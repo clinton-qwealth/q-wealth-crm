@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getCurrentStaff } from '@/lib/staff'
+import { getMfaState } from '@/lib/mfa'
 import { signOut } from './actions'
 
 /**
@@ -10,6 +12,10 @@ import { signOut } from './actions'
 export default async function Home() {
   const staff = await getCurrentStaff()
   if (!staff) redirect('/login')
+
+  // Anyone with a second factor must actually use it before reaching the app.
+  const mfa = await getMfaState()
+  if (mfa.stepUpRequired) redirect('/mfa?next=%2F')
 
   const p = staff.access_profiles
   const permissions: [string, boolean][] = [
@@ -54,7 +60,30 @@ export default async function Home() {
         not here. This screen is a placeholder while the CRM is built.
       </p>
 
-      <form action={signOut} className="mt-6">
+      <div className="mt-6 rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-neutral-600 dark:text-neutral-300">
+            Two-factor authentication
+          </span>
+          <span
+            className={
+              mfa.enrolled
+                ? 'text-xs font-medium text-emerald-700 dark:text-emerald-400'
+                : 'text-xs font-medium text-amber-700 dark:text-amber-400'
+            }
+          >
+            {mfa.enrolled ? 'On' : 'Not set up'}
+          </span>
+        </div>
+        <Link
+          href="/security"
+          className="mt-2 inline-block text-xs underline decoration-neutral-300 underline-offset-2 hover:decoration-neutral-900 dark:decoration-neutral-600"
+        >
+          Manage security settings
+        </Link>
+      </div>
+
+      <form action={signOut} className="mt-4">
         <button
           type="submit"
           className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium transition-colors hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"

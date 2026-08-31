@@ -24,5 +24,13 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
     return { error: 'Those details did not match an account.' }
   }
 
+  // Step up if this account has a second factor. Uses the same client instance
+  // on purpose — a freshly constructed one would not see the session cookies
+  // that signInWithPassword has only just written.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aal?.nextLevel === 'aal2' && aal.currentLevel === 'aal1') {
+    redirect(`/mfa?next=${encodeURIComponent(next)}`)
+  }
+
   redirect(next)
 }
