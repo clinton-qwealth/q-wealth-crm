@@ -41,12 +41,32 @@ export async function getCurrentStaff(): Promise<Staff | null> {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, full_name, email, status, access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes)'
+      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
     .eq('auth_user_id', user.id)
     .maybeSingle()
 
   if (error || !data) return null
-  const staff = data as unknown as Staff
-  return staff.status === 'active' ? staff : null
+
+  // The profile is reached through staff_access_assignments: profile_id was moved
+  // out of staff_users so staff identity could be readable by colleagues while the
+  // permission mapping stayed restricted. The assignment is to-one, so PostgREST
+  // returns an object; an array is tolerated in case that changes.
+  const row = data as Record<string, unknown>
+  const raw = row.staff_access_assignments
+  const assignment = (Array.isArray(raw) ? raw[0] : raw) as
+    | { access_profiles?: AccessProfile }
+    | null
+    | undefined
+  const profile = assignment?.access_profiles
+  if (!profile) return null
+  if (row.status !== 'active') return null
+
+  return {
+    id: row.id as string,
+    full_name: row.full_name as string,
+    email: row.email as string,
+    status: row.status as string,
+    access_profiles: profile,
+  }
 }

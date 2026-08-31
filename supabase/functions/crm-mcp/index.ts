@@ -88,23 +88,48 @@ function fail(message: string) {
   return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true }
 }
 
-// Resolve the CALLING staff member. Must filter on auth_user_id: the
-// staff_read_staff_users RLS policy is USING (is_active_staff()), so an
-// unfiltered select returns every staff row and limit(1) picks an arbitrary one.
+// Resolve the CALLING staff member. Must filter on auth_user_id: staff_users is
+// readable by every active staff member, so an unfiltered select returns all rows
+// and limit(1) picks an arbitrary one - the defect that broke add_note in August.
+//
+// The access profile is reached through staff_access_assignments, not directly.
+// profile_id was moved out of staff_users on 31 Aug 2026 so that staff identity
+// could be readable by colleagues while the permission mapping stayed restricted
+// to administrators. Each staff member can always read their own assignment.
 async function getStaff(db: SupabaseClient, authUserId: string): Promise<Staff | null> {
   const { data, error } = await db
     .from('staff_users')
     .select(
-      'id, full_name, email, status, access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes)'
+      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
     .eq('auth_user_id', authUserId)
     .maybeSingle()
   if (error || !data) return null
-  return data as unknown as Staff
+
+  // The assignment is to-one (its primary key is staff_id), so PostgREST returns
+  // an object. Tolerate an array too, in case relationship detection changes.
+  const row = data as Record<string, unknown>
+  const rawAssignment = row.staff_access_assignments
+  const assignment = (Array.isArray(rawAssignment) ? rawAssignment[0] : rawAssignment) as
+    | { access_profiles?: Staff['access_profiles'] }
+    | null
+    | undefined
+  const profile = assignment?.access_profiles
+  // No profile means no permissions at all. Refuse rather than proceed with a
+  // partially-populated staff object.
+  if (!profile) return null
+
+  return {
+    id: row.id as string,
+    full_name: row.full_name as string,
+    email: row.email as string,
+    status: row.status as string,
+    access_profiles: profile,
+  }
 }
 
 function buildServer(db: SupabaseClient, staff: Staff) {
-  const server = new McpServer({ name: 'q-wealth-crm', version: '0.1.4' })
+  const server = new McpServer({ name: 'q-wealth-crm', version: '0.1.5' })
 
   server.registerTool(
     'whoami',
