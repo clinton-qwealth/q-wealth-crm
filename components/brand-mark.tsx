@@ -1,0 +1,21 @@
+/**
+ * Q Wealth mark. Inlined rather than loaded as an image so it inherits the
+ * surrounding text colour for the letterform, while the dot keeps the brand
+ * orange. The same file also lives at /qwealth-icon.svg for favicon use.
+ */
+export function BrandMark({ className = 'h-6 w-6' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 95.74 93.57"
+      className={className}
+      role="img"
+      aria-label="Q Wealth"
+    >
+      <circle fill="var(--brand-500)" cx="83.49" cy="61.43" r="7.32" />
+      <g fill="currentColor">
+        <path d="M30.51,80.82c8.94-6.94,20.73-.29,29.59,2.96,2.86,1.09,5.8,1.92,9.47,2.78-2.85,2.45-6.72,3.47-10.46,3.47s-7.36-.95-10.53-2.14c-6.61-2.49-10.95-5.52-18.06-7.07h-.01Z" />
+        <path d="M36.46,5.02C18.42,5.02,3.79,20.8,3.79,40.25s14.63,35.23,32.67,35.23,32.67-15.77,32.67-35.23S54.5,5.02,36.46,5.02ZM36.46,69.36c-9.61,0-17.41-13.03-17.41-29.11s7.79-29.11,17.41-29.11,17.41,13.03,17.41,29.11-7.79,29.11-17.41,29.11Z" />
+      </g>
+    </svg>
+  )
+}

@@ -243,12 +243,13 @@ Six hostile paths, all rejected with 401 and all logged:
 | Wrong issuer | `token signature is invalid` |
 | Publishable anon JWT | `invalid claim: missing sub claim` |
 
-**Caveat worth keeping.** The expired, wrong-audience and wrong-issuer tokens were signed
-with a dummy key, so Supabase rejected them on signature before evaluating `exp` or `aud`.
-Those three prove *rejection and logging*, not expiry or audience validation specifically.
-The anon-JWT row is the one that exercises the real path: correctly signed, so it passed
-signature verification and failed on claims. A correctly-signed-but-expired token still
-needs either the project JWT secret or a genuinely expired session to test.
+**Caveat, now partly resolved.** The expired, wrong-audience and wrong-issuer tokens above
+were signed with a dummy key, so Supabase rejected them on signature before evaluating
+`exp` or `aud`. Those three proved *rejection and logging*, not claim validation.
+
+The expiry case was closed properly on 31 August 2026 — see below. **Wrong-audience in
+isolation remains unproven**, and would need a correctly signed token carrying a wrong
+`aud`.
 
 ## 2. `file_note_to_client`
 
@@ -370,3 +371,39 @@ now returns `Malformed bearer token` without ever calling Auth.
 Meaningful rate limiting belongs at an edge/CDN layer in front of the function. Recorded
 as an open gap, with the reasoning left in a comment in `index.ts` so it isn't rebuilt
 the same way.
+
+
+---
+
+# Expired-token test closed (31 August 2026)
+
+The one case that had been overstated. A genuine access token from a password grant was
+held until **71 seconds past its `exp`** and then replayed.
+
+Supabase Auth, asked directly:
+
+```
+HTTP 403
+{"code":403,"error_code":"bad_jwt",
+ "msg":"invalid JWT: unable to parse or verify signature, token has invalid claims: token is expired"}
+```
+
+The signature verified — the rejection is explicitly on the **claims**, specifically `exp`.
+That is the distinction the earlier dummy-signed tokens could not demonstrate.
+
+Through the MCP server: `401 {"error":"Invalid or expired token"}`, with the upstream reason
+captured in the log line:
+
+```json
+{"event":"mcp_auth_rejected","reason":"Invalid or expired token","token_length":811,
+ "upstream":"invalid JWT: unable to parse or verify signature, token has invalid claims: token is expired"}
+```
+
+Readiness checklist item 6 is closed on the strength of this plus the revoked-session test.
+
+**Incidental observation.** The same log query surfaced expired-token rejections carrying
+811-character tokens (password grant) alongside 982-character ones. The longer tokens carry
+extra claims, consistent with OAuth-issued access tokens reaching expiry and being refreshed
+during ordinary connector use — i.e. the path works in production without intervention. It
+does not reveal what `aal` those tokens carry, so the question of whether MFA enforcement can
+be widened beyond sensitive fields is still open.
