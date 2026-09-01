@@ -168,3 +168,72 @@ export function Pill({
     </span>
   )
 }
+
+const accountMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
+
+/**
+ * An account's latest value with a direction mark: green up, red down.
+ *
+ * The comparison is against the average of the valuations in the 30 days before
+ * the latest one, not against the previous day. Values arrive daily, and one
+ * day's movement is noise — the average says where the account has been running.
+ *
+ * No mark is drawn when there is no baseline (a new account has nothing to
+ * compare against) or when the value sits exactly on the average. An arrow in
+ * those cases would assert a direction the data does not show.
+ */
+export function AccountValue({
+  value,
+  changeAmount,
+  changePct,
+  baselineValue,
+  baselinePoints,
+}: {
+  value: string | number | null
+  changeAmount?: string | number | null
+  changePct?: string | number | null
+  baselineValue?: string | number | null
+  baselinePoints?: number | null
+}) {
+  if (value == null) return null
+
+  const change = changeAmount == null ? null : Number(changeAmount)
+  const up = change != null && change > 0
+  const down = change != null && change < 0
+
+  // Kept on the title rather than on the row: the arrow answers "which way" at a
+  // glance, and the figures behind it are there when someone wants them.
+  const detail =
+    change === null || baselineValue == null
+      ? undefined
+      : [
+          `${up ? 'Up' : down ? 'Down' : 'Level at'} ${accountMoney.format(Math.abs(change))}`,
+          changePct == null ? null : `(${Math.abs(Number(changePct))}%)`,
+          `against the 30-day average of ${accountMoney.format(Number(baselineValue))}`,
+          baselinePoints ? `from ${baselinePoints} valuations` : null,
+        ]
+          .filter(Boolean)
+          .join(' ')
+
+  return (
+    <span className="inline-flex items-center gap-1" title={detail}>
+      <span className="tabular-nums">{accountMoney.format(Number(value))}</span>
+      {up || down ? (
+        <>
+          <svg
+            viewBox="0 0 8 8"
+            aria-hidden="true"
+            className={`size-2 ${up ? 'text-emerald-600' : 'text-red-600'}`}
+          >
+            <path
+              d={up ? 'M4 0.5 L8 7.5 L0 7.5 Z' : 'M4 7.5 L0 0.5 L8 0.5 Z'}
+              fill="currentColor"
+            />
+          </svg>
+          {/* The colour carries the meaning, so it needs a text equivalent. */}
+          <span className="sr-only">{up ? 'increasing' : 'decreasing'}</span>
+        </>
+      ) : null}
+    </span>
+  )
+}

@@ -103,7 +103,7 @@ export function DataRow({
 }: {
   primary: string
   secondary?: string
-  meta?: string
+  meta?: ReactNode
   /** Status mark shown beside the name. Left empty for the ordinary case, so a
    *  row only carries a badge when something is worth noticing. */
   badge?: ReactNode

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { Card, PageHeading, Pill } from '@/components/ui'
+import { AccountValue, Card, PageHeading, Pill } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
@@ -93,6 +93,10 @@ type AccountRow = {
   owners: string | null
   latest_value: string | number | null
   valued_on: string | null
+  change_amount: string | number | null
+  change_pct: string | number | null
+  baseline_value: string | number | null
+  baseline_points: number | null
 }
 
 /**
@@ -148,7 +152,6 @@ async function getAccountsData(groupId: string) {
   return { accounts: (accounts ?? []) as AccountRow[], members, providers }
 }
 
-const money = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
 const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   investment: 'Investment',
@@ -392,9 +395,13 @@ export default async function GroupsPage({
                               )
                             }
                             meta={
-                              a.latest_value != null
-                                ? money.format(Number(a.latest_value))
-                                : undefined
+                              <AccountValue
+                                value={a.latest_value}
+                                changeAmount={a.change_amount}
+                                changePct={a.change_pct}
+                                baselineValue={a.baseline_value}
+                                baselinePoints={a.baseline_points}
+                              />
                             }
                           />
                         ))}

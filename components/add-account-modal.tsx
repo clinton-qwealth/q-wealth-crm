@@ -192,7 +192,12 @@ export function AddAccountModal({
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Account number</span>
-                <input name="account_number" className={FIELD} placeholder="Optional" />
+                <input
+                  name="account_number"
+                  required
+                  placeholder="e.g. 12345678"
+                  className={FIELD}
+                />
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Opened</span>

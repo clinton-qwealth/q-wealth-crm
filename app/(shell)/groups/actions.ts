@@ -19,7 +19,7 @@ export async function createAccount(
   const label = String(formData.get('label') ?? '').trim()
   const ownerIds = formData.getAll('owner_party_ids').map(String).filter(Boolean)
   const providerId = String(formData.get('provider_party_id') ?? '') || null
-  const accountNumber = String(formData.get('account_number') ?? '').trim() || null
+  const accountNumber = String(formData.get('account_number') ?? '').trim()
   const openedOn = String(formData.get('opened_on') ?? '') || null
   const rawValue = String(formData.get('opening_value') ?? '').trim()
   const valuedOn = String(formData.get('valued_on') ?? '') || null
@@ -27,6 +27,9 @@ export async function createAccount(
   if (!accountType) return { error: 'Choose an account type.' }
   if (!label) return { error: 'Give the account a name.' }
   if (ownerIds.length === 0) return { error: 'Choose at least one owner.' }
+  // The browser's `required` attribute is a convenience; a server action can be
+  // called without ever rendering the form, so the rule is checked here too.
+  if (!accountNumber) return { error: 'Enter the account number.' }
 
   // Parsed here so a typo is a clear message rather than a database error, and
   // sent as a string so the numeric column keeps full precision — a JS number
