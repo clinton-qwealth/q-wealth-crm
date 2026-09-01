@@ -46,3 +46,20 @@ body {
   /* Was Arial from the starter, which ignored the Geist fonts the layout loads. */
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/*
+ * Tailwind v4's preflight sets `appearance: button` but leaves the cursor at the
+ * browser default, which is an arrow. Every button here is a real action, so
+ * restore the pointer once centrally rather than sprinkling `cursor-pointer`
+ * across each one — and make disabled state read as unavailable.
+ */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+[role="tab"]:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
+}

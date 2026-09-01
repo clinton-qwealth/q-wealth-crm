@@ -71,11 +71,15 @@ export default async function GroupsPage({
       <PageHeading
         eyebrow="Client groups"
         title={group?.name ?? 'Groups'}
-        description={
-          group
-            ? 'Group workspace. Selecting a different group is not built yet.'
-            : 'No client group is visible to you yet.'
+        meta={
+          group ? (
+            <>
+              <Pill on={false}>{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
+              <Pill on={group.status === 'active'}>{group.status}</Pill>
+            </>
+          ) : null
         }
+        description={group ? undefined : 'No client group is visible to you yet.'}
       />
 
       {/* Left — group profile */}
@@ -83,13 +87,7 @@ export default async function GroupsPage({
         <Card title="Group profile">
           {group ? (
             <>
-              <p className="text-sm font-semibold text-neutral-900">{group.name}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <Pill on={false}>{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
-                <Pill on={group.status === 'active'}>{group.status}</Pill>
-              </div>
-
-              <dl className="mt-4 divide-y divide-neutral-100 border-t border-neutral-100">
+              <dl className="divide-y divide-neutral-100">
                 <div className="flex items-baseline justify-between gap-3 py-2">
                   <dt className="text-xs text-neutral-500">Primary contact</dt>
                   <dd className="text-right text-sm text-neutral-900">
@@ -116,6 +114,10 @@ export default async function GroupsPage({
                   ))}
                 </ul>
               ) : null}
+
+              <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-400">
+                Choosing a different group is not built yet.
+              </p>
             </>
           ) : (
             <Placeholder className="h-32">
@@ -131,9 +133,21 @@ export default async function GroupsPage({
           <Tabs
             label="Group detail"
             items={[
-              { id: 'one', label: 'Tab 1', panel: <Placeholder>Tab 1 content</Placeholder> },
-              { id: 'two', label: 'Tab 2', panel: <Placeholder>Tab 2 content</Placeholder> },
-              { id: 'three', label: 'Tab 3', panel: <Placeholder>Tab 3 content</Placeholder> },
+              {
+                id: 'workflows',
+                label: 'Workflows',
+                panel: <Placeholder>Workflows in progress for this group</Placeholder>,
+              },
+              {
+                id: 'accounts',
+                label: 'Accounts',
+                panel: <Placeholder>Investment and superannuation accounts</Placeholder>,
+              },
+              {
+                id: 'detail',
+                label: 'Detail',
+                panel: <Placeholder>Group detail, contacts and relationships</Placeholder>,
+              },
             ]}
           />
         </Card>

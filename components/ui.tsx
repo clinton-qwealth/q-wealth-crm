@@ -13,11 +13,15 @@ export function PageHeading({
   eyebrow,
   title,
   description,
+  meta,
   actions,
 }: {
   eyebrow?: string
   title: string
   description?: string
+  /** Status marks sitting under the title. Kept separate from `description`,
+   *  which renders a paragraph — pills inside a <p> would be wrong markup. */
+  meta?: ReactNode
   actions?: ReactNode
 }) {
   return (
@@ -31,6 +35,7 @@ export function PageHeading({
         <h1 className="mt-1 text-xl font-semibold tracking-tight text-neutral-900">
           {title}
         </h1>
+        {meta ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
         {description ? (
           <p className="mt-1 max-w-prose text-sm text-neutral-500">{description}</p>
         ) : null}

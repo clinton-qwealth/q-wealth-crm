@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 export type TabItem = {
   id: string
@@ -9,19 +9,55 @@ export type TabItem = {
 }
 
 /**
- * Tabs following the ARIA tabs pattern.
+ * Tabs following the ARIA tabs pattern, with an underline that slides between
+ * them.
  *
  * Roving tabindex: only the selected tab is reachable by Tab, and the arrow keys
  * move between them — so a keyboard user tabs once to reach the tablist, then
  * arrows across, rather than tabbing through every tab to get past it. Home and
  * End jump to the ends.
  *
- * Panels are passed in as rendered nodes, so a Server Component can supply real
- * content while the selection stays client-side.
+ * The indicator is one absolutely-positioned bar whose offset and width are
+ * measured from the active tab, rather than a border toggled per tab — a border
+ * cannot animate between elements. Measured in a layout effect so it is
+ * positioned before paint, and re-measured on resize and on font load, both of
+ * which change tab widths after the first measurement.
  */
 export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
   const [active, setActive] = useState(items[0]?.id)
+  const [indicator, setIndicator] = useState({ left: 0, width: 0 })
+  // Suppresses the transition for the very first measurement, so the bar does
+  // not slide in from the left edge on load.
+  const [measured, setMeasured] = useState(false)
+
+  const listRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  const measure = useCallback(() => {
+    const i = items.findIndex((t) => t.id === active)
+    const el = tabRefs.current[i]
+    if (!el) return
+    setIndicator({ left: el.offsetLeft, width: el.offsetWidth })
+  }, [active, items])
+
+  useLayoutEffect(() => {
+    measure()
+    setMeasured(true)
+  }, [measure])
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!list) return
+
+    const observer = new ResizeObserver(measure)
+    observer.observe(list)
+    for (const el of tabRefs.current) if (el) observer.observe(el)
+
+    // Web fonts land after first paint and change text width.
+    document.fonts?.ready.then(measure).catch(() => {})
+
+    return () => observer.disconnect()
+  }, [measure])
 
   function onKeyDown(e: React.KeyboardEvent) {
     const keys = ['ArrowRight', 'ArrowLeft', 'Home', 'End']
@@ -45,10 +81,11 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
   return (
     <div>
       <div
+        ref={listRef}
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="-mx-4 flex items-center gap-1 border-b border-neutral-200 px-4"
+        className="relative -mx-4 flex items-center gap-1 border-b border-neutral-200 px-4"
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
@@ -65,17 +102,27 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
               tabIndex={selected ? 0 : -1}
               onClick={() => setActive(tab.id)}
               className={[
-                '-mb-px border-b-2 px-3 py-2 text-sm font-medium outline-none transition-colors',
+                'rounded-t px-3 py-2 text-sm font-medium outline-none transition-colors',
                 'focus-visible:bg-brand-50 focus-visible:text-brand-700',
-                selected
-                  ? 'border-brand text-neutral-900'
-                  : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:text-neutral-800',
+                selected ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-800',
               ].join(' ')}
             >
               {tab.label}
             </button>
           )
         })}
+
+        <span
+          aria-hidden
+          className={[
+            'absolute bottom-0 h-0.5 rounded-full bg-brand',
+            // Only animate once a real position is known, and respect a reduced
+            // motion preference.
+            measured ? 'transition-[left,width] duration-300 ease-out' : '',
+            'motion-reduce:transition-none',
+          ].join(' ')}
+          style={{ left: indicator.left, width: indicator.width }}
+        />
       </div>
 
       {items.map((tab) => (
