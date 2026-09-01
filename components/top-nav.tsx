@@ -6,6 +6,7 @@ import { SearchCommand } from './search-command'
 
 const NAV_ITEMS = [
   { href: '/', label: 'Home' },
+  { href: '/workflows', label: 'Workflows' },
   { href: '/reports', label: 'Reports' },
 ]
 

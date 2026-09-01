@@ -2,12 +2,16 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
+import { signOut } from '@/app/actions'
 import { UserIcon } from './icons'
 
-const ITEMS = [
+const LINKS = [
   { href: '/profile', label: 'Profile' },
   { href: '/preferences', label: 'Preferences' },
 ]
+
+const ITEM_CLASS =
+  'block w-full px-3 py-1.5 text-left text-sm outline-none transition-colors focus-visible:bg-brand-50 focus-visible:text-brand-700'
 
 function initialsOf(name?: string) {
   if (!name) return null
@@ -20,14 +24,14 @@ function initialsOf(name?: string) {
  *
  * Closes on outside click and on Escape, and returns focus to the trigger so
  * keyboard users are not stranded at the end of the document. Arrow keys move
- * between items; the first item takes focus when the menu is opened from the
- * keyboard.
+ * between items — including Sign out, which is a submit button rather than a
+ * link, so the focus list is typed as HTMLElement rather than anchors.
  */
 export function ProfileMenu({ name, email }: { name?: string; email?: string }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const itemRefs = useRef<(HTMLAnchorElement | null)[]>([])
+  const itemRefs = useRef<(HTMLElement | null)[]>([])
   const initials = initialsOf(name)
 
   useEffect(() => {
@@ -44,8 +48,8 @@ export function ProfileMenu({ name, email }: { name?: string; email?: string }) 
       }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
-        const items = itemRefs.current.filter(Boolean) as HTMLAnchorElement[]
-        const i = items.indexOf(document.activeElement as HTMLAnchorElement)
+        const items = itemRefs.current.filter(Boolean) as HTMLElement[]
+        const i = items.indexOf(document.activeElement as HTMLElement)
         const next =
           e.key === 'ArrowDown'
             ? items[(i + 1) % items.length]
@@ -109,14 +113,12 @@ export function ProfileMenu({ name, email }: { name?: string; email?: string }) 
               {name ? (
                 <p className="truncate text-sm font-medium text-neutral-900">{name}</p>
               ) : null}
-              {email ? (
-                <p className="truncate text-xs text-neutral-500">{email}</p>
-              ) : null}
+              {email ? <p className="truncate text-xs text-neutral-500">{email}</p> : null}
             </div>
           ) : null}
 
           <div className="py-1">
-            {ITEMS.map((item, i) => (
+            {LINKS.map((item, i) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -125,11 +127,27 @@ export function ProfileMenu({ name, email }: { name?: string; email?: string }) 
                   itemRefs.current[i] = el
                 }}
                 onClick={() => setOpen(false)}
-                className="block px-3 py-1.5 text-sm text-neutral-700 outline-none transition-colors hover:bg-neutral-50 hover:text-neutral-900 focus-visible:bg-brand-50 focus-visible:text-brand-700"
+                className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
               >
                 {item.label}
               </Link>
             ))}
+          </div>
+
+          {/* Separated: leaving is a different kind of act from navigating. */}
+          <div className="border-t border-neutral-100 py-1">
+            <form action={signOut}>
+              <button
+                type="submit"
+                role="menuitem"
+                ref={(el) => {
+                  itemRefs.current[LINKS.length] = el
+                }}
+                className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
+              >
+                Sign out
+              </button>
+            </form>
           </div>
         </div>
       ) : null}

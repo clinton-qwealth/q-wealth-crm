@@ -50,9 +50,9 @@ export default async function Home() {
   return (
     <>
       <PageHeading
-        eyebrow={p.name}
+        eyebrow="Q Intelligence"
         title={`Good to see you, ${staff.full_name.split(' ')[0]}`}
-        description="Wireframe. The layout and navigation are real; the panels below are placeholders around live counts."
+        description="A good day to make progress — everything you need is right here."
       />
 
       <StatTile
