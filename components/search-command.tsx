@@ -1,26 +1,31 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { SearchIcon } from './icons'
 
 /**
  * Navbar search. Sits narrow and quiet until focused, then widens.
  *
  * The ⌘K badge is a real shortcut, not decoration: pressing it anywhere on the
- * page focuses the field, and Escape releases it. The modifier label starts as
- * '⌘' so the server and first client render agree, then corrects to 'Ctrl' after
- * mount on non-Apple platforms — avoiding a hydration mismatch rather than
- * suppressing one.
+ * page focuses the field, and Escape releases it.
+ *
+ * The modifier label depends on the platform, which the server cannot know. That
+ * is precisely what useSyncExternalStore's server snapshot is for: server and
+ * first client render both use '⌘', then React re-reads on the client. Same
+ * result as correcting state in an effect, without the extra render pass — and
+ * still no hydration mismatch.
  */
+/* The platform never changes for the life of the page, so there is nothing to
+   subscribe to — but useSyncExternalStore requires a subscribe function, and it
+   must keep a stable identity or React resubscribes every render. */
+const subscribeToNothing = () => () => {}
+const readModifier = () => (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? '⌘' : 'Ctrl ')
+const readModifierOnServer = () => '⌘'
+
 export function SearchCommand() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [focused, setFocused] = useState(false)
-  const [modifier, setModifier] = useState('⌘')
-
-  useEffect(() => {
-    const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-    if (!isApple) setModifier('Ctrl ')
-  }, [])
+  const modifier = useSyncExternalStore(subscribeToNothing, readModifier, readModifierOnServer)
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

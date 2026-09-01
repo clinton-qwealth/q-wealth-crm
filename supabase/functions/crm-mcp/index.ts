@@ -240,12 +240,16 @@ function buildServer(db: SupabaseClient, staff: Staff) {
           })),
         ],
         contact_points: contacts.data ?? [],
-        groups: (memberships.data ?? []).map((m: any) => ({
-          role: m.member_role,
-          primary: m.is_primary_group,
-          group: m.client_groups,
-          link: m.client_groups ? groupLink(m.client_groups.id) : null,
-        })),
+        groups: (memberships.data ?? []).map((row) => {
+          const m = row as Record<string, unknown>
+          const grp = m.client_groups as { id: string } | null
+          return {
+            role: m.member_role,
+            primary: m.is_primary_group,
+            group: grp,
+            link: grp ? groupLink(grp.id) : null,
+          }
+        }),
         sensitive: { tfn_hint: tfnHint.data ?? null, note: 'Full values available in the CRM app only.' },
         link: clientLink(party.id),
       })
@@ -325,8 +329,20 @@ function buildServer(db: SupabaseClient, staff: Staff) {
       // A note can carry several subjects; drop the join column and de-duplicate.
       const seen = new Set<string>()
       const notes = (data ?? [])
-        .filter((n: any) => (seen.has(n.id) ? false : (seen.add(n.id), true)))
-        .map(({ note_subjects: _subjects, ...note }: any) => note)
+        .filter((row) => {
+          const id = (row as Record<string, unknown>).id as string
+          if (seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+        .map((row) => {
+          // note_subjects is the join used to scope the query; it is not part of
+          // the note. Copied and stripped rather than destructured, so no unused
+          // binding is left behind.
+          const note = { ...(row as Record<string, unknown>) }
+          delete note.note_subjects
+          return note
+        })
       return ok(notes)
     }
   )

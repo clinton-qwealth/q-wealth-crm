@@ -27,8 +27,11 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
   const [active, setActive] = useState(items[0]?.id)
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
   // Suppresses the transition for the very first measurement, so the bar does
-  // not slide in from the left edge on load.
-  const [measured, setMeasured] = useState(false)
+  // not slide in from the left edge on load. Derived rather than held in its own
+  // state: a zero width *is* "not yet measured", so a second state variable would
+  // only be a chance for the two to disagree — and setting it in the layout
+  // effect meant an extra render pass on every mount.
+  const measured = indicator.width > 0
 
   const listRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -40,10 +43,7 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
     setIndicator({ left: el.offsetLeft, width: el.offsetWidth })
   }, [active, items])
 
-  useLayoutEffect(() => {
-    measure()
-    setMeasured(true)
-  }, [measure])
+  useLayoutEffect(measure, [measure])
 
   useEffect(() => {
     const list = listRef.current

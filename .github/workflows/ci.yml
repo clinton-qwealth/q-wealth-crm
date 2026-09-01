@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, Monday 08:00 Sydney (22:00 UTC Sunday). The audit job is the reason
+    # this runs on a timer: advisories are published against versions already
+    # installed, so a repository with no commits can still become vulnerable.
+    - cron: '0 22 * * 0'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # `npm ci` installs strictly from package-lock.json, so CI tests the exact
+      # tree that ships rather than whatever the ranges resolve to today.
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build
+        env:
+          # Build-time only. These are NEXT_PUBLIC_ values, inlined into browser
+          # JavaScript by design, so they are not secrets — but the build fails
+          # without them, because lib/env.ts refuses to guess.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Fails the job on high or critical. Moderate and low are reported in the
+      # log without blocking, so a dev-only advisory does not stop a deploy.
+      - name: Audit (fail on high or critical)
+        run: npm audit --audit-level=high
+      - name: Report everything else
+        if: always()
+        run: npm audit || true

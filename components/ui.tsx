@@ -240,7 +240,12 @@ export function AccountValue({
           {/* The colour carries the meaning, so it needs a text equivalent. */}
           <span className="sr-only">{up ? 'increasing' : 'decreasing'}</span>
         </span>
-      ) : null}
+      ) : (
+        /* Holds the badge's width open so every amount in the column shares one
+           right edge, whether or not a direction can be shown. An empty circle
+           would read as a state of its own; empty space reads as nothing. */
+        <span className="block size-[18px] shrink-0" aria-hidden="true" />
+      )}
     </span>
   )
 }

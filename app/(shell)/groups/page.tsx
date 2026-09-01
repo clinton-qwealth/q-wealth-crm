@@ -158,6 +158,16 @@ const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   superannuation: 'Superannuation',
 }
 
+/** Heading shown above each block of accounts. */
+const ACCOUNT_SECTION_LABEL: Record<string, string> = {
+  investment: 'Investment Accounts',
+  superannuation: 'Superannuation Accounts',
+}
+
+/** Investment leads, superannuation follows. Fixed, so the page does not
+ *  reorder itself as accounts are added. */
+const ACCOUNT_TYPE_ORDER = ['investment', 'superannuation']
+
 const ACCOUNT_STATUS_LABEL: Record<string, string> = {
   active: 'Active',
   suspended: 'Suspended',
@@ -211,6 +221,18 @@ export default async function GroupsPage({
   const { accounts, members: ownerOptions, providers } = group
     ? await getAccountsData(group.group_id)
     : { accounts: [], members: [], providers: [] }
+
+  /* Grouped by type so each heading is true of the rows beneath it. Known types
+     lead in a fixed order, and a type added to the enum later still appears —
+     after them — rather than silently vanishing from the page. */
+  const accountGroups = [
+    ...ACCOUNT_TYPE_ORDER,
+    ...[...new Set(accounts.map((a) => a.account_type))].filter(
+      (t) => !ACCOUNT_TYPE_ORDER.includes(t),
+    ),
+  ]
+    .map((type) => ({ type, rows: accounts.filter((a) => a.account_type === type) }))
+    .filter((g) => g.rows.length > 0)
 
   return (
     <>
@@ -372,40 +394,46 @@ export default async function GroupsPage({
                         'Investment and superannuation accounts owned by this group\u2019s members.',
                     }}
                   >
-                    {accounts.length ? (
-                      <ul className="flex flex-col gap-1.5">
-                        {accounts.map((a) => (
-                          <DataRow
-                            key={a.account_id}
-                            primary={a.label}
-                            secondary={[
-                              ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
-                              a.owners,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                            /* Marked only when it is not active. Most accounts
-                               are, so badging every row would be noise and the
-                               exceptions would stop standing out. */
-                            badge={
-                              a.status === 'active' ? undefined : (
-                                <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
-                                  {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
-                                </Pill>
-                              )
-                            }
-                            meta={
-                              <AccountValue
-                                value={a.latest_value}
-                                changeAmount={a.change_amount}
-                                changePct={a.change_pct}
-                                baselineValue={a.baseline_value}
-                                baselinePoints={a.baseline_points}
-                              />
-                            }
-                          />
+                    {accountGroups.length ? (
+                      <div className="flex flex-col gap-5">
+                        {accountGroups.map(({ type, rows }) => (
+                          <div key={type}>
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                              {ACCOUNT_SECTION_LABEL[type] ?? ACCOUNT_TYPE_LABEL[type] ?? type}
+                            </h3>
+                            <ul className="mt-2.5 flex flex-col gap-1.5">
+                              {rows.map((a) => (
+                                <DataRow
+                                  key={a.account_id}
+                                  primary={a.label}
+                                  /* The heading states the type, so the row only
+                                     needs to say who owns it. */
+                                  secondary={a.owners ?? undefined}
+                                  /* Marked only when it is not active. Most accounts
+                                     are, so badging every row would be noise and the
+                                     exceptions would stop standing out. */
+                                  badge={
+                                    a.status === 'active' ? undefined : (
+                                      <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
+                                        {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
+                                      </Pill>
+                                    )
+                                  }
+                                  meta={
+                                    <AccountValue
+                                      value={a.latest_value}
+                                      changeAmount={a.change_amount}
+                                      changePct={a.change_pct}
+                                      baselineValue={a.baseline_value}
+                                      baselinePoints={a.baseline_points}
+                                    />
+                                  }
+                                />
+                              ))}
+                            </ul>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     ) : undefined}
                   </DataSection>
                 ),
