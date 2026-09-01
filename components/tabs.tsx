@@ -85,7 +85,7 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="relative -mx-4 flex items-center gap-1 border-b border-neutral-200 px-4"
+        className="no-scrollbar relative -mx-4 flex items-center gap-1 overflow-x-auto border-b border-neutral-200 px-4"
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
@@ -102,7 +102,7 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
               tabIndex={selected ? 0 : -1}
               onClick={() => setActive(tab.id)}
               className={[
-                'rounded-t px-3 py-2 text-sm font-medium outline-none transition-colors',
+                'shrink-0 rounded-t px-3 py-2 text-sm font-medium outline-none transition-colors',
                 'focus-visible:bg-brand-50 focus-visible:text-brand-700',
                 selected ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-800',
               ].join(' ')}

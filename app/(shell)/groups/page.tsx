@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, PageHeading, Pill } from '@/components/ui'
-import { PlusIcon } from '@/components/icons'
+import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -143,11 +143,21 @@ export default async function GroupsPage({
                   <dt className="text-xs text-neutral-500">Phone</dt>
                   <dd className="text-right text-sm">
                     {phone ? (
+                      /* Reads as data first: same weight and colour as the name
+                         above it, with tabular figures so the digits sit evenly.
+                         The accent appears on hover, where it signals the
+                         affordance without competing with real actions. */
                       <a
                         href={telHref(phone)}
-                        className="rounded text-brand outline-none transition-colors hover:text-brand-700 hover:underline focus-visible:ring-2 focus-visible:ring-brand/30"
+                        className="group inline-flex items-center gap-1.5 rounded outline-none transition-colors hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/30"
                       >
-                        {phone}
+                        {/* Muted by default so the glyph marks the field without
+                            competing with the number; picks up the accent with
+                            the rest of the link on hover. */}
+                        <PhoneIcon className="h-3.5 w-3.5 shrink-0 text-neutral-400 transition-colors group-hover:text-brand" />
+                        <span className="tabular-nums text-neutral-900 underline decoration-neutral-300 decoration-dotted underline-offset-4 transition-colors group-hover:text-brand group-hover:decoration-brand">
+                          {phone}
+                        </span>
                       </a>
                     ) : (
                       <span className="text-neutral-400">—</span>
@@ -157,16 +167,9 @@ export default async function GroupsPage({
               </dl>
 
               <div className="mt-6 border-t border-neutral-100 pt-4">
-                {/* The count belongs with the heading: it describes the list,
-                    not the action underneath it. */}
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                    Members
-                  </h3>
-                  <span className="text-xs tabular-nums text-neutral-400">
-                    {group.member_count ?? members.length}
-                  </span>
-                </div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Members
+                </h3>
 
                 {members.length ? (
                   <ul className="mt-2.5 flex flex-col gap-2">
@@ -224,6 +227,11 @@ export default async function GroupsPage({
                 id: 'accounts',
                 label: 'Accounts',
                 panel: <Placeholder>Investment and superannuation accounts</Placeholder>,
+              },
+              {
+                id: 'assets-liabilities',
+                label: 'Assets + Liabilities',
+                panel: <Placeholder>Assets, liabilities and net position</Placeholder>,
               },
               {
                 id: 'detail',

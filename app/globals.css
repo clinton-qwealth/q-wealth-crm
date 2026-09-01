@@ -63,3 +63,16 @@ button:disabled,
 [role="button"][aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/*
+ * Horizontal scrolling without a visible scrollbar. Used by the tab strip, which
+ * can outgrow a narrow column once labels get long — scrolling is better than
+ * squashing the labels or wrapping them, since a wrapped second row would leave
+ * the sliding indicator on the wrong line.
+ */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
