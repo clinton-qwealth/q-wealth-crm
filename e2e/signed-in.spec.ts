@@ -53,14 +53,25 @@ test.describe('authenticated staff access', () => {
     await expect(page.getByRole('tablist')).toBeVisible()
   })
 
-  test('accounts appear under a heading naming their type', async ({ page }) => {
+  test('the accounts section is headed, with its add control on the same row', async ({
+    page,
+  }) => {
     await page.goto('/groups')
     await page.getByRole('tab', { name: 'Accounts' }).click()
 
-    // At least one type heading, and every account row carries an amount or
-    // nothing — never a broken render.
-    const headings = page.getByRole('heading', { level: 3 })
-    await expect(headings.filter({ hasText: /Accounts$/ }).first()).toBeVisible()
+    const heading = page.getByRole('heading', { level: 3, name: 'Investment Accounts' })
+    await expect(heading).toBeVisible()
+
+    /* The heading and the add control share one row. Asserted by geometry rather
+       than by markup: the DOM could be restructured freely, but if these two stop
+       sitting on the same line the layout has regressed. */
+    const add = page.getByRole('button', { name: /add account/i }).first()
+    const [h, a] = [await heading.boundingBox(), await add.boundingBox()]
+    expect(h && a).toBeTruthy()
+    const overlap =
+      Math.min(h!.y + h!.height, a!.y + a!.height) - Math.max(h!.y, a!.y)
+    expect(overlap, 'heading and add control are not on the same row').toBeGreaterThan(0)
+    expect(a!.x).toBeGreaterThan(h!.x) // heading left, action right
   })
 
   /**

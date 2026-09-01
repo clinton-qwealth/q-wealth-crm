@@ -22,6 +22,7 @@ import { PlusIcon } from './icons'
 export function DataSection({
   addLabel,
   addHref = '#',
+  title,
   countLabel,
   action,
   emptyAction,
@@ -31,6 +32,10 @@ export function DataSection({
   /** e.g. "Add account" — used on both the toolbar link and the empty button. */
   addLabel: string
   addHref?: string
+  /** Section heading, e.g. "Investment Accounts". Shares the toolbar row with the
+   *  add action rather than sitting on a line of its own, so the header costs one
+   *  row instead of two and the action stays level with what it adds to. */
+  title?: string
   /** Optional, e.g. "3 accounts". Gives the toolbar a left side; without it the
    *  add link sits alone on the right rather than drifting left. */
   countLabel?: string
@@ -75,9 +80,16 @@ export function DataSection({
     <div>
       <div
         className={`mb-2.5 flex items-center gap-3 ${
-          countLabel ? 'justify-between' : 'justify-end'
+          title || countLabel ? 'justify-between' : 'justify-end'
         }`}
       >
+        {title ? (
+          /* Same treatment as the Members heading in the left column, so the two
+             read as the same kind of label. */
+          <h3 className="truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            {title}
+          </h3>
+        ) : null}
         {countLabel ? <p className="text-xs text-neutral-500">{countLabel}</p> : null}
         {action ?? (
           <a
