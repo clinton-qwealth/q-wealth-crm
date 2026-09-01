@@ -12,6 +12,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     // Next builds the app; Vitest has no business walking its output.
-    exclude: ['node_modules/**', '.next/**'],
+    // e2e/ belongs to Playwright. Vitest's default include pattern matches
+    // *.spec.ts too, so without this it would try to run browser tests in jsdom.
+    exclude: ['node_modules/**', '.next/**', 'e2e/**'],
   },
 })
