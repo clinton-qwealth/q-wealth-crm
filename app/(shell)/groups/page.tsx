@@ -166,17 +166,20 @@ export default async function GroupsPage({
                 </div>
               </dl>
 
-              <div className="mt-6 border-t border-neutral-100 pt-4">
+              {/* Its own panel rather than a ruled-off region: a light ground
+                  plus a hairline edge separates the collection from the single
+                  facts above it, without adding another divider line. */}
+              <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                   Members
                 </h3>
 
                 {members.length ? (
-                  <ul className="mt-2.5 flex flex-col gap-2">
+                  <ul className="mt-2.5 flex flex-col gap-1.5">
                     {members.map((m) => (
                       <li
                         key={`${m.name}-${m.role}`}
-                        className="flex items-baseline justify-between gap-3"
+                        className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
                       >
                         <span className="truncate text-sm text-neutral-700">{m.name}</span>
                         <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
@@ -193,14 +196,14 @@ export default async function GroupsPage({
                     control. Placeholder target — adding members is not built yet. */}
                 <a
                   href="#"
-                  className="-ml-1 mt-2 inline-flex items-center gap-1 rounded px-1 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+                  className="mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-white hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
                   Add member
                 </a>
               </div>
 
-              <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-400">
+              <p className="mt-3 text-xs text-neutral-400">
                 Choosing a different group is not built yet.
               </p>
             </>
