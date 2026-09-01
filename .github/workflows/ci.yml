@@ -17,7 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # From .nvmrc, so CI and local development cannot drift apart.
+          # jsdom 30 requires ^22.22.2 || ^24.15.0 || >=26 — Node 20 fails at
+          # runtime inside undici, not at install, because npm does not enforce
+          # engines by default.
+          node-version-file: .nvmrc
           cache: npm
       # `npm ci` installs strictly from package-lock.json, so CI tests the exact
       # tree that ships rather than whatever the ranges resolve to today.
@@ -39,7 +43,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # From .nvmrc, so CI and local development cannot drift apart.
+          # jsdom 30 requires ^22.22.2 || ^24.15.0 || >=26 — Node 20 fails at
+          # runtime inside undici, not at install, because npm does not enforce
+          # engines by default.
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       # Chromium only. The access boundary is server-side — the proxy, the session
@@ -68,7 +76,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # From .nvmrc, so CI and local development cannot drift apart.
+          # jsdom 30 requires ^22.22.2 || ^24.15.0 || >=26 — Node 20 fails at
+          # runtime inside undici, not at install, because npm does not enforce
+          # engines by default.
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       # Fails the job on high or critical. Moderate and low are reported in the
