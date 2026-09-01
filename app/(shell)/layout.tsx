@@ -16,7 +16,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">
-      <TopNav staffName={staff.full_name} />
+      <TopNav staffName={staff.full_name} staffEmail={staff.email} />
 
       {/*
         A fixed, cover-positioned layer rather than `bg-fixed` on the container.
