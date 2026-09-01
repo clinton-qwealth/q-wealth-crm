@@ -3,6 +3,7 @@ import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, PageHeading, Pill } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
+import { DataRow, DataSection } from '@/components/data-section'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -224,17 +225,60 @@ export default async function GroupsPage({
               {
                 id: 'workflows',
                 label: 'Workflows',
-                panel: <Placeholder>Workflows in progress for this group</Placeholder>,
+                panel: (
+                  <DataSection
+                    addLabel="Start workflow"
+                    empty={{
+                      title: 'No workflows running',
+                      description:
+                        'Onboarding, annual reviews and advice production appear here once started.',
+                    }}
+                  />
+                ),
               },
               {
                 id: 'accounts',
                 label: 'Accounts',
-                panel: <Placeholder>Investment and superannuation accounts</Placeholder>,
+                panel: (
+                  /* Populated layout shown with placeholder rows so both states
+                     can be compared. No account tables exist in the schema yet. */
+                  <DataSection
+                    addLabel="Add account"
+                    countLabel="2 accounts"
+                    empty={{
+                      title: 'No accounts yet',
+                      description:
+                        'Superannuation, investment and bank accounts held by this group.',
+                    }}
+                  >
+                    <ul className="flex flex-col gap-1.5">
+                      <DataRow
+                        primary="Example superannuation account"
+                        secondary="Placeholder row — no account data exists yet"
+                        meta="—"
+                      />
+                      <DataRow
+                        primary="Example investment account"
+                        secondary="Placeholder row — no account data exists yet"
+                        meta="—"
+                      />
+                    </ul>
+                  </DataSection>
+                ),
               },
               {
                 id: 'assets-liabilities',
                 label: 'Assets + Liabilities',
-                panel: <Placeholder>Assets, liabilities and net position</Placeholder>,
+                panel: (
+                  <DataSection
+                    addLabel="Add asset"
+                    empty={{
+                      title: 'Nothing recorded',
+                      description:
+                        'Property, investments and debts, and the net position they add up to.',
+                    }}
+                  />
+                ),
               },
               {
                 id: 'detail',
