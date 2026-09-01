@@ -76,3 +76,70 @@ button:disabled,
     display: none;
   }
 }
+
+/*
+ * Modal transitions for the native <dialog> element.
+ *
+ * <dialog> is used rather than a hand-rolled overlay because it gives focus
+ * trapping, Escape-to-close, an inert background and top-layer stacking for
+ * free — all things that are easy to get subtly wrong by hand.
+ *
+ * Animating it needs `allow-discrete`: `display` and `overlay` are discrete
+ * properties, so without it the element would vanish instantly and the exit
+ * transition would never be seen. `@starting-style` supplies the "before open"
+ * values, since the element is display:none until it opens.
+ */
+dialog.qw-modal {
+  opacity: 0;
+  transform: translateY(12px) scale(0.99);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out,
+    overlay 180ms ease-out allow-discrete,
+    display 180ms ease-out allow-discrete;
+}
+
+dialog.qw-modal[open] {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@starting-style {
+  dialog.qw-modal[open] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+}
+
+dialog.qw-modal::backdrop {
+  background-color: rgb(23 23 23 / 0);
+  backdrop-filter: blur(0px);
+  transition:
+    background-color 180ms ease-out,
+    backdrop-filter 180ms ease-out,
+    overlay 180ms ease-out allow-discrete,
+    display 180ms ease-out allow-discrete;
+}
+
+dialog.qw-modal[open]::backdrop {
+  background-color: rgb(23 23 23 / 0.4);
+  backdrop-filter: blur(2px);
+}
+
+@starting-style {
+  dialog.qw-modal[open]::backdrop {
+    background-color: rgb(23 23 23 / 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.qw-modal,
+  dialog.qw-modal::backdrop {
+    transition-duration: 1ms;
+  }
+  dialog.qw-modal,
+  dialog.qw-modal[open] {
+    transform: none;
+  }
+}

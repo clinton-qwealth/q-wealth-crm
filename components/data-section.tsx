@@ -23,6 +23,8 @@ export function DataSection({
   addLabel,
   addHref = '#',
   countLabel,
+  action,
+  emptyAction,
   empty,
   children,
 }: {
@@ -32,6 +34,11 @@ export function DataSection({
   /** Optional, e.g. "3 accounts". Gives the toolbar a left side; without it the
    *  add link sits alone on the right rather than drifting left. */
   countLabel?: string
+  /** Replaces the default toolbar link, e.g. with a dialog trigger. */
+  action?: ReactNode
+  /** Replaces the default empty-state button. Usually the same control as
+   *  `action`, styled prominently rather than quietly. */
+  emptyAction?: ReactNode
   /** Required, not optional: any section can be emptied back to zero, so every
    *  one needs a defined empty state rather than collapsing to nothing. */
   empty: { title: string; description: string }
@@ -49,13 +56,17 @@ export function DataSection({
         <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
           {empty.description}
         </p>
-        <a
-          href={addHref}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
-        >
-          <PlusIcon className="h-4 w-4" />
-          {addLabel}
-        </a>
+        <div className="mt-4">
+          {emptyAction ?? (
+            <a
+              href={addHref}
+              className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              <PlusIcon className="h-4 w-4" />
+              {addLabel}
+            </a>
+          )}
+        </div>
       </div>
     )
   }
@@ -68,13 +79,15 @@ export function DataSection({
         }`}
       >
         {countLabel ? <p className="text-xs text-neutral-500">{countLabel}</p> : null}
-        <a
-          href={addHref}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
-        >
-          <PlusIcon className="h-3.5 w-3.5" />
-          {addLabel}
-        </a>
+        {action ?? (
+          <a
+            href={addHref}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            {addLabel}
+          </a>
+        )}
       </div>
       {children}
     </div>

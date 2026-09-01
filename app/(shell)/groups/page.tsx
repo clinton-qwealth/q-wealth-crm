@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, PageHeading, Pill } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
+import { AddAccountModal } from '@/components/add-account-modal'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -84,6 +85,76 @@ async function getGroupContacts(groupId: string) {
   return { phone: (best?.value as string | null) ?? null, adviser }
 }
 
+type AccountRow = {
+  account_id: string
+  account_type: string
+  label: string
+  status: string
+  owners: string | null
+  latest_value: string | number | null
+  valued_on: string | null
+}
+
+/**
+ * The group's members, its accounts, and the providers on file.
+ *
+ * Accounts have no group column by design — an account belongs to the group(s)
+ * its owners belong to. So the path is members -> owned accounts -> summary.
+ * Three round trips; worth folding into a view if this page gets busier.
+ */
+async function getAccountsData(groupId: string) {
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data: memberRows } = await supabase
+    .from('client_group_members')
+    .select('party_id, parties(display_name)')
+    .eq('group_id', groupId)
+    .is('end_date', null)
+
+  const members = (memberRows ?? []).map((m) => {
+    const raw = (m as Record<string, unknown>).parties
+    const party = (Array.isArray(raw) ? raw[0] : raw) as { display_name?: string } | null
+    return { id: m.party_id as string, name: party?.display_name ?? 'Unnamed' }
+  })
+
+  const { data: providerRows } = await supabase
+    .from('party_roles')
+    .select('party_id, parties(display_name)')
+    .eq('role', 'product_provider')
+    .eq('status', 'active')
+
+  const providers = (providerRows ?? []).map((r) => {
+    const raw = (r as Record<string, unknown>).parties
+    const party = (Array.isArray(raw) ? raw[0] : raw) as { display_name?: string } | null
+    return { id: r.party_id as string, name: party?.display_name ?? 'Unnamed' }
+  })
+
+  if (members.length === 0) return { accounts: [] as AccountRow[], members, providers }
+
+  const { data: ownerRows } = await supabase
+    .from('financial_account_owners')
+    .select('account_id')
+    .in('party_id', members.map((m) => m.id))
+
+  const accountIds = [...new Set((ownerRows ?? []).map((o) => o.account_id as string))]
+  if (accountIds.length === 0) return { accounts: [] as AccountRow[], members, providers }
+
+  const { data: accounts } = await supabase
+    .from('financial_accounts_summary')
+    .select('*')
+    .in('account_id', accountIds)
+    .order('label')
+
+  return { accounts: (accounts ?? []) as AccountRow[], members, providers }
+}
+
+const money = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
+
+const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  investment: 'Investment',
+  superannuation: 'Superannuation',
+}
+
 /** Strip formatting so the dialler gets something it can use. */
 function telHref(number: string) {
   const cleaned = number.replace(/[^\d+]/g, '')
@@ -128,6 +199,9 @@ export default async function GroupsPage({
     ? await getGroupContacts(group.group_id)
     : { phone: null, adviser: null }
   const members = parseMembers(group?.members ?? null)
+  const { accounts, members: ownerOptions, providers } = group
+    ? await getAccountsData(group.group_id)
+    : { accounts: [], members: [], providers: [] }
 
   return (
     <>
@@ -184,8 +258,16 @@ export default async function GroupsPage({
                 </div>
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-xs text-neutral-500">Primary adviser</dt>
-                  <dd className="text-right text-sm text-neutral-900">
-                    {adviser ?? <span className="text-neutral-400">—</span>}
+                  <dd className="text-right">
+                    {adviser ? (
+                      /* A pill rather than plain text: the adviser is a reference
+                         to another record, not a value of this one. Neutral tone —
+                         green would imply a live state, brand would imply an
+                         action. */
+                      <Pill tone="neutral">{adviser}</Pill>
+                    ) : (
+                      <span className="text-sm text-neutral-400">—</span>
+                    )}
                   </dd>
                 </div>
               </dl>
@@ -263,28 +345,46 @@ export default async function GroupsPage({
                 id: 'accounts',
                 label: 'Accounts',
                 panel: (
-                  /* Populated layout shown with placeholder rows so both states
-                     can be compared. No account tables exist in the schema yet. */
                   <DataSection
                     addLabel="Add account"
+                    action={
+                      <AddAccountModal
+                        owners={ownerOptions}
+                        providers={providers}
+                        triggerVariant="quiet"
+                      />
+                    }
+                    emptyAction={
+                      <AddAccountModal owners={ownerOptions} providers={providers} />
+                    }
                     empty={{
                       title: 'No accounts yet',
                       description:
-                        'Superannuation, investment and bank accounts held by this group.',
+                        'Investment and superannuation accounts owned by this group\u2019s members.',
                     }}
                   >
-                    <ul className="flex flex-col gap-1.5">
-                      <DataRow
-                        primary="Example superannuation account"
-                        secondary="Placeholder row — no account data exists yet"
-                        meta="—"
-                      />
-                      <DataRow
-                        primary="Example investment account"
-                        secondary="Placeholder row — no account data exists yet"
-                        meta="—"
-                      />
-                    </ul>
+                    {accounts.length ? (
+                      <ul className="flex flex-col gap-1.5">
+                        {accounts.map((a) => (
+                          <DataRow
+                            key={a.account_id}
+                            primary={a.label}
+                            secondary={[
+                              ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
+                              a.owners,
+                              a.status === 'closed' ? 'Closed' : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                            meta={
+                              a.latest_value != null
+                                ? money.format(Number(a.latest_value))
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </ul>
+                    ) : undefined}
                   </DataSection>
                 ),
               },
