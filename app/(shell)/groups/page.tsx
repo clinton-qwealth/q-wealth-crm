@@ -1,0 +1,150 @@
+import { redirect } from 'next/navigation'
+import { getCurrentStaff } from '@/lib/staff'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { Card, PageHeading, Pill } from '@/components/ui'
+import { Tabs } from '@/components/tabs'
+
+export const metadata = { title: 'Groups · Q Wealth CRM' }
+
+type GroupSummary = {
+  group_id: string
+  group_type: string
+  name: string
+  status: string
+  primary_contact: string | null
+  member_count: number | null
+  members: string | null
+}
+
+/**
+ * Loads the group to display. An `id` in the query string wins; otherwise the
+ * first group visible to this staff member is shown so the workspace is not
+ * empty. Group *selection* is not built yet — that belongs with the client list.
+ */
+async function getGroup(id?: string) {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  let q = supabase.from('group_summary').select('*').limit(1)
+  if (id) q = q.eq('group_id', id)
+  else q = q.order('name')
+  const { data, error } = await q.maybeSingle()
+  return error ? null : (data as GroupSummary | null)
+}
+
+/** "Janet Testsmith (primary), Acme Pty Ltd (entity)" -> structured pairs. */
+function parseMembers(members: string | null) {
+  if (!members) return []
+  return [...members.matchAll(/([^,]+?)\s*\(([^)]+)\)/g)].map((m) => ({
+    name: m[1].trim(),
+    role: m[2].trim().replace(/_/g, ' '),
+  }))
+}
+
+const TYPE_LABEL: Record<string, string> = {
+  household: 'Household',
+  business_entity: 'Business entity',
+}
+
+function Placeholder({ children, className = 'h-56' }: { children: string; className?: string }) {
+  return (
+    <div
+      className={`flex ${className} items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50/60`}
+    >
+      <p className="px-4 text-center text-sm text-neutral-400">{children}</p>
+    </div>
+  )
+}
+
+export default async function GroupsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>
+}) {
+  const staff = await getCurrentStaff()
+  if (!staff) redirect('/login')
+
+  const { id } = await searchParams
+  const group = await getGroup(id)
+  const members = parseMembers(group?.members ?? null)
+
+  return (
+    <>
+      <PageHeading
+        eyebrow="Client groups"
+        title={group?.name ?? 'Groups'}
+        description={
+          group
+            ? 'Group workspace. Selecting a different group is not built yet.'
+            : 'No client group is visible to you yet.'
+        }
+      />
+
+      {/* Left — group profile */}
+      <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
+        <Card title="Group profile">
+          {group ? (
+            <>
+              <p className="text-sm font-semibold text-neutral-900">{group.name}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Pill on={false}>{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
+                <Pill on={group.status === 'active'}>{group.status}</Pill>
+              </div>
+
+              <dl className="mt-4 divide-y divide-neutral-100 border-t border-neutral-100">
+                <div className="flex items-baseline justify-between gap-3 py-2">
+                  <dt className="text-xs text-neutral-500">Primary contact</dt>
+                  <dd className="text-right text-sm text-neutral-900">
+                    {group.primary_contact ?? '—'}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 py-2">
+                  <dt className="text-xs text-neutral-500">Members</dt>
+                  <dd className="text-sm tabular-nums text-neutral-900">
+                    {group.member_count ?? members.length}
+                  </dd>
+                </div>
+              </dl>
+
+              {members.length ? (
+                <ul className="mt-3 flex flex-col gap-1.5 border-t border-neutral-100 pt-3">
+                  {members.map((m) => (
+                    <li key={`${m.name}-${m.role}`} className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-sm text-neutral-700">{m.name}</span>
+                      <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
+                        {m.role}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : (
+            <Placeholder className="h-32">
+              No group to show. Groups you own or are assigned to will appear here.
+            </Placeholder>
+          )}
+        </Card>
+      </div>
+
+      {/* Centre — the working area */}
+      <div className="col-span-full lg:col-span-6">
+        <Card>
+          <Tabs
+            label="Group detail"
+            items={[
+              { id: 'one', label: 'Tab 1', panel: <Placeholder>Tab 1 content</Placeholder> },
+              { id: 'two', label: 'Tab 2', panel: <Placeholder>Tab 2 content</Placeholder> },
+              { id: 'three', label: 'Tab 3', panel: <Placeholder>Tab 3 content</Placeholder> },
+            ]}
+          />
+        </Card>
+      </div>
+
+      {/* Right — reserved */}
+      <div className="col-span-full lg:col-span-3">
+        <Card>
+          <Placeholder className="h-56">Reserved</Placeholder>
+        </Card>
+      </div>
+    </>
+  )
+}
