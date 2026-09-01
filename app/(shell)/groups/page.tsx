@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, PageHeading, Pill } from '@/components/ui'
+import { PlusIcon } from '@/components/icons'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -28,6 +29,49 @@ async function getGroup(id?: string) {
   else q = q.order('name')
   const { data, error } = await q.maybeSingle()
   return error ? null : (data as GroupSummary | null)
+}
+
+/**
+ * The primary contact's best phone number.
+ *
+ * `group_summary` carries the contact's name but not their id, so the party has
+ * to be reached through client_groups first. Preference order is the contact's
+ * own `is_preferred` flag, then a mobile over any other number — ringing a
+ * mobile is more likely to reach someone than an office line.
+ */
+async function getPrimaryContactPhone(groupId: string) {
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data: group } = await supabase
+    .from('client_groups')
+    .select('primary_contact_party_id')
+    .eq('id', groupId)
+    .maybeSingle()
+
+  const partyId = group?.primary_contact_party_id
+  if (!partyId) return null
+
+  const { data: phones } = await supabase
+    .from('contact_points')
+    .select('kind, value, is_preferred')
+    .eq('party_id', partyId)
+    .in('kind', ['phone_mobile', 'phone_other'])
+
+  if (!phones?.length) return null
+
+  const best =
+    phones.find((p) => p.is_preferred && p.kind === 'phone_mobile') ??
+    phones.find((p) => p.is_preferred) ??
+    phones.find((p) => p.kind === 'phone_mobile') ??
+    phones[0]
+
+  return (best?.value as string | null) ?? null
+}
+
+/** Strip formatting so the dialler gets something it can use. */
+function telHref(number: string) {
+  const cleaned = number.replace(/[^\d+]/g, '')
+  return `tel:${cleaned}`
 }
 
 /** "Janet Testsmith (primary), Acme Pty Ltd (entity)" -> structured pairs. */
@@ -64,6 +108,7 @@ export default async function GroupsPage({
 
   const { id } = await searchParams
   const group = await getGroup(id)
+  const phone = group ? await getPrimaryContactPhone(group.group_id) : null
   const members = parseMembers(group?.members ?? null)
 
   return (
@@ -74,10 +119,8 @@ export default async function GroupsPage({
         meta={
           group ? (
             <>
-              <Pill on={false}>{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
-              <Pill tone={group.status === 'active' ? 'success' : 'neutral'}>
-                {group.status}
-              </Pill>
+              <Pill tone="neutral">{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
+              <Pill on={group.status === 'active'}>{group.status}</Pill>
             </>
           ) : null
         }
@@ -89,22 +132,44 @@ export default async function GroupsPage({
         <Card title="Group profile">
           {group ? (
             <>
-              <dl>
-                <div className="flex items-baseline justify-between gap-3 pb-2">
+              <dl className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-xs text-neutral-500">Primary contact</dt>
                   <dd className="text-right text-sm text-neutral-900">
                     {group.primary_contact ?? '—'}
                   </dd>
                 </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-xs text-neutral-500">Phone</dt>
+                  <dd className="text-right text-sm">
+                    {phone ? (
+                      <a
+                        href={telHref(phone)}
+                        className="rounded text-brand outline-none transition-colors hover:text-brand-700 hover:underline focus-visible:ring-2 focus-visible:ring-brand/30"
+                      >
+                        {phone}
+                      </a>
+                    ) : (
+                      <span className="text-neutral-400">—</span>
+                    )}
+                  </dd>
+                </div>
               </dl>
 
-              <div className="border-t border-neutral-100 pt-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                  Members
-                </h3>
+              <div className="mt-6 border-t border-neutral-100 pt-4">
+                {/* The count belongs with the heading: it describes the list,
+                    not the action underneath it. */}
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                    Members
+                  </h3>
+                  <span className="text-xs tabular-nums text-neutral-400">
+                    {group.member_count ?? members.length}
+                  </span>
+                </div>
 
                 {members.length ? (
-                  <ul className="mt-2 flex flex-col gap-1.5">
+                  <ul className="mt-2.5 flex flex-col gap-2">
                     {members.map((m) => (
                       <li
                         key={`${m.name}-${m.role}`}
@@ -118,21 +183,18 @@ export default async function GroupsPage({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-sm text-neutral-400">No members yet.</p>
+                  <p className="mt-2.5 text-sm text-neutral-400">No members yet.</p>
                 )}
 
-                <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-neutral-100 pt-2">
-                  {/* Placeholder target: adding members is not built yet. */}
-                  <a
-                    href="#"
-                    className="text-xs font-medium text-brand outline-none hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
-                  >
-                    Add member
-                  </a>
-                  <span className="text-xs tabular-nums text-neutral-400">
-                    {group.member_count ?? members.length}
-                  </span>
-                </div>
+                {/* Reads as the next row of the list rather than a separate
+                    control. Placeholder target — adding members is not built yet. */}
+                <a
+                  href="#"
+                  className="-ml-1 mt-2 inline-flex items-center gap-1 rounded px-1 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add member
+                </a>
               </div>
 
               <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-400">

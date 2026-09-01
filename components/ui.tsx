@@ -130,16 +130,23 @@ export function Button({
 export type PillTone = 'brand' | 'success' | 'neutral'
 
 const PILL_TONES: Record<PillTone, string> = {
+  // Brand marks something as *ours* — an identity or a label, not a state.
   brand: 'bg-brand-100 text-brand-700 ring-brand-200 font-semibold',
-  // Green is reserved for a live, healthy state — distinct from the brand
-  // accent, which marks *ours* rather than *good*.
+  // Green marks a state that is live, on or granted.
   success: 'bg-emerald-50 text-emerald-700 ring-emerald-200 font-semibold',
   neutral: 'bg-neutral-100 text-neutral-500 ring-neutral-200 font-medium',
 }
 
 /**
- * Small state mark. `tone` wins when given; otherwise `on` picks brand or
- * neutral, which keeps the existing yes/no call sites unchanged.
+ * Small state mark.
+ *
+ * `on` carries the meaning: a positive, live state is green, anything else is
+ * neutral. Keeping that rule inside the component rather than at each call site
+ * means a new status cannot quietly pick the wrong colour, and the two colours
+ * stay distinguishable — green says "this is on", brand says "this is ours".
+ *
+ * Pass `tone` explicitly only to override, e.g. `tone="brand"` for a label like
+ * an access-profile name, which is an identity rather than a state.
  */
 export function Pill({
   on = false,
@@ -150,7 +157,7 @@ export function Pill({
   tone?: PillTone
   children: ReactNode
 }) {
-  const resolved = tone ?? (on ? 'brand' : 'neutral')
+  const resolved = tone ?? (on ? 'success' : 'neutral')
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${PILL_TONES[resolved]}`}

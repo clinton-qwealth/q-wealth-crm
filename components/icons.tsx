@@ -43,3 +43,16 @@ export function UserIcon({ className = base }: IconProps) {
     </svg>
   )
 }
+
+export function PlusIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className={className} aria-hidden>
+      <path
+        d="M10 4.75v10.5M4.75 10h10.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
