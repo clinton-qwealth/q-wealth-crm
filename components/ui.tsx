@@ -127,7 +127,7 @@ export function Button({
   )
 }
 
-export type PillTone = 'brand' | 'success' | 'warning' | 'neutral'
+export type PillTone = 'brand' | 'success' | 'warning' | 'danger' | 'neutral'
 
 const PILL_TONES: Record<PillTone, string> = {
   // Brand marks something as *ours* — an identity or a label, not a state.
@@ -136,6 +136,9 @@ const PILL_TONES: Record<PillTone, string> = {
   success: 'bg-emerald-50 text-emerald-700 ring-emerald-200 font-semibold',
   // Amber marks a state that is paused or needs attention — not wrong, not live.
   warning: 'bg-amber-50 text-amber-800 ring-amber-200 font-semibold',
+  // Red is the mirror of success: a value moving the wrong way. Same weights, so
+  // an up mark and a down mark read as one pair rather than two designs.
+  danger: 'bg-red-50 text-red-700 ring-red-200 font-semibold',
   neutral: 'bg-neutral-100 text-neutral-500 ring-neutral-200 font-medium',
 }
 
@@ -216,15 +219,19 @@ export function AccountValue({
           .join(' ')
 
   return (
-    <span className="inline-flex items-center gap-1" title={detail}>
+    <span className="inline-flex items-center gap-1.5" title={detail}>
       <span className="tabular-nums">{accountMoney.format(Number(value))}</span>
       {up || down ? (
-        <>
-          <svg
-            viewBox="0 0 8 8"
-            aria-hidden="true"
-            className={`size-2 ${up ? 'text-emerald-600' : 'text-red-600'}`}
-          >
+        /* Circular rather than a full pill: the contents are a single glyph, so
+           the horizontal padding a pill carries for text would leave it adrift.
+           Tones come straight from PILL_TONES so this stays in step with the
+           status pills instead of drifting into its own greens and reds. */
+        <span
+          className={`inline-flex size-[18px] shrink-0 items-center justify-center rounded-full ring-1 ${
+            up ? PILL_TONES.success : PILL_TONES.danger
+          }`}
+        >
+          <svg viewBox="0 0 8 8" aria-hidden="true" className="size-[7px]">
             <path
               d={up ? 'M4 0.5 L8 7.5 L0 7.5 Z' : 'M4 7.5 L0 0.5 L8 0.5 Z'}
               fill="currentColor"
@@ -232,7 +239,7 @@ export function AccountValue({
           </svg>
           {/* The colour carries the meaning, so it needs a text equivalent. */}
           <span className="sr-only">{up ? 'increasing' : 'decreasing'}</span>
-        </>
+        </span>
       ) : null}
     </span>
   )
