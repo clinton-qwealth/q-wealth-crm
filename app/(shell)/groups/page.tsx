@@ -33,24 +33,37 @@ async function getGroup(id?: string) {
 }
 
 /**
- * The primary contact's best phone number.
+ * The primary contact's best phone number, and the group's servicing adviser.
  *
- * `group_summary` carries the contact's name but not their id, so the party has
- * to be reached through client_groups first. Preference order is the contact's
- * own `is_preferred` flag, then a mobile over any other number — ringing a
- * mobile is more likely to reach someone than an office line.
+ * `group_summary` carries the contact's name but not their id, so client_groups
+ * has to be read anyway — the adviser comes along in the same query as an embed
+ * rather than costing another round trip.
+ *
+ * The adviser is `owner_staff_id`: the schema defines the owner as the servicing
+ * adviser, required on every group, and it is what group-scoped visibility keys
+ * off. Reading their name is possible because staff identity is readable by any
+ * active staff member; only the permission mapping is restricted.
  */
-async function getPrimaryContactPhone(groupId: string) {
+async function getGroupContacts(groupId: string) {
   const supabase = await createSupabaseServerClient({ writable: false })
 
   const { data: group } = await supabase
     .from('client_groups')
-    .select('primary_contact_party_id')
+    .select('primary_contact_party_id, owner_staff_id, staff_users(full_name)')
     .eq('id', groupId)
     .maybeSingle()
 
+  // The owner embed is to-one, so PostgREST returns an object; tolerate an array
+  // in case relationship detection changes.
+  const rawOwner = (group as Record<string, unknown> | null)?.staff_users
+  const owner = (Array.isArray(rawOwner) ? rawOwner[0] : rawOwner) as
+    | { full_name?: string }
+    | null
+    | undefined
+  const adviser = owner?.full_name ?? null
+
   const partyId = group?.primary_contact_party_id
-  if (!partyId) return null
+  if (!partyId) return { phone: null, adviser }
 
   const { data: phones } = await supabase
     .from('contact_points')
@@ -58,15 +71,17 @@ async function getPrimaryContactPhone(groupId: string) {
     .eq('party_id', partyId)
     .in('kind', ['phone_mobile', 'phone_other'])
 
-  if (!phones?.length) return null
+  if (!phones?.length) return { phone: null, adviser }
 
+  // The contact's own stated preference wins; a mobile is more likely to reach
+  // someone than an office line.
   const best =
     phones.find((p) => p.is_preferred && p.kind === 'phone_mobile') ??
     phones.find((p) => p.is_preferred) ??
     phones.find((p) => p.kind === 'phone_mobile') ??
     phones[0]
 
-  return (best?.value as string | null) ?? null
+  return { phone: (best?.value as string | null) ?? null, adviser }
 }
 
 /** Strip formatting so the dialler gets something it can use. */
@@ -109,7 +124,9 @@ export default async function GroupsPage({
 
   const { id } = await searchParams
   const group = await getGroup(id)
-  const phone = group ? await getPrimaryContactPhone(group.group_id) : null
+  const { phone, adviser } = group
+    ? await getGroupContacts(group.group_id)
+    : { phone: null, adviser: null }
   const members = parseMembers(group?.members ?? null)
 
   return (
@@ -163,6 +180,12 @@ export default async function GroupsPage({
                     ) : (
                       <span className="text-neutral-400">—</span>
                     )}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-xs text-neutral-500">Primary adviser</dt>
+                  <dd className="text-right text-sm text-neutral-900">
+                    {adviser ?? <span className="text-neutral-400">—</span>}
                   </dd>
                 </div>
               </dl>
@@ -244,7 +267,6 @@ export default async function GroupsPage({
                      can be compared. No account tables exist in the schema yet. */
                   <DataSection
                     addLabel="Add account"
-                    countLabel="2 accounts"
                     empty={{
                       title: 'No accounts yet',
                       description:

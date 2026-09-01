@@ -29,7 +29,8 @@ export function DataSection({
   /** e.g. "Add account" — used on both the toolbar link and the empty button. */
   addLabel: string
   addHref?: string
-  /** e.g. "3 accounts". Gives the toolbar a left side and says what you're looking at. */
+  /** Optional, e.g. "3 accounts". Gives the toolbar a left side; without it the
+   *  add link sits alone on the right rather than drifting left. */
   countLabel?: string
   /** Required, not optional: any section can be emptied back to zero, so every
    *  one needs a defined empty state rather than collapsing to nothing. */
@@ -61,8 +62,12 @@ export function DataSection({
 
   return (
     <div>
-      <div className="mb-2.5 flex items-center justify-between gap-3">
-        <p className="text-xs text-neutral-500">{countLabel}</p>
+      <div
+        className={`mb-2.5 flex items-center gap-3 ${
+          countLabel ? 'justify-between' : 'justify-end'
+        }`}
+      >
+        {countLabel ? <p className="text-xs text-neutral-500">{countLabel}</p> : null}
         <a
           href={addHref}
           className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
