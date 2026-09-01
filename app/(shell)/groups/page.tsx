@@ -75,7 +75,9 @@ export default async function GroupsPage({
           group ? (
             <>
               <Pill on={false}>{TYPE_LABEL[group.group_type] ?? group.group_type}</Pill>
-              <Pill on={group.status === 'active'}>{group.status}</Pill>
+              <Pill tone={group.status === 'active' ? 'success' : 'neutral'}>
+                {group.status}
+              </Pill>
             </>
           ) : null
         }
@@ -87,33 +89,51 @@ export default async function GroupsPage({
         <Card title="Group profile">
           {group ? (
             <>
-              <dl className="divide-y divide-neutral-100">
-                <div className="flex items-baseline justify-between gap-3 py-2">
+              <dl>
+                <div className="flex items-baseline justify-between gap-3 pb-2">
                   <dt className="text-xs text-neutral-500">Primary contact</dt>
                   <dd className="text-right text-sm text-neutral-900">
                     {group.primary_contact ?? '—'}
                   </dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3 py-2">
-                  <dt className="text-xs text-neutral-500">Members</dt>
-                  <dd className="text-sm tabular-nums text-neutral-900">
-                    {group.member_count ?? members.length}
-                  </dd>
-                </div>
               </dl>
 
-              {members.length ? (
-                <ul className="mt-3 flex flex-col gap-1.5 border-t border-neutral-100 pt-3">
-                  {members.map((m) => (
-                    <li key={`${m.name}-${m.role}`} className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-sm text-neutral-700">{m.name}</span>
-                      <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
-                        {m.role}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+              <div className="border-t border-neutral-100 pt-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                  Members
+                </h3>
+
+                {members.length ? (
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {members.map((m) => (
+                      <li
+                        key={`${m.name}-${m.role}`}
+                        className="flex items-baseline justify-between gap-3"
+                      >
+                        <span className="truncate text-sm text-neutral-700">{m.name}</span>
+                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
+                          {m.role}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-neutral-400">No members yet.</p>
+                )}
+
+                <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-neutral-100 pt-2">
+                  {/* Placeholder target: adding members is not built yet. */}
+                  <a
+                    href="#"
+                    className="text-xs font-medium text-brand outline-none hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+                  >
+                    Add member
+                  </a>
+                  <span className="text-xs tabular-nums text-neutral-400">
+                    {group.member_count ?? members.length}
+                  </span>
+                </div>
+              </div>
 
               <p className="mt-3 border-t border-neutral-100 pt-3 text-xs text-neutral-400">
                 Choosing a different group is not built yet.

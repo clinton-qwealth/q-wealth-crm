@@ -127,15 +127,33 @@ export function Button({
   )
 }
 
-/** Small on/off mark. Brand tint for on, plain neutral for off. */
-export function Pill({ on, children }: { on: boolean; children: ReactNode }) {
+export type PillTone = 'brand' | 'success' | 'neutral'
+
+const PILL_TONES: Record<PillTone, string> = {
+  brand: 'bg-brand-100 text-brand-700 ring-brand-200 font-semibold',
+  // Green is reserved for a live, healthy state — distinct from the brand
+  // accent, which marks *ours* rather than *good*.
+  success: 'bg-emerald-50 text-emerald-700 ring-emerald-200 font-semibold',
+  neutral: 'bg-neutral-100 text-neutral-500 ring-neutral-200 font-medium',
+}
+
+/**
+ * Small state mark. `tone` wins when given; otherwise `on` picks brand or
+ * neutral, which keeps the existing yes/no call sites unchanged.
+ */
+export function Pill({
+  on = false,
+  tone,
+  children,
+}: {
+  on?: boolean
+  tone?: PillTone
+  children: ReactNode
+}) {
+  const resolved = tone ?? (on ? 'brand' : 'neutral')
   return (
     <span
-      className={
-        on
-          ? 'inline-flex items-center rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-200'
-          : 'inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500 ring-1 ring-neutral-200'
-      }
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${PILL_TONES[resolved]}`}
     >
       {children}
     </span>
