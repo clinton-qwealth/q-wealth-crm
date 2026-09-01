@@ -15,6 +15,7 @@ export async function createAccount(
   formData: FormData
 ): Promise<CreateAccountState> {
   const accountType = String(formData.get('account_type') ?? '')
+  const status = String(formData.get('status') ?? 'active')
   const label = String(formData.get('label') ?? '').trim()
   const ownerIds = formData.getAll('owner_party_ids').map(String).filter(Boolean)
   const providerId = String(formData.get('provider_party_id') ?? '') || null
@@ -49,6 +50,7 @@ export async function createAccount(
     p_opened_on: openedOn,
     p_opening_value: openingValue,
     p_valued_on: valuedOn,
+    p_status: status,
   })
 
   if (error) return { error: error.message }

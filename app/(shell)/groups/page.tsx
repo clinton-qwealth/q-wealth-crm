@@ -155,6 +155,12 @@ const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   superannuation: 'Superannuation',
 }
 
+const ACCOUNT_STATUS_LABEL: Record<string, string> = {
+  active: 'Active',
+  suspended: 'Suspended',
+  closed: 'Closed',
+}
+
 /** Strip formatting so the dialler gets something it can use. */
 function telHref(number: string) {
   const cleaned = number.replace(/[^\d+]/g, '')
@@ -372,10 +378,19 @@ export default async function GroupsPage({
                             secondary={[
                               ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
                               a.owners,
-                              a.status === 'closed' ? 'Closed' : null,
                             ]
                               .filter(Boolean)
                               .join(' · ')}
+                            /* Marked only when it is not active. Most accounts
+                               are, so badging every row would be noise and the
+                               exceptions would stop standing out. */
+                            badge={
+                              a.status === 'active' ? undefined : (
+                                <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
+                                  {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
+                                </Pill>
+                              )
+                            }
                             meta={
                               a.latest_value != null
                                 ? money.format(Number(a.latest_value))

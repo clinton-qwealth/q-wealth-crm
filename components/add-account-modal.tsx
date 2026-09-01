@@ -140,15 +140,25 @@ export function AddAccountModal({
               </label>
             </div>
 
-            <label className="flex flex-col gap-1.5">
-              <span className={LABEL}>Account name</span>
-              <input
-                name="label"
-                required
-                placeholder="e.g. Netwealth Wrap"
-                className={FIELD}
-              />
-            </label>
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Account name</span>
+                <input
+                  name="label"
+                  required
+                  placeholder="e.g. Netwealth Wrap"
+                  className={FIELD}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Status</span>
+                <select name="status" defaultValue="active" className={FIELD}>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </label>
+            </div>
 
             <fieldset className="flex flex-col gap-1.5">
               <legend className={LABEL}>Owners</legend>

@@ -99,15 +99,22 @@ export function DataRow({
   primary,
   secondary,
   meta,
+  badge,
 }: {
   primary: string
   secondary?: string
   meta?: string
+  /** Status mark shown beside the name. Left empty for the ordinary case, so a
+   *  row only carries a badge when something is worth noticing. */
+  badge?: ReactNode
 }) {
   return (
     <li className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-3 py-2">
       <span className="min-w-0">
-        <span className="block truncate text-sm text-neutral-800">{primary}</span>
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm text-neutral-800">{primary}</span>
+          {badge}
+        </span>
         {secondary ? (
           <span className="block truncate text-xs text-neutral-400">{secondary}</span>
         ) : null}

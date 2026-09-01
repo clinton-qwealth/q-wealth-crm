@@ -127,13 +127,15 @@ export function Button({
   )
 }
 
-export type PillTone = 'brand' | 'success' | 'neutral'
+export type PillTone = 'brand' | 'success' | 'warning' | 'neutral'
 
 const PILL_TONES: Record<PillTone, string> = {
   // Brand marks something as *ours* — an identity or a label, not a state.
   brand: 'bg-brand-100 text-brand-700 ring-brand-200 font-semibold',
   // Green marks a state that is live, on or granted.
   success: 'bg-emerald-50 text-emerald-700 ring-emerald-200 font-semibold',
+  // Amber marks a state that is paused or needs attention — not wrong, not live.
+  warning: 'bg-amber-50 text-amber-800 ring-amber-200 font-semibold',
   neutral: 'bg-neutral-100 text-neutral-500 ring-neutral-200 font-medium',
 }
 
