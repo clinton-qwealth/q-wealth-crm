@@ -81,6 +81,26 @@ function clientLink(id: string) {
   return `${APP_BASE}/clients/${id}`
 }
 
+/**
+ * Accounts and policies have no group column: they belong to the group(s) their
+ * related parties belong to. Both tools therefore resolve parties first, and
+ * share that step rather than duplicating it.
+ */
+async function resolveParties(
+  db: SupabaseClient,
+  partyId: string | undefined,
+  groupId: string | undefined,
+): Promise<{ ids: string[] } | { error: string }> {
+  if (partyId) return { ids: [partyId] }
+  const { data, error } = await db
+    .from('client_group_members')
+    .select('party_id')
+    .eq('group_id', groupId!)
+    .is('end_date', null)
+  if (error) return { error: error.message }
+  return { ids: (data ?? []).map((m) => (m as Record<string, unknown>).party_id as string) }
+}
+
 function ok(data: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
 }
@@ -129,7 +149,7 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<Staff |
 }
 
 function buildServer(db: SupabaseClient, staff: Staff) {
-  const server = new McpServer({ name: 'q-wealth-crm', version: '0.1.5' })
+  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.0' })
 
   server.registerTool(
     'whoami',
@@ -384,6 +404,137 @@ function buildServer(db: SupabaseClient, staff: Staff) {
         .limit(25)
       if (error) return fail(error.message)
       return ok(data ?? [])
+    }
+  )
+
+  server.registerTool(
+    'get_client_accounts',
+    {
+      title: 'Get financial accounts',
+      description:
+        'Investment and superannuation accounts for a client (party_id) or every member of a group (group_id). ' +
+        'Ownership, not the group, is what an account belongs to, so a jointly-owned account is returned for both owners. ' +
+        'IMPORTANT on values: latest_value is the most recent RECORDED valuation and valued_on is the date it applied - ' +
+        'it is NOT a live balance and may be days or months old, so always state the as-at date when reporting a value. ' +
+        'change_amount and change_pct compare latest_value against baseline_value, the average of the valuations in the ' +
+        '30 days BEFORE the latest one. baseline_points is how many valuations that average came from; 0 means no trend ' +
+        'can be stated at all. All amounts are AUD.',
+      inputSchema: {
+        party_id: z.string().uuid().optional(),
+        group_id: z.string().uuid().optional(),
+      },
+    },
+    async ({ party_id, group_id }) => {
+      if (!party_id && !group_id) return fail('Provide party_id or group_id.')
+      const partyIds = await resolveParties(db, party_id, group_id)
+      if ('error' in partyIds) return fail(partyIds.error)
+      if (partyIds.ids.length === 0) return ok([])
+
+      const { data: owners, error: oErr } = await db
+        .from('financial_account_owners')
+        .select('account_id')
+        .in('party_id', partyIds.ids)
+      if (oErr) return fail(oErr.message)
+
+      const ids = [...new Set((owners ?? []).map((o) => (o as Record<string, unknown>).account_id as string))]
+      if (ids.length === 0) return ok([])
+
+      const { data, error } = await db
+        .from('financial_accounts_summary')
+        .select('*')
+        .in('account_id', ids)
+        .order('label')
+      if (error) return fail(error.message)
+      return ok(data ?? [])
+    }
+  )
+
+  server.registerTool(
+    'get_client_insurance',
+    {
+      title: 'Get insurance policies',
+      description:
+        'Personal insurance for a client (party_id) or every member of a group (group_id): life, TPD, trauma and income protection. ' +
+        'A policy has BOTH owners (who hold the contract) and lives_insured (who is covered). These are often different people, ' +
+        'so never assume the owner is the person covered. One policy can bundle several covers under one policy number. ' +
+        'CRITICAL on amounts: every cover carries benefit_amount together with benefit_basis. benefit_basis is lump_sum for ' +
+        'life, TPD and trauma, and monthly (occasionally annual) for income protection. A benefit_amount of 6500 with basis ' +
+        'monthly means $6,500 PER MONTH, not $6,500 of cover. benefit_display gives the correctly worded figure - prefer it. ' +
+        'total_lump_sum_cover and total_monthly_benefit are separate on purpose: a lump sum and an income stream are ' +
+        'different quantities and must never be added together. All amounts are AUD.',
+      inputSchema: {
+        party_id: z.string().uuid().optional(),
+        group_id: z.string().uuid().optional(),
+      },
+    },
+    async ({ party_id, group_id }) => {
+      if (!party_id && !group_id) return fail('Provide party_id or group_id.')
+      const partyIds = await resolveParties(db, party_id, group_id)
+      if ('error' in partyIds) return fail(partyIds.error)
+      if (partyIds.ids.length === 0) return ok([])
+
+      // Any policy role counts: a person whose life is insured on a policy someone
+      // else owns still holds that cover.
+      const { data: links, error: lErr } = await db
+        .from('insurance_policy_parties')
+        .select('policy_id')
+        .in('party_id', partyIds.ids)
+      if (lErr) return fail(lErr.message)
+
+      const ids = [...new Set((links ?? []).map((r) => (r as Record<string, unknown>).policy_id as string))]
+      if (ids.length === 0) return ok([])
+
+      const { data: policies, error } = await db
+        .from('insurance_policies_summary')
+        .select('*')
+        .in('policy_id', ids)
+        .order('label')
+      if (error) return fail(error.message)
+
+      const { data: covers, error: cErr } = await db
+        .from('insurance_policy_covers')
+        .select('policy_id, cover_type, benefit_amount, benefit_basis, benefit_period, waiting_period, indexed')
+        .in('policy_id', ids)
+      if (cErr) return fail(cErr.message)
+
+      // The web app has a formatter that encodes the basis rule. This consumer has
+      // none, so the wording is applied here rather than left to be inferred.
+      //
+      // Return type stated explicitly: spreading a Record<string, unknown> into
+      // an object literal drops the index signature, so the caller could no
+      // longer read policy_id off the result.
+      const worded = (row: Record<string, unknown>): Record<string, unknown> => {
+        const money = Number(row.benefit_amount).toLocaleString('en-AU', {
+          style: 'currency',
+          currency: 'AUD',
+          maximumFractionDigits: 0,
+        })
+        const basis = row.benefit_basis as string
+        return {
+          ...row,
+          benefit_display:
+            basis === 'monthly'
+              ? `${money} per month`
+              : basis === 'annual'
+                ? `${money} per year`
+                : `${money} lump sum`,
+        }
+      }
+
+      const byPolicy = new Map<string, Record<string, unknown>[]>()
+      for (const c of covers ?? []) {
+        const row = worded(c as Record<string, unknown>)
+        const key = row.policy_id as string
+        if (!byPolicy.has(key)) byPolicy.set(key, [])
+        byPolicy.get(key)!.push(row)
+      }
+
+      return ok(
+        (policies ?? []).map((pol) => {
+          const row = pol as Record<string, unknown>
+          return { ...row, covers: byPolicy.get(row.policy_id as string) ?? [] }
+        })
+      )
     }
   )
 
