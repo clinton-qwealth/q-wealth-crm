@@ -44,7 +44,7 @@ export function ChallengeForm({ next }: { next: string }) {
   return (
     <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-neutral-600">
+        <span className="text-left text-xs font-medium text-neutral-600">
           Authentication code
         </span>
         <input
