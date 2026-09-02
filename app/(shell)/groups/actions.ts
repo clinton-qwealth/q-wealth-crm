@@ -165,6 +165,19 @@ function readPersonFields(formData: FormData) {
     p_addr_state: str('addr_state') || null,
     p_addr_postcode: str('addr_postcode') || null,
     p_notes: str('notes') || null,
+    p_place_of_birth: str('place_of_birth') || null,
+    // Three states, so an empty select means "not asked" rather than "no".
+    p_smoker: str('smoker') === '' ? null : str('smoker') === 'true',
+    p_primary_citizenship: str('primary_citizenship') || null,
+    p_secondary_citizenship: str('secondary_citizenship') || null,
+    p_tax_residency: str('tax_residency') || null,
+    p_employment_status: str('employment_status') || null,
+    p_occupation: str('occupation') || null,
+    p_company_name: str('company_name') || null,
+    p_hin: str('hin') || null,
+    p_chess_pid: str('chess_pid') || null,
+    p_coffee_preference: str('coffee_preference') || null,
+    p_date_of_death: str('date_of_death') || null,
   }
 }
 
@@ -300,4 +313,55 @@ export async function searchPeople(groupId: string, query: string): Promise<Pers
         detail: detail || 'No contact details on file',
       }
     })
+}
+
+
+/**
+ * Decrypt one sensitive field for display.
+ *
+ * Every gate lives in the database, not here. reveal_sensitive_field checks the
+ * caller holds `view_sensitive`, checks the session carries a verified second
+ * factor, and writes a row to sensitive_access_log naming the caller — all of
+ * which apply whether the call arrives from this action, from psql, or from
+ * anywhere else. Adding a weaker check here would only create a second, softer
+ * answer to the same question.
+ *
+ * The second-factor requirement is not an extra hurdle in the web app: every
+ * authenticated route already requires `aal2`, so a staff member who can reach
+ * this screen has already satisfied it. It matters for any other caller.
+ */
+export async function revealSensitiveField(
+  partyId: string,
+  kind: string,
+): Promise<{ value: string } | { error: string }> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('reveal_sensitive_field', {
+    p_party_id: partyId,
+    p_kind: kind,
+  })
+  if (error) return { error: revealError(error.message) }
+  if (data === null || data === undefined) return { error: 'Nothing recorded for that field.' }
+  return { value: String(data) }
+}
+
+/**
+ * Turn a database refusal into something a person can act on.
+ *
+ * The raw message is not shown: `permission denied for function
+ * reveal_sensitive_field` tells a user nothing and tells an attacker the
+ * function's name. Each refusal the database can actually produce is mapped;
+ * anything unrecognised falls back to a message that admits the failure without
+ * describing the internals.
+ */
+function revealError(message: string) {
+  if (message.includes('view_sensitive')) {
+    return 'Your access profile does not permit revealing this field.'
+  }
+  if (message.toLowerCase().includes('multi-factor')) {
+    return 'Sign in again and complete your authenticator step to reveal this.'
+  }
+  if (message.includes('permission denied')) {
+    return 'You do not have permission to reveal this field.'
+  }
+  return 'That field could not be revealed. If it persists, contact your administrator.'
 }

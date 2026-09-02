@@ -97,3 +97,31 @@ export function TickIcon({ className = base }: IconProps) {
     </svg>
   )
 }
+
+export function EyeIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M1.5 8s2.4-4.25 6.5-4.25S14.5 8 14.5 8s-2.4 4.25-6.5 4.25S1.5 8 1.5 8Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1.9" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  )
+}
+
+export function EyeOffIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M3.2 4.6C2.1 5.6 1.5 8 1.5 8s2.4 4.25 6.5 4.25c1 0 1.9-.2 2.7-.6M6.1 3.95c.6-.13 1.24-.2 1.9-.2 4.1 0 6.5 4.25 6.5 4.25s-.63 1.1-1.75 2.2"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path d="M2 2l12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}

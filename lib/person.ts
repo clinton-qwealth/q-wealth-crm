@@ -18,6 +18,20 @@ export type PersonDetail = {
   gender: string | null
   marital_status: string | null
   tfn_status: string
+  place_of_birth: string | null
+  smoker: boolean | null
+  primary_citizenship: string | null
+  secondary_citizenship: string | null
+  tax_residency: string | null
+  employment_status: string | null
+  occupation: string | null
+  company_name: string | null
+  hin: string | null
+  chess_pid: string | null
+  coffee_preference: string | null
+  /** Masked hints for the encrypted identifiers, as kind -> hint. Hints only;
+   *  the plaintext needs an MFA-gated reveal that is logged. */
+  hints: Record<string, string>
   member_role: string | null
   is_primary_group: boolean | null
   email: string | null
@@ -78,6 +92,10 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       title: null, first_name: '', middle_name: null, last_name: '',
       preferred_name: null, date_of_birth: null, date_of_death: null, gender: null,
       marital_status: null, tfn_status: 'not_provided',
+      place_of_birth: null, smoker: null, primary_citizenship: null,
+      secondary_citizenship: null, tax_residency: null, employment_status: null,
+      occupation: null, company_name: null, hin: null, chess_pid: null,
+      coffee_preference: null, hints: {},
       member_role: r.member_role, is_primary_group: r.is_primary_group,
       email: null, mobile: null, phone_other: null,
       address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
@@ -86,7 +104,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
 
   if (ids.length === 0) return organisations.sort((a, b) => a.display_name.localeCompare(b.display_name))
 
-  const [{ data: persons }, { data: contacts }, { data: roles }, { data: allMemberships }] =
+  const [{ data: persons }, { data: contacts }, { data: roles }, { data: allMemberships }, hintResults] =
     await Promise.all([
       supabase.from('persons').select('*').in('party_id', ids),
       supabase.from('contact_points').select('*').in('party_id', ids).eq('is_preferred', true),
@@ -97,7 +115,18 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
         .in('party_id', ids)
         .is('end_date', null)
         .neq('group_id', groupId),
+      // One call per person rather than one per field: get_masked_hints returns
+      // every encrypted kind held against a party in a single object.
+      Promise.all(
+        ids.map(async (id) => ({
+          id,
+          hints: ((await supabase.rpc('get_masked_hints', { p_party_id: id })).data ??
+            {}) as Record<string, string>,
+        })),
+      ),
     ])
+
+  const hintsBy = new Map(hintResults.map((h) => [h.id, h.hints]))
 
   const personBy = new Map((persons ?? []).map((p) => [p.party_id as string, p]))
   const contactsBy = new Map<string, Record<string, unknown>[]>()
@@ -133,6 +162,18 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
         gender: (p.gender as string) ?? null,
         marital_status: (p.marital_status as string) ?? null,
         tfn_status: (p.tfn_status as string) ?? 'not_provided',
+        place_of_birth: (p.place_of_birth as string) ?? null,
+        smoker: (p.smoker as boolean | null) ?? null,
+        primary_citizenship: (p.primary_citizenship as string) ?? null,
+        secondary_citizenship: (p.secondary_citizenship as string) ?? null,
+        tax_residency: (p.tax_residency as string) ?? null,
+        employment_status: (p.employment_status as string) ?? null,
+        occupation: (p.occupation as string) ?? null,
+        company_name: (p.company_name as string) ?? null,
+        hin: (p.hin as string) ?? null,
+        chess_pid: (p.chess_pid as string) ?? null,
+        coffee_preference: (p.coffee_preference as string) ?? null,
+        hints: hintsBy.get(m.party_id) ?? {},
         member_role: m.member_role,
         is_primary_group: m.is_primary_group,
         email: pick(m.party_id, 'email'),

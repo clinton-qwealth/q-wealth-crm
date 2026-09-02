@@ -4,18 +4,23 @@ import { useActionState, useEffect, useRef, useState, useTransition } from 'reac
 import {
   createMember,
   linkMember,
+  revealSensitiveField,
   searchPeople,
   updateMember,
   type MemberState,
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
-import { CopyIcon, PlusIcon, TickIcon } from './icons'
+import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
+import { Pill } from './ui'
+import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel } from '@/lib/countries'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
 const LABEL = 'text-left text-xs font-medium text-neutral-600'
+
+const COUNTRY_OPTIONS = COUNTRIES.map((c) => ({ value: c.code, label: c.name }))
 
 const MEMBER_ROLES = [
   ['primary', 'Primary'],
@@ -79,6 +84,18 @@ function formatDate(iso?: string | null) {
 }
 
 /**
+ * Smoker status has three states, not two.
+ *
+ * A plain on/off toggle can only say yes or no, and defaulting to "non-smoker"
+ * asserts something nobody has established — while materially changing an
+ * insurance premium. So null is a real, visible value here.
+ */
+function smokerLabel(smoker: boolean | null) {
+  if (smoker === null || smoker === undefined) return null
+  return smoker ? 'Smoker' : 'Non-smoker'
+}
+
+/**
  * A value with a copy-to-clipboard control.
  *
  * Copies exactly what is on screen rather than the underlying ISO string: the
@@ -117,6 +134,121 @@ function CopyValue({ value, label }: { value: string; label: string }) {
         )}
       </button>
     </span>
+  )
+}
+
+/**
+ * An encrypted identifier: masked by default, revealed on request.
+ *
+ * The masked form is the stored hint — dots plus the last few characters, which
+ * is enough to check you are looking at the right record without exposing it.
+ * Pressing the eye calls reveal_sensitive_field, which decrypts, checks the
+ * caller holds `view_sensitive`, and writes a row to sensitive_access_log naming
+ * them. So a reveal is a recorded act, not a free look.
+ *
+ * The value hides itself again after half a minute. A tax file number left on a
+ * screen in an open-plan office is the ordinary way these leak, and nobody
+ * remembers to click twice.
+ */
+function Encrypted({
+  partyId,
+  kind,
+  hint,
+  status,
+}: {
+  partyId: string
+  kind: string
+  hint?: string
+  status?: string
+}) {
+  const [value, setValue] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (value === null) return
+    const t = window.setTimeout(() => setValue(null), 30_000)
+    return () => window.clearTimeout(t)
+  }, [value])
+
+  if (!hint) {
+    if (status === 'exempt') return <span className="text-neutral-500">Exempt</span>
+    return <span className="text-neutral-400">Not provided</span>
+  }
+
+  const toggle = async () => {
+    if (value !== null) {
+      setValue(null)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    const result = await revealSensitiveField(partyId, kind)
+    setBusy(false)
+    if ('error' in result) setError(result.error)
+    else setValue(result.value)
+  }
+
+  return (
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="font-mono text-[13px] tracking-tight">
+          {value ?? hint}
+        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={busy}
+          aria-label={value === null ? 'Reveal, which is recorded against your name' : 'Hide'}
+          title={value === null ? 'Reveal — recorded against your name' : 'Hide'}
+          className="rounded p-0.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          {value === null ? (
+            <EyeIcon className="h-3.5 w-3.5" />
+          ) : (
+            <EyeOffIcon className="h-3.5 w-3.5 text-brand" />
+          )}
+        </button>
+        {value !== null ? <CopyValue value={value} label={kind} /> : null}
+      </span>
+      {error ? (
+        <span role="alert" className="text-[11px] text-red-600">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function Select({
+  label,
+  name,
+  defaultValue,
+  options,
+  placeholder = 'Not recorded',
+  className = '',
+}: {
+  label: string
+  name: string
+  defaultValue?: string | null
+  options: { value: string; label: string }[]
+  placeholder?: string
+  className?: string
+}) {
+  return (
+    <label className={`flex flex-col gap-1.5 ${className}`}>
+      <span className={LABEL}>{label}</span>
+      <select name={name} defaultValue={defaultValue ?? ''} className={FIELD}>
+        {/* An explicit empty option, so "we have not asked" is selectable
+            rather than being whatever happens to sort first. */}
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -312,12 +444,18 @@ export function MemberPanel({
         <div className="flex h-full flex-col">
           <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
             <div className="min-w-0">
-              <h2
-                id="member-panel-title"
-                className="truncate text-2xl font-semibold tracking-tight text-neutral-900"
-              >
-                {heading}
-              </h2>
+              <div className="flex items-center gap-2.5">
+                <h2
+                  id="member-panel-title"
+                  className="truncate text-2xl font-semibold tracking-tight text-neutral-900"
+                >
+                  {heading}
+                </h2>
+                {/* A date of death changes what almost every other field on this
+                    record means, so it is marked where the name is rather than
+                    left three tabs away for someone to notice. */}
+                {person?.date_of_death ? <Pill tone="danger">Deceased</Pill> : null}
+              </div>
               {mode === 'view' && person ? (
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {ROLE_LABEL[person.member_role ?? ''] ?? person.member_role}
@@ -364,17 +502,16 @@ export function MemberPanel({
                     id: 'personal',
                     label: 'Personal',
                     panel: (
-                      <div className="flex flex-col gap-7 px-5 pb-6">
+                      <div className="flex flex-col gap-4 px-5 pb-6">
                         <Section title="Identity" boxed>
                           {/* Two real columns, each stacking its own fields, so
-                              the order down a column is what was asked for. A
-                              single grid with auto-flow would fill left, right,
-                              left instead, which reads as a different order. */}
+                              the order down a column is what was asked for. */}
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <div className="flex flex-col gap-4">
                               <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
                               <Row span="full" label="Gender" value={person.gender} />
                               <Row span="full" label="Marital status" value={person.marital_status} />
+                              <Row span="full" label="Place of birth" value={person.place_of_birth} />
                             </div>
                             <div className="flex flex-col gap-4">
                               <Row span="full" label="Known as" value={person.preferred_name} />
@@ -383,14 +520,66 @@ export function MemberPanel({
                                 label="Date of birth"
                                 value={
                                   person.date_of_birth ? (
-                                    <CopyValue
-                                      value={formatDate(person.date_of_birth)!}
-                                      label="date of birth"
-                                    />
+                                    <CopyValue value={formatDate(person.date_of_birth)!} label="date of birth" />
                                   ) : null
                                 }
                               />
+                              <Row span="full" label="Smoker status" value={smokerLabel(person.smoker)} />
+                              <Row span="full" label="Date of death" value={formatDate(person.date_of_death)} />
                             </div>
+                          </dl>
+                        </Section>
+
+                        <Section title="Citizenship and tax residency" boxed>
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Primary citizenship" value={countryName(person.primary_citizenship)} />
+                              <Row span="full" label="Secondary citizenship" value={countryName(person.secondary_citizenship)} />
+                            </div>
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Tax residency" value={countryName(person.tax_residency)} />
+                            </div>
+                          </dl>
+                        </Section>
+
+                        <Section title="Employment" boxed>
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Employment status" value={employmentLabel(person.employment_status)} />
+                              <Row span="full" label="Occupation" value={person.occupation} />
+                            </div>
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Company name" value={person.company_name} />
+                            </div>
+                          </dl>
+                        </Section>
+
+                        <Section title="Identifiers" boxed>
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Tax file number" value={<Encrypted partyId={person.party_id} kind="tfn" hint={person.hints.tfn} status={person.tfn_status} />} />
+                              <Row span="full" label="Tax identification number" value={<Encrypted partyId={person.party_id} kind="tin" hint={person.hints.tin} />} />
+                              <Row span="full" label="Centrelink reference number" value={<Encrypted partyId={person.party_id} kind="centrelink_crn" hint={person.hints.centrelink_crn} />} />
+                            </div>
+                            <div className="flex flex-col gap-4">
+                              <Row span="full" label="Holder identification number (HIN)" value={person.hin ? <CopyValue value={person.hin} label="HIN" /> : null} />
+                              <Row span="full" label="CHESS sponsor ID (PID)" value={person.chess_pid} />
+                              <Row span="full" label="Director identification number" value={<Encrypted partyId={person.party_id} kind="director_id" hint={person.hints.director_id} />} />
+                            </div>
+                          </dl>
+                          <p className="mt-4 text-xs leading-relaxed text-neutral-500">
+                            Masked by default. These four are stored encrypted, and pressing the
+                            eye decrypts one — which is <span className="font-medium">recorded
+                            against your name</span> in the access log, and hides itself again
+                            after thirty seconds. The HIN and CHESS PID are plain text: a HIN
+                            appears on every holding statement, and a PID identifies the broker
+                            rather than the client. None of the four are ever visible to Claude.
+                          </p>
+                        </Section>
+
+                        <Section title="Preferences" boxed>
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
+                            <Row span="full" label="Coffee preference" value={person.coffee_preference} />
                           </dl>
                         </Section>
                       </div>
@@ -431,24 +620,16 @@ export function MemberPanel({
                             <Row label="Record status" value={person.status} />
                           </dl>
                         </Section>
-                        <Section title="Identifiers">
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
-                            <Row
-                              span="full"
-                              label="Tax file number"
-                              value={
-                                person.tfn_status === 'provided' ? 'On file — reveal in the CRM only'
-                                : person.tfn_status === 'exempt' ? 'Exempt'
-                                : 'Not provided'
-                              }
-                            />
-                          </dl>
-                          <p className="mt-3 text-xs leading-relaxed text-neutral-500">
-                            Revealing a tax file number requires a verified second factor and is
-                            recorded against your name. Passport, licence and Medicare are held the
-                            same way but have no screen yet.
-                          </p>
-                        </Section>
+                          {/* Identifiers moved to Personal when the other four were
+                              added — the tax file number was showing in both places,
+                              read-only here and revealable there. One field, one home. */}
+                          <Section title="Documents on file">
+                            <p className="text-sm leading-relaxed text-neutral-500">
+                              Passport, driver&rsquo;s licence and Medicare are held encrypted the
+                              same way as the identifiers on the Personal tab, but have no screen
+                              yet. Identity verification records have no tables in the database.
+                            </p>
+                          </Section>
                       </div>
                     ),
                   },
@@ -663,6 +844,51 @@ export function MemberPanel({
                       <Field label="State" name="addr_state" defaultValue={person?.address.state} className="col-span-1" />
                       <Field label="Postcode" name="addr_postcode" defaultValue={person?.address.postcode} className="col-span-2" />
                     </div>
+                  </Section>
+
+                  <Section title="Citizenship, tax and employment">
+                    <div className="grid grid-cols-6 gap-3">
+                      <Field label="Place of birth" name="place_of_birth" defaultValue={person?.place_of_birth} className="col-span-6" placeholder="Town and country" />
+                      <Select
+                        label="Smoker status"
+                        name="smoker"
+                        defaultValue={person?.smoker === null || person?.smoker === undefined ? '' : String(person.smoker)}
+                        placeholder="Not asked"
+                        options={[
+                          { value: 'false', label: 'Non-smoker' },
+                          { value: 'true', label: 'Smoker' },
+                        ]}
+                        className="col-span-3"
+                      />
+                      <Field label="Date of death" name="date_of_death" type="date" defaultValue={person?.date_of_death} className="col-span-3" />
+                      <Select label="Primary citizenship" name="primary_citizenship" defaultValue={person?.primary_citizenship} options={COUNTRY_OPTIONS} className="col-span-3" />
+                      <Select label="Secondary citizenship" name="secondary_citizenship" defaultValue={person?.secondary_citizenship} options={COUNTRY_OPTIONS} className="col-span-3" />
+                      <Select label="Tax residency" name="tax_residency" defaultValue={person?.tax_residency} options={COUNTRY_OPTIONS} className="col-span-3" />
+                      <Select label="Employment status" name="employment_status" defaultValue={person?.employment_status} options={EMPLOYMENT_STATUS} className="col-span-3" />
+                      <Field label="Occupation" name="occupation" defaultValue={person?.occupation} className="col-span-3" />
+                      <Field label="Company name" name="company_name" defaultValue={person?.company_name} className="col-span-3" />
+                    </div>
+                  </Section>
+
+                  <Section title="Identifiers">
+                    <div className="grid grid-cols-6 gap-3">
+                      <Field label="Holder identification number (HIN)" name="hin" defaultValue={person?.hin} className="col-span-3" />
+                      <Field label="CHESS sponsor ID (PID)" name="chess_pid" defaultValue={person?.chess_pid} className="col-span-3" />
+                    </div>
+                    {/* The encrypted identifiers are absent from this form on
+                        purpose. Writing one goes through set_sensitive_field,
+                        which enforces view_sensitive and a verified second
+                        factor and logs the write; routing them through this save
+                        would have bypassed both silently. */}
+                    <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+                      Tax file number, tax identification number, Centrelink reference and
+                      director ID are not edited here. They are encrypted, and changing one
+                      requires a verified second factor and is recorded against your name.
+                    </p>
+                  </Section>
+
+                  <Section title="Preferences">
+                    <Field label="Coffee preference" name="coffee_preference" defaultValue={person?.coffee_preference} placeholder="Flat white, no sugar" />
                   </Section>
 
                   <Section title="Notes">

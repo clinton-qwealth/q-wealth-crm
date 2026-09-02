@@ -367,8 +367,11 @@ export default async function GroupsPage({
                             initialMode="view"
                             initialPartyId={m.party_id}
                           >
-                            <span className="truncate text-sm text-neutral-700">
-                              {m.display_name}
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate text-sm text-neutral-700">
+                                {m.display_name}
+                              </span>
+                              {m.date_of_death ? <Pill tone="danger">Deceased</Pill> : null}
                             </span>
                             <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
                               {(m.member_role ?? '').replace(/_/g, ' ')}
