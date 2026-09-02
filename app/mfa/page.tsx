@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { getMfaState } from '@/lib/mfa'
 import { safeNext } from '@/lib/safe-next'
+import { AuthShell } from '@/components/auth-shell'
 import { ChallengeForm } from './challenge-form'
 
 export const metadata = { title: 'Verify your identity · Q Wealth CRM' }
@@ -22,17 +23,12 @@ export default async function MfaPage({
   if (!mfa.stepUpRequired) redirect(next)
 
   return (
-    <main className="flex min-h-full flex-1 items-center justify-center px-6 py-16">
-      <div className="w-full max-w-sm">
-        <p className="text-xs font-medium uppercase tracking-widest text-neutral-400">
-          Q Wealth CRM
-        </p>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight">Verify your identity</h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
-          Enter the six-digit code from your authenticator app.
-        </p>
-        <ChallengeForm next={next} />
-      </div>
-    </main>
+    <AuthShell
+      title="Verify your identity"
+      description="Enter the six-digit code from your authenticator."
+      footer="Lost access to your authenticator? Contact your administrator — a factor cannot be removed without one."
+    >
+      <ChallengeForm next={next} />
+    </AuthShell>
   )
 }

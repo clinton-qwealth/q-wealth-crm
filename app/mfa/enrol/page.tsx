@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { getMfaState } from '@/lib/mfa'
+import { AuthShell } from '@/components/auth-shell'
 import { EnrolPanel } from '@/app/(shell)/profile/enrol-panel'
 
 export const metadata = { title: 'Set up two-factor authentication · Q Wealth CRM' }
@@ -27,27 +28,18 @@ export default async function EnrolPage() {
   if (mfa.enrolled) redirect(mfa.stepUpRequired ? '/mfa?next=%2F' : '/')
 
   return (
-    <main className="flex min-h-full flex-1 items-center justify-center px-6 py-16">
-      <div className="w-full max-w-md">
-        <p className="text-xs font-medium uppercase tracking-widest text-neutral-400">
-          Q Wealth CRM
-        </p>
-        <h1 className="mt-2 text-xl font-semibold tracking-tight">
-          Set up two-factor authentication
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+    <AuthShell
+      width="md"
+      title="Set up two-factor authentication"
+      description={
+        <>
           This is required before you can use the CRM. A password alone is not enough to
-          protect client data, and it is the only thing currently standing in front of your
-          account.
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-neutral-600">
-          You will need an authenticator app — 1Password, Authy, Google Authenticator or
-          similar.
-        </p>
-        <div className="mt-6">
-          <EnrolPanel enrolled={false} />
-        </div>
-      </div>
-    </main>
+          protect client data, and right now it is the only thing in front of your account.
+        </>
+      }
+      footer="You will need an authenticator app — 1Password, Authy, Google Authenticator or similar."
+    >
+      <EnrolPanel enrolled={false} />
+    </AuthShell>
   )
 }
