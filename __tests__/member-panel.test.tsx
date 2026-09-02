@@ -72,11 +72,31 @@ describe('MemberPanel', () => {
     await user.click(screen.getByRole('button', { name: 'trigger' }))
 
     expect(screen.getByText('Ms Priya Anne Drawertest')).toBeDefined()
+    // Contact lives on its own tab now. Inactive panels stay mounted with
+    // `hidden`, so the value is present in the DOM either way.
     expect(screen.getByText('priya@example.com')).toBeDefined()
-    expect(screen.getByText('12 Bay Street, Mosman NSW 2088')).toBeDefined()
+    expect(screen.getByText('12 Bay Street')).toBeDefined()
+    expect(screen.getByText('Mosman')).toBeDefined()
     // Nothing editable: a client record is audited on every change, so reading
     // one must not be able to alter it.
     expect(container.querySelectorAll('dialog input').length).toBe(0)
+  })
+
+  test('the record is split across Identity, Contact and Standing', async () => {
+    const user = userEvent.setup()
+    open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(tabs).toEqual(['Identity', 'Contact', 'Standing'])
+
+    // Exactly one panel is exposed at a time; `hidden` keeps the others out of
+    // the accessibility tree even though they stay mounted.
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+
+    await user.click(screen.getByRole('tab', { name: 'Standing' }))
+    expect(screen.getByRole('tab', { name: 'Standing' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel').textContent).toContain('Primary group')
   })
 
   test('an absent value reads as a gap rather than being hidden', async () => {

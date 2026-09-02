@@ -11,6 +11,7 @@ import {
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
 import { PlusIcon } from './icons'
+import { Tabs } from './tabs'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -82,7 +83,7 @@ function Row({
          the same number of rows, so the last line in the longer column stops
          half way across and reads as a mistake. Spacing separates the rows and
          the label/value contrast carries the scan. */
-      className={`flex items-baseline justify-between gap-4 py-1.5 ${
+      className={`flex items-baseline justify-between gap-4 py-2 ${
         span === 'full' ? 'sm:col-span-2' : ''
       }`}
     >
@@ -101,7 +102,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
           Removed rather than fixed: the uppercase heading and the gap between
           sections carry the structure, and the label/value contrast carries the
           scan within one. */}
-      <div className="mt-2">{children}</div>
+      <div className="mt-3">{children}</div>
     </section>
   )
 }
@@ -223,11 +224,11 @@ export function MemberPanel({
         className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:max-w-[46rem]"
       >
         <div className="flex h-full flex-col">
-          <header className="flex items-start justify-between gap-3 border-b border-neutral-100 px-5 py-4">
+          <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
             <div className="min-w-0">
               <h2
                 id="member-panel-title"
-                className="truncate text-xl font-semibold tracking-tight text-neutral-900"
+                className="truncate text-2xl font-semibold tracking-tight text-neutral-900"
               >
                 {heading}
               </h2>
@@ -258,72 +259,112 @@ export function MemberPanel({
 
           {mode === 'view' && person ? (
             <>
-              <div className="flex-1 overflow-y-auto px-5 py-4">
-                <div className="flex flex-col gap-6">
-                  <Section title="Identity">
-                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                      <Row label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
-                      <Row label="Known as" value={person.preferred_name} />
-                      <Row label="Date of birth" value={person.date_of_birth} />
-                      <Row label="Gender" value={person.gender} />
-                      <Row label="Marital status" value={person.marital_status} />
-                    </dl>
-                  </Section>
+              {/* Tabs rather than one long scroll: at this width the record is
+                  three distinct kinds of information, and an adviser opening the
+                  panel usually wants one of them. `fill` keeps the strip in place
+                  and lets the active panel scroll beneath it. */}
+              <Tabs
+                fill
+                gutter={5}
+                flushTop={false}
+                label={`${person.display_name} record`}
+                items={[
+                  {
+                    id: 'identity',
+                    label: 'Identity',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
+                        <Section title="Names">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
+                            <Row label="Known as" value={person.preferred_name} />
+                            <Row label="Date of birth" value={person.date_of_birth} />
+                          </dl>
+                        </Section>
+                        <Section title="Personal">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row label="Gender" value={person.gender} />
+                            <Row label="Marital status" value={person.marital_status} />
+                          </dl>
+                        </Section>
+                        {person.notes ? (
+                          <Section title="Notes">
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
+                              {person.notes}
+                            </p>
+                          </Section>
+                        ) : null}
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'contact',
+                    label: 'Contact',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
+                        <Section title="Reachable on">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row label="Email" value={person.email} />
+                            <Row label="Mobile" value={person.mobile} />
+                            <Row label="Other phone" value={person.phone_other} />
+                          </dl>
+                        </Section>
+                        <Section title="Residential address">
+                          {/* Explicitly two columns. It was grid-cols-1, and the
+                              full-span Street row silently created a second
+                              column anyway — CSS grid adds implicit tracks for a
+                              col-span wider than the container. Declared rather
+                              than accidental. */}
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row span="full" label="Street" value={[person.address.line1, person.address.line2].filter(Boolean).join(', ')} />
+                            <Row span="full" label="Suburb" value={person.address.suburb} />
+                            <Row label="State" value={person.address.state} />
+                            <Row label="Postcode" value={person.address.postcode} />
+                          </dl>
+                        </Section>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'standing',
+                    label: 'Standing',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
+                        <Section title="With the firm">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row label="Roles" value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')} />
+                            <Row label="Record status" value={person.status} />
+                            <Row
+                              span="full"
+                              label="Tax file number"
+                              value={
+                                person.tfn_status === 'provided' ? 'On file — reveal in the CRM only'
+                                : person.tfn_status === 'exempt' ? 'Exempt'
+                                : 'Not provided'
+                              }
+                            />
+                          </dl>
+                        </Section>
+                        <Section title="Group membership">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
+                            <Row label="Primary group" value={person.is_primary_group ? 'Yes' : 'No'} />
+                            <Row
+                              span="full"
+                              label="Other groups"
+                              value={person.other_groups
+                                .map((g) => `${g.name} (${g.member_role.replace(/_/g, ' ')})`)
+                                .join(', ')}
+                            />
+                          </dl>
+                        </Section>
+                      </div>
+                    ),
+                  },
+                ]}
+              />
 
-                  <Section title="Contact">
-                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                      <Row label="Email" value={person.email} />
-                      <Row label="Mobile" value={person.mobile} />
-                      <Row label="Other phone" value={person.phone_other} />
-                      <Row
-                        span="full"
-                        label="Address"
-                        value={[
-                          person.address.line1,
-                          person.address.line2,
-                          [person.address.suburb, person.address.state, person.address.postcode]
-                            .filter(Boolean)
-                            .join(' '),
-                        ]
-                          .filter((s) => s && s.trim())
-                          .join(', ')}
-                      />
-                    </dl>
-                  </Section>
-
-                  <Section title="Standing">
-                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                      <Row
-                        label="Roles"
-                        value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')}
-                      />
-                      <Row span="full" label="Tax file number" value={
-                        person.tfn_status === 'provided' ? 'On file — reveal in the CRM only'
-                        : person.tfn_status === 'exempt' ? 'Exempt'
-                        : 'Not provided'
-                      } />
-                      <Row
-                        span="full"
-                        label="Other groups"
-                        value={person.other_groups
-                          .map((g) => `${g.name} (${g.member_role.replace(/_/g, ' ')})`)
-                          .join(', ')}
-                      />
-                      <Row label="Record status" value={person.status} />
-                    </dl>
-                  </Section>
-
-                  {person.notes ? (
-                    <Section title="Notes">
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
-                        {person.notes}
-                      </p>
-                    </Section>
-                  ) : null}
-                </div>
-              </div>
-
-              <footer className="flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-5 py-3">
+              <footer className="flex shrink-0 justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-5 py-3">
                 <button
                   type="button"
                   onClick={close}

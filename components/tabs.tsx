@@ -23,7 +23,31 @@ export type TabItem = {
  * positioned before paint, and re-measured on resize and on font load, both of
  * which change tab widths after the first measurement.
  */
-export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
+export function Tabs({
+  items,
+  label,
+  fill = false,
+  gutter = 4,
+  flushTop = true,
+}: {
+  items: TabItem[]
+  label: string
+  /**
+   * `fill` makes the tabs own a fixed-height container: the strip stays put and
+   * the active panel scrolls beneath it. Without it the whole component grows
+   * and the page scrolls, which is right inside a card and wrong inside a panel
+   * where scrolling the tabs out of reach is a dead end.
+   */
+  fill?: boolean
+  /** Horizontal padding of the container the strip bleeds across. */
+  gutter?: 4 | 5
+  /**
+   * Pull the strip up into the container's top padding, so it caps a card.
+   * False when something sits above it — in a panel with a header, the negative
+   * margin drags the strip over that header instead.
+   */
+  flushTop?: boolean
+}) {
   const [active, setActive] = useState(items[0]?.id)
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
   // Suppresses the transition for the very first measurement, so the bar does
@@ -78,14 +102,21 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
     tabRefs.current[next]?.focus()
   }
 
+  // Written out rather than interpolated: Tailwind scans source text, so a
+  // constructed class name like `-mx-${gutter}` would never be generated.
+  const bleed = gutter === 5 ? '-mx-5 px-5' : '-mx-4 px-4'
+  const lift = !flushTop ? '' : gutter === 5 ? '-mt-5' : '-mt-4'
+  // The rounded corners only belong on a strip that caps its container.
+  const cap = flushTop ? 'rounded-t-[7px]' : ''
+
   return (
-    <div>
+    <div className={fill ? 'flex min-h-0 flex-1 flex-col' : undefined}>
       <div
         ref={listRef}
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="no-scrollbar relative -mx-4 -mt-4 flex items-center gap-1 overflow-x-auto rounded-t-[7px] border-b border-neutral-200 bg-neutral-50 px-4 pt-1"
+        className={`no-scrollbar relative ${bleed} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-50 pt-1`}
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
@@ -133,7 +164,11 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
           aria-labelledby={`tab-${tab.id}`}
           hidden={tab.id !== active}
           tabIndex={0}
-          className="pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20"
+          className={
+            fill
+              ? 'min-h-0 flex-1 overflow-y-auto pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20'
+              : 'pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20'
+          }
         >
           {tab.panel}
         </div>
