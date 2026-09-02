@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import { getMfaState } from '@/lib/mfa'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { Card, PageHeading, StatTile } from '@/components/ui'
 
@@ -39,10 +38,6 @@ async function getCounts() {
 export default async function Home() {
   const staff = await getCurrentStaff()
   if (!staff) redirect('/login')
-
-  // Step-up and enrolment are gated in the shell layout, which covers every route
-  // in this group rather than only this one.
-  const mfa = await getMfaState()
 
   const counts = await getCounts()
   const p = staff.access_profiles

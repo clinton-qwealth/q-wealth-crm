@@ -233,15 +233,6 @@ function telHref(number: string) {
   return `tel:${cleaned}`
 }
 
-/** "Janet Testsmith (primary), Acme Pty Ltd (entity)" -> structured pairs. */
-function parseMembers(members: string | null) {
-  if (!members) return []
-  return [...members.matchAll(/([^,]+?)\s*\(([^)]+)\)/g)].map((m) => ({
-    name: m[1].trim(),
-    role: m[2].trim().replace(/_/g, ' '),
-  }))
-}
-
 const TYPE_LABEL: Record<string, string> = {
   household: 'Household',
   business_entity: 'Business entity',

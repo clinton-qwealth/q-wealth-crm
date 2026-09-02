@@ -7,7 +7,6 @@ import {
   patchMember,
   revealSensitiveField,
   searchPeople,
-  updateMember,
   type MemberState,
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
@@ -320,12 +319,16 @@ function EditableSection({
   const [editing, setEditing] = useState(false)
   const [state, action, pending] = useActionState<MemberState, FormData>(patchMember, null)
 
-  // A save closes the section back to its read-only form. The revalidate on the
-  // server has already refreshed the values behind it.
-  useEffect(() => {
+  // A save closes the section back to its read-only form — the revalidate on the
+  // server has already refreshed the values behind it. Adjusted during render
+  // rather than in an effect, so the edit form never paints once more after a
+  // successful save; `handled` is the action state already acted on, since
+  // useActionState hands back a new object on every submission.
+  const [handled, setHandled] = useState<MemberState>(null)
+  if (state !== handled) {
+    setHandled(state)
     if (state && 'ok' in state) setEditing(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state])
+  }
 
   const error = state && 'error' in state ? state.error : null
 
@@ -474,7 +477,6 @@ export function MemberPanel({
   const person = members.find((m) => m.party_id === partyId)
 
   const [createState, createAction, creating] = useActionState<MemberState, FormData>(createMember, null)
-  const [updateState, updateAction, updating] = useActionState<MemberState, FormData>(updateMember, null)
   const [linkState, linkAction, linking] = useActionState<MemberState, FormData>(linkMember, null)
 
   const [query, setQuery] = useState('')
@@ -488,17 +490,16 @@ export function MemberPanel({
   }
   const close = () => dialogRef.current?.close()
 
-  // A successful save closes the panel. Each action has its own state, so all
-  // three are watched rather than one combined flag.
+  // A successful save closes the panel. Each action has its own state, so both
+  // are watched rather than one combined flag.
   useEffect(() => {
-    for (const s of [createState, updateState, linkState]) {
+    for (const s of [createState, linkState]) {
       if (s && 'ok' in s) {
         close()
         break
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createState, updateState, linkState])
+  }, [createState, linkState])
 
   // Escape closes the dialog without telling React, so state is reset on close
   // rather than on open — otherwise a reopened panel shows the previous mode.
@@ -518,8 +519,8 @@ export function MemberPanel({
     startSearch(async () => setMatches(await searchPeople(groupId, value)))
   }
 
-  const busy = creating || updating || linking
-  const error = [createState, updateState, linkState].find((s) => s && 'error' in s) as
+  const busy = creating || linking
+  const error = [createState, linkState].find((s) => s && 'error' in s) as
     | { error: string }
     | undefined
 
@@ -547,7 +548,7 @@ export function MemberPanel({
           // panel land on the panel.
           if (e.target === dialogRef.current) close()
         }}
-        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:max-w-[46rem]"
+        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
       >
         <div className="flex h-full flex-col">
           <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
@@ -641,16 +642,23 @@ export function MemberPanel({
                             </dl>
                           }
                           edit={
-                            <div className="grid grid-cols-6 gap-3">
-                              <Field label="Title" name="title" defaultValue={person.title} className="col-span-2" />
-                              <Field label="First name" name="first_name" defaultValue={person.first_name} required className="col-span-4" />
-                              <Field label="Middle name" name="middle_name" defaultValue={person.middle_name} className="col-span-3" />
-                              <Field label="Last name" name="last_name" defaultValue={person.last_name} required className="col-span-3" />
-                              <Field label="Known as" name="preferred_name" defaultValue={person.preferred_name} className="col-span-3" />
-                              <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person.date_of_birth} className="col-span-3" />
-                              <Field label="Gender" name="gender" defaultValue={person.gender} className="col-span-3" />
-                              <Field label="Marital status" name="marital_status" defaultValue={person.marital_status} className="col-span-3" />
-                              <Field label="Place of birth" name="place_of_birth" defaultValue={person.place_of_birth} className="col-span-6" />
+                            /* Twelve columns. The given names share the first row
+                               2/5/5, and the surname takes half of the second —
+                               at four across, a long surname clipped inside its
+                               box, and a surname is the field least tolerable to
+                               have to scroll while checking it. Two columns below
+                               `sm`, because three inputs across a phone-width
+                               drawer is unusable. */
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-12">
+                              <Field label="Title" name="title" defaultValue={person.title} className="sm:col-span-2" />
+                              <Field label="First name" name="first_name" defaultValue={person.first_name} required className="sm:col-span-5" />
+                              <Field label="Middle name" name="middle_name" defaultValue={person.middle_name} className="sm:col-span-5" />
+                              <Field label="Last name" name="last_name" defaultValue={person.last_name} required className="sm:col-span-6" />
+                              <Field label="Known as" name="preferred_name" defaultValue={person.preferred_name} className="sm:col-span-6" />
+                              <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person.date_of_birth} className="sm:col-span-6" />
+                              <Field label="Gender" name="gender" defaultValue={person.gender} className="sm:col-span-6" />
+                              <Field label="Marital status" name="marital_status" defaultValue={person.marital_status} className="sm:col-span-6" />
+                              <Field label="Place of birth" name="place_of_birth" defaultValue={person.place_of_birth} className="sm:col-span-6" />
                               <Select
                                 label="Smoker status"
                                 name="smoker"
@@ -660,9 +668,9 @@ export function MemberPanel({
                                   { value: 'false', label: 'Non-smoker' },
                                   { value: 'true', label: 'Smoker' },
                                 ]}
-                                className="col-span-3"
+                                className="sm:col-span-6"
                               />
-                              <Field label="Date of death" name="date_of_death" type="date" defaultValue={person.date_of_death} className="col-span-3" />
+                              <Field label="Date of death" name="date_of_death" type="date" defaultValue={person.date_of_death} className="sm:col-span-6" />
                             </div>
                           }
                         />

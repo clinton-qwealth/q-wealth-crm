@@ -215,32 +215,6 @@ export async function createMember(
   return { ok: true }
 }
 
-export async function updateMember(
-  _prev: MemberState,
-  formData: FormData,
-): Promise<MemberState> {
-  const partyId = String(formData.get('party_id') ?? '')
-  const groupId = String(formData.get('group_id') ?? '') || null
-  const memberRole = String(formData.get('member_role') ?? '') || null
-  if (!partyId) return { error: 'No individual selected.' }
-
-  const fields = readPersonFields(formData)
-  const problem = fieldProblem(fields)
-  if (problem) return { error: problem }
-
-  const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.rpc('update_person', {
-    p_party_id: partyId,
-    ...fields,
-    p_group_id: groupId,
-    p_member_role: memberRole,
-  })
-  if (error) return { error: error.message }
-
-  revalidatePath('/groups')
-  return { ok: true }
-}
-
 /** Attach someone who already exists — the reason the party model exists. */
 export async function linkMember(
   _prev: MemberState,

@@ -9,13 +9,13 @@ import userEvent from '@testing-library/user-event'
  */
 vi.mock('@/app/(shell)/groups/actions', () => ({
   createMember: vi.fn(),
-  updateMember: vi.fn(),
   patchMember: vi.fn(),
   linkMember: vi.fn(),
   revealSensitiveField: vi.fn(async () => ({ error: 'not in this test' })),
   searchPeople: vi.fn(async () => []),
 }))
 
+const actions = await import('@/app/(shell)/groups/actions')
 const { MemberPanel } = await import('@/components/member-panel')
 const { default: React } = await import('react')
 
@@ -178,6 +178,60 @@ describe('MemberPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByDisplayValue('Architect')).toBeNull()
     expect(screen.getByText('Architect')).toBeDefined()
+  })
+
+  /**
+   * A successful save has to put the section back to read-only by itself. This
+   * is adjusted during render rather than in an effect, so it is worth pinning:
+   * the failure mode is a section that stays in edit mode after saving, leaving
+   * the user unsure whether the change went through.
+   */
+  test('a successful save returns the section to read-only', async () => {
+    const user = userEvent.setup()
+    vi.mocked(actions.patchMember).mockResolvedValue({ ok: true })
+    open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit preferences/i }))
+    expect(screen.getByDisplayValue('Flat white, no sugar')).toBeDefined()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.queryByDisplayValue('Flat white, no sugar')).toBeNull()
+    expect(screen.getByText('Flat white, no sugar')).toBeDefined()
+  })
+
+  /* The other half: a refused save must keep the fields on screen, or the
+     user's typing is lost along with the explanation of why. */
+  test('a refused save keeps the section open and says why', async () => {
+    const user = userEvent.setup()
+    vi.mocked(actions.patchMember).mockResolvedValue({ error: 'Enter a first name.' })
+    open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit preferences/i }))
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Enter a first name.')).toBeDefined()
+    expect(screen.getByDisplayValue('Flat white, no sugar')).toBeDefined()
+  })
+
+  /**
+   * The name row: title, first and middle names share the top row and the
+   * surname takes the next, because at four across a long surname was clipped
+   * inside its box. jsdom has no layout engine, so the spans that produce the
+   * wrap are asserted here and the geometry was measured in a real browser.
+   */
+  test('the surname sits on its own row, not fourth across', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit identity/i }))
+
+    const span = (name: string) => {
+      const cls = container.querySelector(`dialog [name="${name}"]`)!.parentElement!.className
+      return Number(/sm:col-span-(\d+)/.exec(cls)![1])
+    }
+    // A full twelve columns of given names, so the surname cannot fit beside them.
+    expect(span('title') + span('first_name') + span('middle_name')).toBe(12)
+    expect(span('last_name')).toBe(6)
   })
 
   test('search mode offers finding someone before creating them', async () => {
