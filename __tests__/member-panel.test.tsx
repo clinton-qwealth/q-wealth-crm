@@ -29,6 +29,7 @@ const person = {
   last_name: 'Drawertest',
   preferred_name: 'Pri',
   date_of_birth: '1985-04-12',
+  date_of_death: null,
   gender: 'Female',
   marital_status: 'Married',
   tfn_status: 'provided',
@@ -82,20 +83,20 @@ describe('MemberPanel', () => {
     expect(container.querySelectorAll('dialog input').length).toBe(0)
   })
 
-  test('the record is split across Identity, Contact and Standing', async () => {
+  test('the record is split across five tabs', async () => {
     const user = userEvent.setup()
     open('view')
     await user.click(screen.getByRole('button', { name: 'trigger' }))
 
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
-    expect(tabs).toEqual(['Identity', 'Contact', 'Standing'])
+    expect(tabs).toEqual(['Personal', 'Contact', 'Compliance', 'Estate', 'Other'])
 
     // Exactly one panel is exposed at a time; `hidden` keeps the others out of
     // the accessibility tree even though they stay mounted.
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
 
-    await user.click(screen.getByRole('tab', { name: 'Standing' }))
-    expect(screen.getByRole('tab', { name: 'Standing' }).getAttribute('aria-selected')).toBe('true')
+    await user.click(screen.getByRole('tab', { name: 'Other' }))
+    expect(screen.getByRole('tab', { name: 'Other' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tabpanel').textContent).toContain('Primary group')
   })
 

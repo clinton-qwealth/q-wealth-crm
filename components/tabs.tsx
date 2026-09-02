@@ -29,6 +29,8 @@ export function Tabs({
   fill = false,
   gutter = 4,
   flushTop = true,
+  alignFirst = false,
+  bleed = true,
 }: {
   items: TabItem[]
   label: string
@@ -47,6 +49,21 @@ export function Tabs({
    * margin drags the strip over that header instead.
    */
   flushTop?: boolean
+  /**
+   * Line the first tab's TEXT up with the container's own text, rather than its
+   * button box. A tab button carries px-3 for a comfortable hit area, which
+   * otherwise pushes the first label 12px further in than every heading and
+   * value below it — a small misalignment that is very visible in a column.
+   */
+  alignFirst?: boolean
+  /**
+   * Cancel the parent's horizontal padding with a negative margin, so the strip
+   * reaches the container's edges. True inside a padded card. FALSE when the
+   * parent has no padding of its own — otherwise the negative margin drags the
+   * strip outside the container entirely, which is what it did in the member
+   * panel until this existed.
+   */
+  bleed?: boolean
 }) {
   const [active, setActive] = useState(items[0]?.id)
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
@@ -104,7 +121,16 @@ export function Tabs({
 
   // Written out rather than interpolated: Tailwind scans source text, so a
   // constructed class name like `-mx-${gutter}` would never be generated.
-  const bleed = gutter === 5 ? '-mx-5 px-5' : '-mx-4 px-4'
+  // Left padding is reduced by the button's own px-3 so the first label lands on
+  // the container's text edge: a 20px gutter minus 12px of button padding is 8px.
+  const pad = alignFirst
+    ? gutter === 5
+      ? 'pl-2 pr-5'
+      : 'pl-1 pr-4'
+    : gutter === 5
+      ? 'px-5'
+      : 'px-4'
+  const pull = !bleed ? '' : gutter === 5 ? '-mx-5' : '-mx-4'
   const lift = !flushTop ? '' : gutter === 5 ? '-mt-5' : '-mt-4'
   // The rounded corners only belong on a strip that caps its container.
   const cap = flushTop ? 'rounded-t-[7px]' : ''
@@ -116,7 +142,7 @@ export function Tabs({
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className={`no-scrollbar relative ${bleed} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-50 pt-1`}
+        className={`no-scrollbar relative ${pull} ${pad} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-50 pt-1`}
       >
         {items.map((tab, i) => {
           const selected = tab.id === active

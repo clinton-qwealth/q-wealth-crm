@@ -263,15 +263,20 @@ export function MemberPanel({
                   three distinct kinds of information, and an adviser opening the
                   panel usually wants one of them. `fill` keeps the strip in place
                   and lets the active panel scroll beneath it. */}
+              {/* Five tabs, so each is one question an adviser is actually
+                  asking. `alignFirst` lines the first label up with the name
+                  above and the values below. */}
               <Tabs
                 fill
                 gutter={5}
                 flushTop={false}
+                bleed={false}
+                alignFirst
                 label={`${person.display_name} record`}
                 items={[
                   {
-                    id: 'identity',
-                    label: 'Identity',
+                    id: 'personal',
+                    label: 'Personal',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Names">
@@ -281,19 +286,12 @@ export function MemberPanel({
                             <Row label="Date of birth" value={person.date_of_birth} />
                           </dl>
                         </Section>
-                        <Section title="Personal">
+                        <Section title="Personal detail">
                           <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                             <Row label="Gender" value={person.gender} />
                             <Row label="Marital status" value={person.marital_status} />
                           </dl>
                         </Section>
-                        {person.notes ? (
-                          <Section title="Notes">
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
-                              {person.notes}
-                            </p>
-                          </Section>
-                        ) : null}
                       </div>
                     ),
                   },
@@ -310,11 +308,6 @@ export function MemberPanel({
                           </dl>
                         </Section>
                         <Section title="Residential address">
-                          {/* Explicitly two columns. It was grid-cols-1, and the
-                              full-span Street row silently created a second
-                              column anyway — CSS grid adds implicit tracks for a
-                              col-span wider than the container. Declared rather
-                              than accidental. */}
                           <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                             <Row span="full" label="Street" value={[person.address.line1, person.address.line2].filter(Boolean).join(', ')} />
                             <Row span="full" label="Suburb" value={person.address.suburb} />
@@ -326,14 +319,19 @@ export function MemberPanel({
                     ),
                   },
                   {
-                    id: 'standing',
-                    label: 'Standing',
+                    id: 'compliance',
+                    label: 'Compliance',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
-                        <Section title="With the firm">
+                        <Section title="Standing with the firm">
                           <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                             <Row label="Roles" value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')} />
+                            <Row label="Client since" value={person.roles.find((r) => r.role === 'client')?.start_date} />
                             <Row label="Record status" value={person.status} />
+                          </dl>
+                        </Section>
+                        <Section title="Identifiers">
+                          <dl className="grid grid-cols-1 gap-x-8">
                             <Row
                               span="full"
                               label="Tax file number"
@@ -344,7 +342,47 @@ export function MemberPanel({
                               }
                             />
                           </dl>
+                          <p className="mt-3 text-xs leading-relaxed text-neutral-500">
+                            Revealing a tax file number requires a verified second factor and is
+                            recorded against your name. Passport, licence and Medicare are held the
+                            same way but have no screen yet.
+                          </p>
                         </Section>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'estate',
+                    label: 'Estate',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
+                        <Section title="Estate">
+                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                            <Row label="Date of death" value={person.date_of_death} />
+                          </dl>
+                        </Section>
+                        {/* Honest empty state. The database holds no will, power
+                            of attorney or beneficiary tables yet, so this tab has
+                            one real field. Saying so is better than an empty
+                            panel that looks broken. */}
+                        <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-6">
+                          <p className="text-sm font-medium text-neutral-700">
+                            Estate detail is not modelled yet
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                            Wills, enduring powers of attorney, appointed executors and
+                            beneficiary nominations have no tables in the database. Date of death
+                            is the only estate field that exists today.
+                          </p>
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'other',
+                    label: 'Other',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Group membership">
                           <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                             <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
@@ -357,6 +395,15 @@ export function MemberPanel({
                                 .join(', ')}
                             />
                           </dl>
+                        </Section>
+                        <Section title="Notes">
+                          {person.notes ? (
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
+                              {person.notes}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-neutral-400">Nothing recorded.</p>
+                          )}
                         </Section>
                       </div>
                     ),

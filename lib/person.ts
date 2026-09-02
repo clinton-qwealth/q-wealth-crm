@@ -14,6 +14,7 @@ export type PersonDetail = {
   last_name: string
   preferred_name: string | null
   date_of_birth: string | null
+  date_of_death: string | null
   gender: string | null
   marital_status: string | null
   tfn_status: string
@@ -75,7 +76,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       status: (r.party?.status as string) ?? 'active',
       notes: (r.party?.notes as string) ?? null,
       title: null, first_name: '', middle_name: null, last_name: '',
-      preferred_name: null, date_of_birth: null, gender: null,
+      preferred_name: null, date_of_birth: null, date_of_death: null, gender: null,
       marital_status: null, tfn_status: 'not_provided',
       member_role: r.member_role, is_primary_group: r.is_primary_group,
       email: null, mobile: null, phone_other: null,
@@ -128,6 +129,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
         last_name: (p.last_name as string) ?? '',
         preferred_name: (p.preferred_name as string) ?? null,
         date_of_birth: (p.date_of_birth as string) ?? null,
+        date_of_death: (p.date_of_death as string) ?? null,
         gender: (p.gender as string) ?? null,
         marital_status: (p.marital_status as string) ?? null,
         tfn_status: (p.tfn_status as string) ?? 'not_provided',
