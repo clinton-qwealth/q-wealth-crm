@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getCurrentStaff } from '@/lib/staff'
+import { getMfaState } from '@/lib/mfa'
 import { ConsentForm } from './consent-form'
 import { ConsentShell } from './consent-shell'
 
@@ -62,6 +63,38 @@ export default async function ConsentPage({
         <p>If you believe this is wrong, contact your administrator.</p>
       </ConsentShell>
     )
+  }
+
+  /*
+   * The second factor is required HERE, and this is the load-bearing check.
+   *
+   * An OAuth-issued session carries `aal1` even when the browser session that
+   * authorised it was `aal2` — measured 2 Sep 2026, with the token minted 29
+   * seconds after a factor was verified. So the assurance level cannot be
+   * required on each MCP request; it has to be required at the one moment a
+   * token can come into existence, which is this screen.
+   *
+   * The effect: every connector token that exists was authorised by someone who
+   * proved a second factor at the moment of issuance. A stolen password alone
+   * reaches neither the app nor a token.
+   */
+  const mfa = await getMfaState()
+  if (!mfa.enrolled) {
+    return (
+      <ConsentShell title="Two-factor authentication required">
+        <p>
+          Connecting Claude to client data requires two-factor authentication on your Q
+          Wealth account, and this account does not have it set up yet.
+        </p>
+        <p>
+          Sign in to the CRM and complete the two-factor setup, then start this connection
+          again.
+        </p>
+      </ConsentShell>
+    )
+  }
+  if (mfa.stepUpRequired) {
+    redirect(`/mfa?next=${encodeURIComponent(returnTo)}`)
   }
 
   const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId)

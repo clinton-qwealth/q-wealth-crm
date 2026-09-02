@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
+import { getMfaState } from '@/lib/mfa'
 import { TopNav } from '@/components/top-nav'
 
 /**
@@ -13,6 +14,24 @@ import { TopNav } from '@/components/top-nav'
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const staff = await getCurrentStaff()
   if (!staff) redirect('/login')
+
+  /*
+   * Two-factor authentication is mandatory, enforced here rather than on each
+   * page so a new route cannot be added without it.
+   *
+   * Both redirect targets sit outside this route group, which is what keeps the
+   * unenrolled case from looping through the layout that sent it.
+   *
+   * This is app-side enforcement, and deliberately so: requiring `aal2` in RLS
+   * would be stronger, but an OAuth-issued session carries `aal1` even when the
+   * browser session that authorised it was `aal2`, so it would take the MCP
+   * connector down. The consent screen carries the same gate instead, which
+   * means every token ever issued was authorised by someone holding a second
+   * factor — enforcement at issuance rather than on each use.
+   */
+  const mfa = await getMfaState()
+  if (!mfa.enrolled) redirect('/mfa/enrol')
+  if (mfa.stepUpRequired) redirect('/mfa?next=%2F')
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">

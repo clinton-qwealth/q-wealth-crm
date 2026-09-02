@@ -40,8 +40,9 @@ export default async function Home() {
   const staff = await getCurrentStaff()
   if (!staff) redirect('/login')
 
+  // Step-up and enrolment are gated in the shell layout, which covers every route
+  // in this group rather than only this one.
   const mfa = await getMfaState()
-  if (mfa.stepUpRequired) redirect('/mfa?next=%2F')
 
   const counts = await getCounts()
   const p = staff.access_profiles

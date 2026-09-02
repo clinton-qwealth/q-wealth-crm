@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { freshTotp } from './totp'
 
 /**
  * The other half of the boundary: an authenticated staff member does get in, and
@@ -11,11 +12,18 @@ import { expect, test } from '@playwright/test'
  */
 const email = process.env.E2E_EMAIL
 const password = process.env.E2E_PASSWORD
+const totpSecret = process.env.E2E_TOTP_SECRET
 
 test.describe('authenticated staff access', () => {
+  /*
+   * Two-factor authentication is mandatory on every authenticated route, so a
+   * password alone no longer reaches the app — by design. The suite therefore
+   * needs a TOTP secret it can generate codes from, and skips without one rather
+   * than failing and looking like a regression.
+   */
   test.skip(
-    !email || !password,
-    'Set E2E_EMAIL and E2E_PASSWORD to run the signed-in checks.',
+    !email || !password || !totpSecret,
+    'Set E2E_EMAIL, E2E_PASSWORD and E2E_TOTP_SECRET to run the signed-in checks.',
   )
 
   test.beforeEach(async ({ page }) => {
@@ -23,6 +31,15 @@ test.describe('authenticated staff access', () => {
     await page.getByLabel(/email/i).fill(email!)
     await page.getByLabel(/password/i).fill(password!)
     await page.getByRole('button', { name: /sign in/i }).click()
+
+    // A password grant is aal1. With a factor enrolled, every route demands
+    // step-up, so the suite has to complete it exactly as a person would.
+    await page.waitForURL(/\/(mfa|$|groups|profile)/)
+    if (new URL(page.url()).pathname === '/mfa') {
+      await page.getByLabel(/authentication code/i).fill(await freshTotp(totpSecret!))
+      await page.getByRole('button', { name: /verify/i }).click()
+      await expect(page).not.toHaveURL(/\/mfa/)
+    }
     await expect(page).not.toHaveURL(/\/login/)
   })
 
