@@ -10,7 +10,7 @@ import {
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
-import { PlusIcon } from './icons'
+import { CopyIcon, PlusIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 
 const FIELD =
@@ -64,6 +64,62 @@ function Field({
   )
 }
 
+/**
+ * A date as DD-MM-YYYY.
+ *
+ * Reformatted from the ISO string by splitting it, NOT by going through `Date`.
+ * `new Date('1985-04-12')` is parsed as UTC midnight, so anywhere west of
+ * Greenwich `toLocaleDateString` renders the day before — a date of birth off by
+ * one, which is exactly the kind of error nobody notices until it matters.
+ */
+function formatDate(iso?: string | null) {
+  if (!iso) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso
+}
+
+/**
+ * A value with a copy-to-clipboard control.
+ *
+ * Copies exactly what is on screen rather than the underlying ISO string: the
+ * point is to paste what you just read. The button is only rendered when there
+ * is something to copy, so an empty field shows no affordance.
+ */
+function CopyValue({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {
+      // Clipboard access can be refused outright — a denied permission, or a
+      // non-secure context. Staying silent is better than a scary message for
+      // something the user can still select by hand.
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span>{value}</span>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={copied ? `${label} copied` : `Copy ${label}`}
+        title={copied ? 'Copied' : `Copy ${label}`}
+        className="rounded p-0.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        {copied ? (
+          <TickIcon className="h-3.5 w-3.5 text-emerald-600" />
+        ) : (
+          <CopyIcon className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </span>
+  )
+}
+
 /** One label/value line in view mode. Absent values are shown as an em dash
  *  rather than hidden, so a gap in the record reads as a gap. */
 function Row({
@@ -72,7 +128,7 @@ function Row({
   span = 'half',
 }: {
   label: string
-  value?: string | null
+  value?: React.ReactNode
   /** `full` crosses both columns. Long values — an address, a list of groups —
    *  wrap badly in half the width, so they take the whole row instead. */
   span?: 'half' | 'full'
@@ -88,12 +144,23 @@ function Row({
       }`}
     >
       <dt className="shrink-0 text-xs text-neutral-500">{label}</dt>
-      <dd className="min-w-0 text-right text-sm text-neutral-800">{value?.trim() || '—'}</dd>
+      <dd className="min-w-0 text-right text-sm text-neutral-800">
+        {value === null || value === undefined || value === '' ? '—' : value}
+      </dd>
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  boxed = false,
+}: {
+  title: string
+  children: React.ReactNode
+  /** Draws a rounded border around the section's content. */
+  boxed?: boolean
+}) {
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
@@ -102,7 +169,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
           Removed rather than fixed: the uppercase heading and the gap between
           sections carry the structure, and the label/value contrast carries the
           scan within one. */}
-      <div className="mt-3">{children}</div>
+      <div className={boxed ? 'mt-3 rounded-lg border border-neutral-200 px-4 py-3' : 'mt-3'}>
+        {children}
+      </div>
     </section>
   )
 }
@@ -279,17 +348,32 @@ export function MemberPanel({
                     label: 'Personal',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
-                        <Section title="Names">
+                        <Section title="Identity" boxed>
+                          {/* Two real columns, each stacking its own fields, so
+                              the order down a column is what was asked for. A
+                              single grid with auto-flow would fill left, right,
+                              left instead, which reads as a different order. */}
                           <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                            <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
-                            <Row label="Known as" value={person.preferred_name} />
-                            <Row label="Date of birth" value={person.date_of_birth} />
-                          </dl>
-                        </Section>
-                        <Section title="Personal detail">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                            <Row label="Gender" value={person.gender} />
-                            <Row label="Marital status" value={person.marital_status} />
+                            <div>
+                              <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
+                              <Row span="full" label="Gender" value={person.gender} />
+                              <Row span="full" label="Marital status" value={person.marital_status} />
+                            </div>
+                            <div>
+                              <Row span="full" label="Known as" value={person.preferred_name} />
+                              <Row
+                                span="full"
+                                label="Date of birth"
+                                value={
+                                  person.date_of_birth ? (
+                                    <CopyValue
+                                      value={formatDate(person.date_of_birth)!}
+                                      label="date of birth"
+                                    />
+                                  ) : null
+                                }
+                              />
+                            </div>
                           </dl>
                         </Section>
                       </div>

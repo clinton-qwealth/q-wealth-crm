@@ -69,3 +69,31 @@ export function PhoneIcon({ className = base }: IconProps) {
     </svg>
   )
 }
+
+export function CopyIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <rect x="5.75" y="5.75" width="7.5" height="7.5" rx="1.75" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M10.25 3.75a1.5 1.5 0 0 0-1.5-1.5h-4A2.5 2.5 0 0 0 2.25 4.75v4a1.5 1.5 0 0 0 1.5 1.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+export function TickIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M3.5 8.5l3 3 6-6"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
