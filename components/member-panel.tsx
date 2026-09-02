@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import {
   createMember,
   linkMember,
@@ -11,7 +11,7 @@ import {
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
-import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, TickIcon } from './icons'
+import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { Pill } from './ui'
 import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER } from '@/lib/countries'
@@ -251,20 +251,27 @@ function VerifyIdentity() {
     setState({ step: 'sent', code: String(n).padStart(6, '0') })
   }
 
+  /* One place for the spacing off the name, without giving up the narrowing
+     that each step of the union needs — ml-2 sits on top of the row's own
+     gap-2.5, so the control reads as its own control rather than part of the
+     name. */
+  const shell = (children: ReactNode) => <div className="ml-2 shrink-0">{children}</div>
+
   if (state.step === 'idle') {
-    return (
+    return shell(
       <button
         type="button"
         onClick={start}
-        className="shrink-0 rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600 outline-none transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600 outline-none transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
       >
+        <SmsIcon className="h-3.5 w-3.5" />
         Verify
-      </button>
+      </button>,
     )
   }
 
   if (state.step === 'done') {
-    return (
+    return shell(
       <button
         type="button"
         onClick={start}
@@ -273,7 +280,7 @@ function VerifyIdentity() {
            describe a state and not the action the button performs. Named
            explicitly so it carries both. */
         aria-label={state.ok ? 'Verified. Verify again' : 'Not verified. Verify again'}
-        className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+        className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >
         <Pill tone={state.ok ? 'success' : 'danger'}>
           <span className="inline-flex items-center gap-1">
@@ -281,12 +288,12 @@ function VerifyIdentity() {
             {state.ok ? 'Verified' : 'Not verified'}
           </span>
         </Pill>
-      </button>
+      </button>,
     )
   }
 
-  return (
-    <div className="flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-50 py-0.5 pl-2 pr-1">
+  return shell(
+    <div className="flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-50 py-0.5 pl-2 pr-1">
       {/* Announced when it appears, since the adviser is on a call and reading
           it aloud rather than looking at the screen. */}
       <span role="status" className="font-mono text-sm tabular-nums tracking-widest text-neutral-900">
@@ -310,7 +317,7 @@ function VerifyIdentity() {
       >
         <CrossIcon className="h-3.5 w-3.5" />
       </button>
-    </div>
+    </div>,
   )
 }
 

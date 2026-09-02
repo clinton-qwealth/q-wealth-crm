@@ -98,6 +98,23 @@ export function TickIcon({ className = base }: IconProps) {
   )
 }
 
+/* A message bubble, for the code that will go out by SMS. Tail on the lower
+   left so it reads as outgoing rather than received. */
+export function SmsIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <rect x="2.25" y="3.25" width="11.5" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M5.75 11.25v2.25l2.75-2.25"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /* The mirror of TickIcon — same box, same stroke weight, so a pass mark and a
    fail mark read as one pair rather than two designs. */
 export function CrossIcon({ className = base }: IconProps) {
