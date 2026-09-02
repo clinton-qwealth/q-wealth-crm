@@ -50,22 +50,15 @@ export function Card({
   className = '',
   title,
   action,
-  tone = 'plain',
 }: {
   children: ReactNode
   className?: string
   title?: string
   action?: ReactNode
-  /** `muted` sets the card on light grey so white record rows lift off it — the
-   *  same treatment as the Members panel. Chosen with a prop rather than an
-   *  appended class because two competing `bg-*` utilities resolve by stylesheet
-   *  order, not by the order they appear in the attribute. */
-  tone?: 'plain' | 'muted'
 }) {
-  const surface = tone === 'muted' ? 'bg-neutral-50' : 'bg-white'
   return (
     <section
-      className={`rounded-lg border border-neutral-200 ${surface} p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] ${className}`}
+      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] ${className}`}
     >
       {title || action ? (
         <div className="mb-3 flex items-center justify-between gap-3">

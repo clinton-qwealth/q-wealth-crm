@@ -334,7 +334,7 @@ export default async function GroupsPage({
 
       {/* Centre — the working area */}
       <div className="col-span-full lg:col-span-6">
-        <Card tone="muted">
+        <Card>
           <Tabs
             label="Group detail"
             items={[

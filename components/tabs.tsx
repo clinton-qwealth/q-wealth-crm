@@ -85,7 +85,7 @@ export function Tabs({ items, label }: { items: TabItem[]; label: string }) {
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="no-scrollbar relative -mx-4 flex items-center gap-1 overflow-x-auto border-b border-neutral-200 px-4"
+        className="no-scrollbar relative -mx-4 -mt-4 flex items-center gap-1 overflow-x-auto rounded-t-[7px] border-b border-neutral-200 bg-neutral-50 px-4 pt-1"
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
