@@ -134,18 +134,22 @@ function Row({
   span?: 'half' | 'full'
 }) {
   return (
-    <div
-      /* No rule under each row. In a two-column grid the columns rarely hold
-         the same number of rows, so the last line in the longer column stops
-         half way across and reads as a mistake. Spacing separates the rows and
-         the label/value contrast carries the scan. */
-      className={`flex items-baseline justify-between gap-4 py-2 ${
-        span === 'full' ? 'sm:col-span-2' : ''
-      }`}
-    >
-      <dt className="shrink-0 text-xs text-neutral-500">{label}</dt>
-      <dd className="min-w-0 text-right text-sm text-neutral-800">
-        {value === null || value === undefined || value === '' ? '—' : value}
+    <div className={span === 'full' ? 'sm:col-span-2' : undefined}>
+      {/*
+        Label above value, not beside it.
+        Side by side with the value right-aligned, every field opened a gap of a
+        different width — "Full name" nearly filled its column while "Gender"
+        left a void — so the eye travelled a different distance for each one.
+        Stacking removes the contention: labels line up, values line up, and a
+        long value has the whole column instead of whatever the label left over.
+      */}
+      <dt className="text-xs leading-snug text-neutral-500">{label}</dt>
+      <dd className="mt-0.5 text-sm leading-snug text-neutral-900">
+        {value === null || value === undefined || value === '' ? (
+          <span className="text-neutral-400">—</span>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   )
@@ -161,17 +165,30 @@ function Section({
   /** Draws a rounded border around the section's content. */
   boxed?: boolean
 }) {
+  // Boxed sections carry their title INSIDE the border, as a titled card.
+  // With the title outside, its text sat on the panel's gutter while the fields
+  // sat one padding-width further in — the heading not lining up with the thing
+  // it heads. Inside, the card's edge aligns with the tabs and the name above,
+  // and the title aligns with its own fields.
+  if (boxed) {
+    return (
+      <section className="rounded-lg border border-neutral-200 px-4 py-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          {title}
+        </h3>
+        <div className="mt-3.5">{children}</div>
+      </section>
+    )
+  }
+
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
-      {/* No rules at all in the end. `last:border-0` here was dead — the div is
-          always the only child of its section, so the border never rendered.
-          Removed rather than fixed: the uppercase heading and the gap between
-          sections carry the structure, and the label/value contrast carries the
-          scan within one. */}
-      <div className={boxed ? 'mt-3 rounded-lg border border-neutral-200 px-4 py-3' : 'mt-3'}>
-        {children}
-      </div>
+      {/* Unboxed sections use spacing alone. Per-row rules were tried and
+          removed: in a two-column grid the columns rarely hold the same number
+          of rows, so the last line in the longer column stopped half way across
+          and read as a mistake. */}
+      <div className="mt-3">{children}</div>
     </section>
   )
 }
@@ -353,13 +370,13 @@ export function MemberPanel({
                               the order down a column is what was asked for. A
                               single grid with auto-flow would fill left, right,
                               left instead, which reads as a different order. */}
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
-                            <div>
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                            <div className="flex flex-col gap-4">
                               <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
                               <Row span="full" label="Gender" value={person.gender} />
                               <Row span="full" label="Marital status" value={person.marital_status} />
                             </div>
-                            <div>
+                            <div className="flex flex-col gap-4">
                               <Row span="full" label="Known as" value={person.preferred_name} />
                               <Row
                                 span="full"
@@ -385,14 +402,14 @@ export function MemberPanel({
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Reachable on">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Email" value={person.email} />
                             <Row label="Mobile" value={person.mobile} />
                             <Row label="Other phone" value={person.phone_other} />
                           </dl>
                         </Section>
                         <Section title="Residential address">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row span="full" label="Street" value={[person.address.line1, person.address.line2].filter(Boolean).join(', ')} />
                             <Row span="full" label="Suburb" value={person.address.suburb} />
                             <Row label="State" value={person.address.state} />
@@ -408,14 +425,14 @@ export function MemberPanel({
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Standing with the firm">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Roles" value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')} />
                             <Row label="Client since" value={person.roles.find((r) => r.role === 'client')?.start_date} />
                             <Row label="Record status" value={person.status} />
                           </dl>
                         </Section>
                         <Section title="Identifiers">
-                          <dl className="grid grid-cols-1 gap-x-8">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
                             <Row
                               span="full"
                               label="Tax file number"
@@ -441,7 +458,7 @@ export function MemberPanel({
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Estate">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Date of death" value={person.date_of_death} />
                           </dl>
                         </Section>
@@ -468,7 +485,7 @@ export function MemberPanel({
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Group membership">
-                          <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
                             <Row label="Primary group" value={person.is_primary_group ? 'Yes' : 'No'} />
                             <Row
