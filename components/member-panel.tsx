@@ -11,10 +11,10 @@ import {
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
-import { CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, TickIcon } from './icons'
+import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { Pill } from './ui'
-import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel } from '@/lib/countries'
+import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER } from '@/lib/countries'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -221,6 +221,99 @@ function Encrypted({
   )
 }
 
+/**
+ * Identity verification, as an adviser does it on a phone call: a one-time code
+ * goes to the client, they read it back, and the adviser records whether it
+ * matched.
+ *
+ * The code here is a PLACEHOLDER, generated in the browser and shown on screen.
+ * That is fine while it stands in for the real thing, and unacceptable once it
+ * is wired to Twilio: a code the browser knows is a code the person at the
+ * keyboard can read without the client ever receiving it, which defeats the
+ * whole check. When this is wired up, the code must be generated on the server,
+ * sent to the client's mobile, and the browser must only ever submit what the
+ * client read back for comparison.
+ *
+ * The outcome is not stored anywhere. It lives here until the panel closes.
+ */
+type VerifyState =
+  | { step: 'idle' }
+  | { step: 'sent'; code: string }
+  | { step: 'done'; ok: boolean }
+
+function VerifyIdentity() {
+  const [state, setState] = useState<VerifyState>({ step: 'idle' })
+
+  const start = () => {
+    // getRandomValues rather than Math.random. It costs nothing here, and the
+    // habit is the one this code should keep when it stops being a placeholder.
+    const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000
+    setState({ step: 'sent', code: String(n).padStart(6, '0') })
+  }
+
+  if (state.step === 'idle') {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        className="shrink-0 rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600 outline-none transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        Verify
+      </button>
+    )
+  }
+
+  if (state.step === 'done') {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        title="Verify again"
+        /* The visible pill reads "Verified", which as an accessible name would
+           describe a state and not the action the button performs. Named
+           explicitly so it carries both. */
+        aria-label={state.ok ? 'Verified. Verify again' : 'Not verified. Verify again'}
+        className="shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        <Pill tone={state.ok ? 'success' : 'danger'}>
+          <span className="inline-flex items-center gap-1">
+            {state.ok ? <TickIcon className="h-3 w-3" /> : <CrossIcon className="h-3 w-3" />}
+            {state.ok ? 'Verified' : 'Not verified'}
+          </span>
+        </Pill>
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-50 py-0.5 pl-2 pr-1">
+      {/* Announced when it appears, since the adviser is on a call and reading
+          it aloud rather than looking at the screen. */}
+      <span role="status" className="font-mono text-sm tabular-nums tracking-widest text-neutral-900">
+        {state.code}
+      </span>
+      <button
+        type="button"
+        onClick={() => setState({ step: 'done', ok: true })}
+        aria-label="Mark verification as passed"
+        title="Client read the code back"
+        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-emerald-50 hover:text-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+      >
+        <TickIcon className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => setState({ step: 'done', ok: false })}
+        aria-label="Mark verification as failed"
+        title="Code did not match"
+        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-red-500/30"
+      >
+        <CrossIcon className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
 function Select({
   label,
   name,
@@ -248,6 +341,14 @@ function Select({
             {o.label}
           </option>
         ))}
+        {/* A stored value the list does not offer is kept as an option of its
+            own, so it stays selected and survives the next save. Without this
+            the select would fall back to the empty option and quietly clear a
+            real value — these columns are writable through the MCP too, so this
+            list is not the only source of what they can hold. */}
+        {defaultValue && !options.some((o) => o.value === defaultValue) ? (
+          <option value={defaultValue}>{defaultValue}</option>
+        ) : null}
       </select>
     </label>
   )
@@ -564,6 +665,9 @@ export function MemberPanel({
                     record means, so it is marked where the name is rather than
                     left three tabs away for someone to notice. */}
                 {person?.date_of_death ? <Pill tone="danger">Deceased</Pill> : null}
+                {/* Only for a record that exists — there is no one to call while
+                    a new person is still being typed in. */}
+                {mode === 'view' && person ? <VerifyIdentity key={person.party_id} /> : null}
               </div>
               {mode === 'view' && person ? (
                 <p className="mt-0.5 text-xs text-neutral-500">
@@ -656,7 +760,7 @@ export function MemberPanel({
                               <Field label="Last name" name="last_name" defaultValue={person.last_name} required className="sm:col-span-6" />
                               <Field label="Known as" name="preferred_name" defaultValue={person.preferred_name} className="sm:col-span-6" />
                               <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person.date_of_birth} className="sm:col-span-6" />
-                              <Field label="Gender" name="gender" defaultValue={person.gender} className="sm:col-span-6" />
+                              <Select label="Gender" name="gender" defaultValue={person.gender} options={GENDER} className="sm:col-span-6" />
                               <Field label="Marital status" name="marital_status" defaultValue={person.marital_status} className="sm:col-span-6" />
                               <Field label="Place of birth" name="place_of_birth" defaultValue={person.place_of_birth} className="sm:col-span-6" />
                               <Select
@@ -1022,7 +1126,7 @@ export function MemberPanel({
                       <Field label="Last name" name="last_name" defaultValue={person?.last_name} required className="col-span-3" />
                       <Field label="Known as" name="preferred_name" defaultValue={person?.preferred_name} className="col-span-3" placeholder="Optional" />
                       <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person?.date_of_birth} className="col-span-3" />
-                      <Field label="Gender" name="gender" defaultValue={person?.gender} className="col-span-3" placeholder="Optional" />
+                      <Select label="Gender" name="gender" defaultValue={person?.gender} options={GENDER} className="col-span-3" placeholder="Optional" />
                       <Field label="Marital status" name="marital_status" defaultValue={person?.marital_status} className="col-span-3" placeholder="Optional" />
                     </div>
                   </Section>

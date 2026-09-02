@@ -234,6 +234,97 @@ describe('MemberPanel', () => {
     expect(span('last_name')).toBe(6)
   })
 
+  test('gender is chosen from a list, not typed', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit identity/i }))
+
+    const select = container.querySelector('dialog select[name="gender"]') as HTMLSelectElement
+    expect(select).not.toBeNull()
+    expect(container.querySelector('dialog input[name="gender"]')).toBeNull()
+    // The stored value must be the one selected, not the first option.
+    expect(select.value).toBe('Female')
+    expect([...select.options].map((o) => o.value)).toEqual([
+      '', 'Female', 'Male', 'Non-binary', 'Prefer not to say',
+    ])
+  })
+
+  /**
+   * The column is free text and writable through the MCP, so it can hold a value
+   * the dropdown does not offer. That value has to stay selected: if the select
+   * fell back to its empty option, the next save of the section would clear a
+   * real value without anyone touching the field.
+   */
+  test('a stored gender outside the list is kept rather than cleared', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <MemberPanel groupId="g1" members={[{ ...person, gender: 'Indeterminate' }]} initialMode="view" initialPartyId="p1">
+        trigger
+      </MemberPanel>,
+    )
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit identity/i }))
+
+    const select = container.querySelector('dialog select[name="gender"]') as HTMLSelectElement
+    expect(select.value).toBe('Indeterminate')
+  })
+
+  describe('identity verification', () => {
+    test('the header offers Verify, and it produces a six-digit code', async () => {
+      const user = userEvent.setup()
+      open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+      await user.click(screen.getByRole('button', { name: 'Verify' }))
+      expect(screen.getByRole('status').textContent).toMatch(/^\d{6}$/)
+    })
+
+    /* Six digits every time, including the one in ten draws that lands below
+       100000. A real random code is already six digits about nine times in ten,
+       so left to chance this is the assertion that would not have held. */
+    test('a small draw is padded rather than shown short', async () => {
+      const user = userEvent.setup()
+      const spy = vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+        ;(array as Uint32Array)[0] = 42
+        return array
+      })
+      open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('button', { name: 'Verify' }))
+
+      expect(screen.getByRole('status').textContent).toBe('000042')
+      spy.mockRestore()
+    })
+
+    test('the tick records a pass and the cross records a fail', async () => {
+      const user = userEvent.setup()
+      open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+      await user.click(screen.getByRole('button', { name: 'Verify' }))
+      await user.click(screen.getByRole('button', { name: /verification as passed/i }))
+      expect(screen.getByText('Verified')).toBeDefined()
+      expect(screen.queryByRole('status')).toBeNull()
+      // The pill's own text is a state; the button must announce the action.
+      expect(screen.getByRole('button', { name: 'Verified. Verify again' })).toBeDefined()
+
+      // The outcome is a button, so a call that goes wrong can be run again.
+      await user.click(screen.getByRole('button', { name: /verify again/i }))
+      await user.click(screen.getByRole('button', { name: /verification as failed/i }))
+      expect(screen.getByText('Not verified')).toBeDefined()
+    })
+
+    /* There is no one to telephone while a new person is still being typed in,
+       and no party_id to verify against. */
+    test('it is absent while creating someone', async () => {
+      const user = userEvent.setup()
+      open('search')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      expect(screen.queryByRole('button', { name: 'Verify' })).toBeNull()
+    })
+  })
+
   test('search mode offers finding someone before creating them', async () => {
     const user = userEvent.setup()
     open('search')

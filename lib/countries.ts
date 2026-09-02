@@ -90,6 +90,19 @@ export const EMPLOYMENT_STATUS: { value: string; label: string }[] = [
   { value: 'not_disclosed', label: 'Not disclosed' },
 ]
 
+/*
+ * Value and label are the same string here, unlike the coded lists above. The
+ * column is free text and already holds 'Female' and 'Male', so matching those
+ * exactly means no migration and no risk of a stored value failing to match an
+ * option — and the read-only view can render the column directly.
+ */
+export const GENDER: { value: string; label: string }[] = [
+  { value: 'Female', label: 'Female' },
+  { value: 'Male', label: 'Male' },
+  { value: 'Non-binary', label: 'Non-binary' },
+  { value: 'Prefer not to say', label: 'Prefer not to say' },
+]
+
 const EMPLOYMENT_LABEL = new Map(EMPLOYMENT_STATUS.map((e) => [e.value, e.label]))
 
 export function employmentLabel(value?: string | null) {

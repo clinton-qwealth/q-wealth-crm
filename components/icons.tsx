@@ -98,6 +98,22 @@ export function TickIcon({ className = base }: IconProps) {
   )
 }
 
+/* The mirror of TickIcon — same box, same stroke weight, so a pass mark and a
+   fail mark read as one pair rather than two designs. */
+export function CrossIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M4.5 4.5l7 7M11.5 4.5l-7 7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export function EyeIcon({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
