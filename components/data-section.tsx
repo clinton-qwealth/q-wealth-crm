@@ -18,6 +18,11 @@ import { PlusIcon } from './icons'
  *
  * Only one add affordance is ever shown, so there is never a question of which
  * one to press.
+ *
+ * The empty state is white because this section sits on a muted card: a
+ * translucent grey fill over grey leaves the dashed box with no fill at all. Its
+ * records are white too, so the empty state and the rows it becomes share a
+ * surface.
  */
 export function DataSection({
   addLabel,
@@ -53,7 +58,7 @@ export function DataSection({
 }) {
   if (!children) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-white px-6 py-10 text-center">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
           <PlusIcon className="h-4 w-4" />
         </span>

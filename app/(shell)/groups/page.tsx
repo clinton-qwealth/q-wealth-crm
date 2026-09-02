@@ -334,7 +334,7 @@ export default async function GroupsPage({
 
       {/* Centre — the working area */}
       <div className="col-span-full lg:col-span-6">
-        <Card>
+        <Card tone="muted">
           <Tabs
             label="Group detail"
             items={[
@@ -430,9 +430,9 @@ export default async function GroupsPage({
                 ),
               },
               {
-                id: 'detail',
-                label: 'Detail',
-                panel: <Placeholder>Group detail, contacts and relationships</Placeholder>,
+                id: 'goals',
+                label: 'Goals',
+                panel: <Placeholder>Client goals, target dates and progress toward them</Placeholder>,
               },
             ]}
           />
