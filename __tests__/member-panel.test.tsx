@@ -10,7 +10,9 @@ import userEvent from '@testing-library/user-event'
 vi.mock('@/app/(shell)/groups/actions', () => ({
   createMember: vi.fn(),
   updateMember: vi.fn(),
+  patchMember: vi.fn(),
   linkMember: vi.fn(),
+  revealSensitiveField: vi.fn(async () => ({ error: 'not in this test' })),
   searchPeople: vi.fn(async () => []),
 }))
 
@@ -55,7 +57,7 @@ const person = {
   other_groups: [{ name: 'Faketrade Pty Ltd Group', member_role: 'director' }],
 }
 
-function open(mode: 'view' | 'edit' | 'search' = 'view') {
+function open(mode: 'view' | 'search' = 'view') {
   return render(
     <MemberPanel groupId="g1" members={[person]} initialMode={mode} initialPartyId="p1">
       trigger
@@ -121,27 +123,61 @@ describe('MemberPanel', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
-  test('Edit switches to a form with the values already in it', async () => {
+  /* The panel-wide Edit button was replaced by a pencil per section, so
+     correcting one field cannot put twenty others into an editable state. */
+  test('each section has its own edit control, and the panel has none', async () => {
     const user = userEvent.setup()
     open('view')
     await user.click(screen.getByRole('button', { name: 'trigger' }))
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
 
-    expect(screen.getByDisplayValue('Priya')).toBeDefined()
-    expect(screen.getByDisplayValue('Drawertest')).toBeDefined()
-    expect(screen.getByDisplayValue('priya@example.com')).toBeDefined()
-    expect(screen.getByRole('button', { name: /save changes/i })).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(screen.getByRole('button', { name: /edit identity/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /edit employment/i })).toBeDefined()
   })
 
-  test('Cancel from edit returns to view rather than closing', async () => {
+  test('the pencil makes only its own section editable', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+    expect(container.querySelectorAll('dialog input[name]').length).toBe(0)
+    await user.click(screen.getByRole('button', { name: /edit employment/i }))
+
+    // Employment's fields appear...
+    expect(screen.getByDisplayValue('Architect')).toBeDefined()
+    // ...and Identity's do not.
+    expect(screen.queryByDisplayValue('Priya')).toBeNull()
+  })
+
+  /**
+   * The reason per-section editing is safe: a section's form carries only its
+   * own fields, and update_person_patch leaves untouched columns alone. If a
+   * section's form ever gained a hidden copy of another section's data, a save
+   * could overwrite it — so the field set is asserted, not assumed.
+   */
+  test('a section submits only its own fields, plus the two identifiers', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('button', { name: /edit preferences/i }))
+
+    const form = container.querySelector('dialog form:has(input[name="coffee_preference"])')
+    const names = [...form!.querySelectorAll('input[name], select[name], textarea[name]')].map(
+      (el) => el.getAttribute('name'),
+    )
+    expect(names.sort()).toEqual(['coffee_preference', 'group_id', 'party_id'])
+  })
+
+  test('Cancel on a section returns it to read-only', async () => {
     const user = userEvent.setup()
     open('view')
     await user.click(screen.getByRole('button', { name: 'trigger' }))
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: /edit employment/i }))
+    expect(screen.getByDisplayValue('Architect')).toBeDefined()
 
-    expect(screen.getByText('Ms Priya Anne Drawertest')).toBeDefined()
-    expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByDisplayValue('Architect')).toBeNull()
+    expect(screen.getByText('Architect')).toBeDefined()
   })
 
   test('search mode offers finding someone before creating them', async () => {

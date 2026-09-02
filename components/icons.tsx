@@ -125,3 +125,17 @@ export function EyeOffIcon({ className = base }: IconProps) {
     </svg>
   )
 }
+
+export function PencilIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M11.4 2.35a1.2 1.2 0 0 1 1.7 0l.55.55a1.2 1.2 0 0 1 0 1.7L6.2 12.05l-3 .75.75-3 7.45-7.45Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M10.3 3.45 12.55 5.7" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  )
+}

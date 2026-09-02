@@ -365,3 +365,46 @@ function revealError(message: string) {
   }
   return 'That field could not be revealed. If it persists, contact your administrator.'
 }
+
+
+/**
+ * Save one section of an individual's record.
+ *
+ * The patch is built from whatever fields the submitted form contains, which is
+ * what makes per-section editing safe: a form holding four inputs produces a
+ * four-key patch, and update_person_patch leaves every column it does not
+ * mention alone. Sending the same four fields to update_person would have
+ * nulled the other nineteen.
+ */
+export async function patchMember(
+  _prev: MemberState,
+  formData: FormData,
+): Promise<MemberState> {
+  const partyId = String(formData.get('party_id') ?? '')
+  const groupId = String(formData.get('group_id') ?? '') || null
+  if (!partyId) return { error: 'No individual selected.' }
+
+  const patch: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (key === 'party_id' || key === 'group_id') continue
+    patch[key] = String(value).trim()
+  }
+  if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
+
+  if (patch.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(patch.email)) {
+    return { error: 'That email address does not look right.' }
+  }
+  if ('first_name' in patch && !patch.first_name) return { error: 'Enter a first name.' }
+  if ('last_name' in patch && !patch.last_name) return { error: 'Enter a last name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_person_patch', {
+    p_party_id: partyId,
+    p_patch: patch,
+    p_group_id: groupId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}

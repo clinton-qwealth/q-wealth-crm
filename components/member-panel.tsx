@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from 'reac
 import {
   createMember,
   linkMember,
+  patchMember,
   revealSensitiveField,
   searchPeople,
   updateMember,
@@ -11,7 +12,7 @@ import {
   type PersonMatch,
 } from '@/app/(shell)/groups/actions'
 import type { PersonDetail } from '@/lib/person'
-import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, TickIcon } from './icons'
+import { CopyIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { Pill } from './ui'
 import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel } from '@/lib/countries'
@@ -34,8 +35,9 @@ const MEMBER_ROLES = [
 
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(MEMBER_ROLES)
 
-/** 'view' shows the record; 'edit' and 'create' are forms; 'search' finds someone existing. */
-type Mode = 'view' | 'edit' | 'create' | 'search'
+/** 'view' shows the record and edits it section by section; 'create' is the new-person
+ *  form; 'search' finds someone who already exists. */
+type Mode = 'view' | 'create' | 'search'
 
 function Field({
   label,
@@ -287,6 +289,113 @@ function Row({
   )
 }
 
+/**
+ * A section that can be edited on its own.
+ *
+ * The pencil replaces the panel-wide Edit button. Correcting one phone number
+ * should not turn the whole record into a form — and a form covering twenty
+ * fields is twenty chances to change something by accident, on a record where
+ * every change is audited.
+ *
+ * Each section owns its own form, so the submitted fields ARE the patch:
+ * update_person_patch leaves every column the form does not mention untouched.
+ * That is the whole reason this is safe to do per section.
+ */
+function EditableSection({
+  title,
+  partyId,
+  groupId,
+  view,
+  edit,
+  boxed = false,
+}: {
+  title: string
+  partyId: string
+  groupId: string
+  view: React.ReactNode
+  /** The inputs. Their `name` attributes become the patch keys. */
+  edit: React.ReactNode
+  boxed?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [state, action, pending] = useActionState<MemberState, FormData>(patchMember, null)
+
+  // A save closes the section back to its read-only form. The revalidate on the
+  // server has already refreshed the values behind it.
+  useEffect(() => {
+    if (state && 'ok' in state) setEditing(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state])
+
+  const error = state && 'error' in state ? state.error : null
+
+  const header = (
+    <div className="flex items-center justify-between gap-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
+      {editing ? (
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            {pending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          aria-label={`Edit ${title.toLowerCase()}`}
+          title={`Edit ${title.toLowerCase()}`}
+          className="rounded-md p-1 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          <PencilIcon className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
+
+  const body = (
+    <>
+      {header}
+      <div className="mt-3.5">{editing ? edit : view}</div>
+      {error ? (
+        <p role="alert" className="mt-3 text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
+    </>
+  )
+
+  // The whole section is the form, so the header's Save button submits it
+  // without needing to reach across the tree.
+  return (
+    <form
+      action={action}
+      className={boxed ? 'rounded-lg border border-neutral-200 px-4 py-4' : undefined}
+    >
+      {/* Only while editing. A section being read renders nothing submittable,
+          which keeps "reading a record cannot change it" true of the DOM and
+          not merely of intent. */}
+      {editing ? (
+        <>
+          <input type="hidden" name="party_id" value={partyId} />
+          <input type="hidden" name="group_id" value={groupId} />
+        </>
+      ) : null}
+      {body}
+    </form>
+  )
+}
+
 function Section({
   title,
   children,
@@ -417,7 +526,6 @@ export function MemberPanel({
   const heading =
     mode === 'create' ? 'Add an individual'
     : mode === 'search' ? 'Add an existing person'
-    : mode === 'edit' ? `Edit ${person?.display_name ?? 'individual'}`
     : (person?.display_name ?? 'Individual')
 
   const triggerClass =
@@ -503,58 +611,136 @@ export function MemberPanel({
                     label: 'Personal',
                     panel: (
                       <div className="flex flex-col gap-4 px-5 pb-6">
-                        <Section title="Identity" boxed>
-                          {/* Two real columns, each stacking its own fields, so
-                              the order down a column is what was asked for. */}
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
-                              <Row span="full" label="Gender" value={person.gender} />
-                              <Row span="full" label="Marital status" value={person.marital_status} />
-                              <Row span="full" label="Place of birth" value={person.place_of_birth} />
-                            </div>
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Known as" value={person.preferred_name} />
-                              <Row
-                                span="full"
-                                label="Date of birth"
-                                value={
-                                  person.date_of_birth ? (
-                                    <CopyValue value={formatDate(person.date_of_birth)!} label="date of birth" />
-                                  ) : null
-                                }
+                        <EditableSection
+                          title="Identity"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
+                                <Row span="full" label="Gender" value={person.gender} />
+                                <Row span="full" label="Marital status" value={person.marital_status} />
+                                <Row span="full" label="Place of birth" value={person.place_of_birth} />
+                              </div>
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Known as" value={person.preferred_name} />
+                                <Row
+                                  span="full"
+                                  label="Date of birth"
+                                  value={
+                                    person.date_of_birth ? (
+                                      <CopyValue value={formatDate(person.date_of_birth)!} label="date of birth" />
+                                    ) : null
+                                  }
+                                />
+                                <Row span="full" label="Smoker status" value={smokerLabel(person.smoker)} />
+                                <Row span="full" label="Date of death" value={formatDate(person.date_of_death)} />
+                              </div>
+                            </dl>
+                          }
+                          edit={
+                            <div className="grid grid-cols-6 gap-3">
+                              <Field label="Title" name="title" defaultValue={person.title} className="col-span-2" />
+                              <Field label="First name" name="first_name" defaultValue={person.first_name} required className="col-span-4" />
+                              <Field label="Middle name" name="middle_name" defaultValue={person.middle_name} className="col-span-3" />
+                              <Field label="Last name" name="last_name" defaultValue={person.last_name} required className="col-span-3" />
+                              <Field label="Known as" name="preferred_name" defaultValue={person.preferred_name} className="col-span-3" />
+                              <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person.date_of_birth} className="col-span-3" />
+                              <Field label="Gender" name="gender" defaultValue={person.gender} className="col-span-3" />
+                              <Field label="Marital status" name="marital_status" defaultValue={person.marital_status} className="col-span-3" />
+                              <Field label="Place of birth" name="place_of_birth" defaultValue={person.place_of_birth} className="col-span-6" />
+                              <Select
+                                label="Smoker status"
+                                name="smoker"
+                                defaultValue={person.smoker === null ? '' : String(person.smoker)}
+                                placeholder="Not asked"
+                                options={[
+                                  { value: 'false', label: 'Non-smoker' },
+                                  { value: 'true', label: 'Smoker' },
+                                ]}
+                                className="col-span-3"
                               />
-                              <Row span="full" label="Smoker status" value={smokerLabel(person.smoker)} />
-                              <Row span="full" label="Date of death" value={formatDate(person.date_of_death)} />
+                              <Field label="Date of death" name="date_of_death" type="date" defaultValue={person.date_of_death} className="col-span-3" />
                             </div>
-                          </dl>
-                        </Section>
+                          }
+                        />
 
-                        <Section title="Citizenship and tax residency" boxed>
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Primary citizenship" value={countryName(person.primary_citizenship)} />
-                              <Row span="full" label="Secondary citizenship" value={countryName(person.secondary_citizenship)} />
+                        <EditableSection
+                          title="Citizenship and tax residency"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Primary citizenship" value={countryName(person.primary_citizenship)} />
+                                <Row span="full" label="Secondary citizenship" value={countryName(person.secondary_citizenship)} />
+                              </div>
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Tax residency" value={countryName(person.tax_residency)} />
+                              </div>
+                            </dl>
+                          }
+                          edit={
+                            <div className="grid grid-cols-6 gap-3">
+                              <Select label="Primary citizenship" name="primary_citizenship" defaultValue={person.primary_citizenship} options={COUNTRY_OPTIONS} className="col-span-3" />
+                              <Select label="Secondary citizenship" name="secondary_citizenship" defaultValue={person.secondary_citizenship} options={COUNTRY_OPTIONS} className="col-span-3" />
+                              <Select label="Tax residency" name="tax_residency" defaultValue={person.tax_residency} options={COUNTRY_OPTIONS} className="col-span-3" />
                             </div>
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Tax residency" value={countryName(person.tax_residency)} />
-                            </div>
-                          </dl>
-                        </Section>
+                          }
+                        />
 
-                        <Section title="Employment" boxed>
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Employment status" value={employmentLabel(person.employment_status)} />
-                              <Row span="full" label="Occupation" value={person.occupation} />
+                        <EditableSection
+                          title="Employment"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Employment status" value={employmentLabel(person.employment_status)} />
+                                <Row span="full" label="Occupation" value={person.occupation} />
+                              </div>
+                              <div className="flex flex-col gap-4">
+                                <Row span="full" label="Company name" value={person.company_name} />
+                              </div>
+                            </dl>
+                          }
+                          edit={
+                            <div className="grid grid-cols-6 gap-3">
+                              <Select label="Employment status" name="employment_status" defaultValue={person.employment_status} options={EMPLOYMENT_STATUS} className="col-span-3" />
+                              <Field label="Occupation" name="occupation" defaultValue={person.occupation} className="col-span-3" />
+                              <Field label="Company name" name="company_name" defaultValue={person.company_name} className="col-span-6" />
                             </div>
-                            <div className="flex flex-col gap-4">
-                              <Row span="full" label="Company name" value={person.company_name} />
-                            </div>
-                          </dl>
-                        </Section>
+                          }
+                        />
 
-                        <Section title="Identifiers" boxed>
+                        <EditableSection
+                          title="Identifiers"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          edit={
+                            <div className="grid grid-cols-6 gap-3">
+                              <Field label="Holder identification number (HIN)" name="hin" defaultValue={person.hin} className="col-span-3" />
+                              <Field label="CHESS sponsor ID (PID)" name="chess_pid" defaultValue={person.chess_pid} className="col-span-3" />
+                              {/* The four encrypted identifiers are absent from
+                                  this form on purpose: writing one goes through
+                                  set_sensitive_field, which enforces the
+                                  permission and the second factor and logs the
+                                  write. Including them here would bypass all of
+                                  that silently. */}
+                              <p className="col-span-6 text-xs leading-relaxed text-neutral-500">
+                                Only the HIN and CHESS PID are edited here. The encrypted
+                                identifiers are changed through their own flow, which records who
+                                changed them.
+                              </p>
+                            </div>
+                          }
+                          view={
+                            <>
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <div className="flex flex-col gap-4">
                               <Row span="full" label="Tax file number" value={<Encrypted partyId={person.party_id} kind="tfn" hint={person.hints.tfn} status={person.tfn_status} />} />
@@ -574,14 +760,23 @@ export function MemberPanel({
                             after thirty seconds. The HIN and CHESS PID are plain text: a HIN
                             appears on every holding statement, and a PID identifies the broker
                             rather than the client. None of the four are ever visible to Claude.
-                          </p>
-                        </Section>
+                              </p>
+                            </>
+                          }
+                        />
 
-                        <Section title="Preferences" boxed>
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
-                            <Row span="full" label="Coffee preference" value={person.coffee_preference} />
-                          </dl>
-                        </Section>
+                        <EditableSection
+                          title="Preferences"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4">
+                              <Row span="full" label="Coffee preference" value={person.coffee_preference} />
+                            </dl>
+                          }
+                          edit={<Field label="Coffee preference" name="coffee_preference" defaultValue={person.coffee_preference} placeholder="Flat white, no sugar" />}
+                        />
                       </div>
                     ),
                   },
@@ -597,14 +792,32 @@ export function MemberPanel({
                             <Row label="Other phone" value={person.phone_other} />
                           </dl>
                         </Section>
-                        <Section title="Residential address">
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <Row span="full" label="Street" value={[person.address.line1, person.address.line2].filter(Boolean).join(', ')} />
-                            <Row span="full" label="Suburb" value={person.address.suburb} />
-                            <Row label="State" value={person.address.state} />
-                            <Row label="Postcode" value={person.address.postcode} />
-                          </dl>
-                        </Section>
+                        <EditableSection
+                          title="Residential address"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                              <Row span="full" label="Street" value={[person.address.line1, person.address.line2].filter(Boolean).join(', ')} />
+                              <Row span="full" label="Suburb" value={person.address.suburb} />
+                              <Row label="State" value={person.address.state} />
+                              <Row label="Postcode" value={person.address.postcode} />
+                            </dl>
+                          }
+                          edit={
+                            /* All five address inputs together, always. The address is one
+                               row with several columns, so update_person_patch takes them as
+                               a unit — a form submitting only some would blank the rest. */
+                            <div className="grid grid-cols-6 gap-3">
+                              <Field label="Street" name="addr_line1" defaultValue={person.address.line1} className="col-span-6" />
+                              <Field label="Line 2" name="addr_line2" defaultValue={person.address.line2} className="col-span-6" />
+                              <Field label="Suburb" name="addr_suburb" defaultValue={person.address.suburb} className="col-span-3" />
+                              <Field label="State" name="addr_state" defaultValue={person.address.state} className="col-span-1" />
+                              <Field label="Postcode" name="addr_postcode" defaultValue={person.address.postcode} className="col-span-2" />
+                            </div>
+                          }
+                        />
                       </div>
                     ),
                   },
@@ -701,13 +914,6 @@ export function MemberPanel({
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('edit')}
-                  className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
-                >
-                  Edit
-                </button>
               </footer>
             </>
           ) : null}
@@ -791,15 +997,12 @@ export function MemberPanel({
             </>
           ) : null}
 
-          {mode === 'create' || mode === 'edit' ? (
+          {mode === 'create' ? (
             <form
-              action={mode === 'create' ? createAction : updateAction}
+              action={createAction}
               className="flex min-h-0 flex-1 flex-col"
             >
               <input type="hidden" name="group_id" value={groupId} />
-              {mode === 'edit' && person ? (
-                <input type="hidden" name="party_id" value={person.party_id} />
-              ) : null}
 
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 <div className="flex flex-col gap-6">
@@ -912,7 +1115,7 @@ export function MemberPanel({
               <footer className="flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-5 py-3">
                 <button
                   type="button"
-                  onClick={() => (mode === 'edit' && person ? setMode('view') : close())}
+                  onClick={close}
                   className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-brand/30"
                 >
                   Cancel
@@ -922,7 +1125,7 @@ export function MemberPanel({
                   disabled={busy}
                   className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
                 >
-                  {busy ? 'Saving…' : mode === 'create' ? 'Add individual' : 'Save changes'}
+                  {busy ? 'Adding…' : 'Add individual'}
                 </button>
               </footer>
             </form>
