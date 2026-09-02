@@ -65,9 +65,27 @@ function Field({
 
 /** One label/value line in view mode. Absent values are shown as an em dash
  *  rather than hidden, so a gap in the record reads as a gap. */
-function Row({ label, value }: { label: string; value?: string | null }) {
+function Row({
+  label,
+  value,
+  span = 'half',
+}: {
+  label: string
+  value?: string | null
+  /** `full` crosses both columns. Long values — an address, a list of groups —
+   *  wrap badly in half the width, so they take the whole row instead. */
+  span?: 'half' | 'full'
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-neutral-100 py-2 last:border-0">
+    <div
+      /* No rule under each row. In a two-column grid the columns rarely hold
+         the same number of rows, so the last line in the longer column stops
+         half way across and reads as a mistake. Spacing separates the rows and
+         the label/value contrast carries the scan. */
+      className={`flex items-baseline justify-between gap-4 py-1.5 ${
+        span === 'full' ? 'sm:col-span-2' : ''
+      }`}
+    >
       <dt className="shrink-0 text-xs text-neutral-500">{label}</dt>
       <dd className="min-w-0 text-right text-sm text-neutral-800">{value?.trim() || '—'}</dd>
     </div>
@@ -78,6 +96,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
+      {/* No rules at all in the end. `last:border-0` here was dead — the div is
+          always the only child of its section, so the border never rendered.
+          Removed rather than fixed: the uppercase heading and the gap between
+          sections carry the structure, and the label/value contrast carries the
+          scan within one. */}
       <div className="mt-2">{children}</div>
     </section>
   )
@@ -197,14 +220,14 @@ export function MemberPanel({
           // panel land on the panel.
           if (e.target === dialogRef.current) close()
         }}
-        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[32rem] lg:w-1/3"
+        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:max-w-[46rem]"
       >
         <div className="flex h-full flex-col">
           <header className="flex items-start justify-between gap-3 border-b border-neutral-100 px-5 py-4">
             <div className="min-w-0">
               <h2
                 id="member-panel-title"
-                className="truncate text-base font-semibold tracking-tight text-neutral-900"
+                className="truncate text-xl font-semibold tracking-tight text-neutral-900"
               >
                 {heading}
               </h2>
@@ -238,7 +261,7 @@ export function MemberPanel({
               <div className="flex-1 overflow-y-auto px-5 py-4">
                 <div className="flex flex-col gap-6">
                   <Section title="Identity">
-                    <dl>
+                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                       <Row label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
                       <Row label="Known as" value={person.preferred_name} />
                       <Row label="Date of birth" value={person.date_of_birth} />
@@ -248,11 +271,12 @@ export function MemberPanel({
                   </Section>
 
                   <Section title="Contact">
-                    <dl>
+                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                       <Row label="Email" value={person.email} />
                       <Row label="Mobile" value={person.mobile} />
                       <Row label="Other phone" value={person.phone_other} />
                       <Row
+                        span="full"
                         label="Address"
                         value={[
                           person.address.line1,
@@ -268,17 +292,18 @@ export function MemberPanel({
                   </Section>
 
                   <Section title="Standing">
-                    <dl>
+                    <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                       <Row
                         label="Roles"
                         value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')}
                       />
-                      <Row label="Tax file number" value={
+                      <Row span="full" label="Tax file number" value={
                         person.tfn_status === 'provided' ? 'On file — reveal in the CRM only'
                         : person.tfn_status === 'exempt' ? 'Exempt'
                         : 'Not provided'
                       } />
                       <Row
+                        span="full"
                         label="Other groups"
                         value={person.other_groups
                           .map((g) => `${g.name} (${g.member_role.replace(/_/g, ' ')})`)
