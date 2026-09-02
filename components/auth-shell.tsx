@@ -36,14 +36,14 @@ export function AuthShell({
       />
 
       <div className={width === 'md' ? 'w-full max-w-md' : 'w-full max-w-sm'}>
-        <div className="rounded-2xl border border-neutral-200/80 bg-white p-7 shadow-xl shadow-neutral-900/[0.07] sm:p-8">
+        <div className="rounded-2xl border border-neutral-200/80 bg-white p-7 text-center shadow-xl shadow-neutral-900/[0.07] sm:p-8">
           <Image
             src="/qwealth-logo.svg"
             alt="Q Wealth"
             width={86}
             height={83}
             priority
-            className="h-16 w-auto"
+            className="mx-auto h-16 w-auto"
           />
 
           <h1 className="mt-7 text-lg font-semibold tracking-tight text-neutral-900">{title}</h1>
