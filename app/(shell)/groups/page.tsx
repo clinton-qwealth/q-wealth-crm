@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { AccountValue, Card, PageHeading, Pill } from '@/components/ui'
+import { AccountValue, Card, coverSummary, PageHeading, Pill } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
+import { AddPolicyModal } from '@/components/add-policy-modal'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -85,6 +86,21 @@ async function getGroupContacts(groupId: string) {
   return { phone: (best?.value as string | null) ?? null, adviser }
 }
 
+type PolicyRow = {
+  policy_id: string
+  label: string
+  policy_number: string
+  status: string
+  insurer: string | null
+  owners: string | null
+  lives_insured: string | null
+  cover_types: string | null
+  total_lump_sum_cover: string | number | null
+  total_monthly_benefit: string | number | null
+  premium: string | number | null
+  premium_frequency: string | null
+}
+
 type AccountRow = {
   account_id: string
   account_type: string
@@ -133,25 +149,69 @@ async function getAccountsData(groupId: string) {
     return { id: r.party_id as string, name: party?.display_name ?? 'Unnamed' }
   })
 
-  if (members.length === 0) return { accounts: [] as AccountRow[], members, providers }
+  if (members.length === 0) {
+    return { accounts: [] as AccountRow[], policies: [] as PolicyRow[], members, providers }
+  }
+  const partyIds = members.map((m) => m.id)
 
+  /* Accounts and policies are fetched independently: a group can hold cover
+     without holding an investment account, and vice versa. Returning early from
+     one path would silently empty the other. */
   const { data: ownerRows } = await supabase
     .from('financial_account_owners')
     .select('account_id')
-    .in('party_id', members.map((m) => m.id))
+    .in('party_id', partyIds)
 
   const accountIds = [...new Set((ownerRows ?? []).map((o) => o.account_id as string))]
-  if (accountIds.length === 0) return { accounts: [] as AccountRow[], members, providers }
+  const accounts = accountIds.length
+    ? ((
+        await supabase
+          .from('financial_accounts_summary')
+          .select('*')
+          .in('account_id', accountIds)
+          .order('label')
+      ).data ?? [])
+    : []
 
-  const { data: accounts } = await supabase
-    .from('financial_accounts_summary')
-    .select('*')
-    .in('account_id', accountIds)
-    .order('label')
+  // Same derivation as accounts, but through any policy role — a person whose
+  // life is insured on a policy someone else owns still belongs to this list.
+  const { data: policyPartyRows } = await supabase
+    .from('insurance_policy_parties')
+    .select('policy_id')
+    .in('party_id', partyIds)
 
-  return { accounts: (accounts ?? []) as AccountRow[], members, providers }
+  const policyIds = [...new Set((policyPartyRows ?? []).map((r) => r.policy_id as string))]
+  const policies = policyIds.length
+    ? ((
+        await supabase
+          .from('insurance_policies_summary')
+          .select('*')
+          .in('policy_id', policyIds)
+          .order('label')
+      ).data ?? [])
+    : []
+
+  return {
+    accounts: accounts as AccountRow[],
+    policies: policies as PolicyRow[],
+    members,
+    providers,
+  }
 }
 
+
+const COVER_TYPE_LABEL: Record<string, string> = {
+  life: 'Life',
+  tpd: 'TPD',
+  trauma: 'Trauma',
+  income_protection: 'Income protection',
+}
+
+const POLICY_STATUS_LABEL: Record<string, string> = {
+  in_force: 'In force',
+  lapsed: 'Lapsed',
+  cancelled: 'Cancelled',
+}
 
 const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   investment: 'Investment',
@@ -209,9 +269,9 @@ export default async function GroupsPage({
     ? await getGroupContacts(group.group_id)
     : { phone: null, adviser: null }
   const members = parseMembers(group?.members ?? null)
-  const { accounts, members: ownerOptions, providers } = group
+  const { accounts, policies, members: ownerOptions, providers } = group
     ? await getAccountsData(group.group_id)
-    : { accounts: [], members: [], providers: [] }
+    : { accounts: [], policies: [], members: [], providers: [] }
 
 
   return (
@@ -356,6 +416,7 @@ export default async function GroupsPage({
                 id: 'accounts',
                 label: 'Accounts',
                 panel: (
+                  <div className="flex flex-col gap-6">
                   <DataSection
                     title="Investment Accounts"
                     addLabel="Add account"
@@ -413,6 +474,56 @@ export default async function GroupsPage({
                       </ul>
                     ) : undefined}
                   </DataSection>
+                    <DataSection
+                      title="Insurance Policies"
+                      addLabel="Add policy"
+                      action={
+                        <AddPolicyModal
+                          owners={ownerOptions}
+                          providers={providers}
+                          triggerVariant="quiet"
+                        />
+                      }
+                      emptyAction={
+                        <AddPolicyModal owners={ownerOptions} providers={providers} />
+                      }
+                      empty={{
+                        title: 'No policies yet',
+                        description:
+                          'Life, TPD, trauma and income protection cover held by this group\u2019s members.',
+                      }}
+                    >
+                      {policies.length ? (
+                        <ul className="flex flex-col gap-1.5">
+                          {policies.map((p) => (
+                            <DataRow
+                              key={p.policy_id}
+                              primary={p.label}
+                              secondary={[
+                                p.cover_types
+                                  ?.split(', ')
+                                  .map((c) => COVER_TYPE_LABEL[c] ?? c)
+                                  .join(', '),
+                                p.lives_insured,
+                              ]
+                                .filter(Boolean)
+                                .join(' \u00b7 ')}
+                              /* Same rule as accounts: marked only when the
+                                 status is worth noticing. */
+                              badge={
+                                p.status === 'in_force' ? undefined : (
+                                  <Pill tone={p.status === 'lapsed' ? 'warning' : 'neutral'}>
+                                    {POLICY_STATUS_LABEL[p.status] ?? p.status}
+                                  </Pill>
+                                )
+                              }
+                              meta={coverSummary(p.total_lump_sum_cover, p.total_monthly_benefit) ?? undefined}
+                            />
+                          ))}
+                        </ul>
+                      ) : undefined}
+                    </DataSection>
+                  </div>
                 ),
               },
               {

@@ -249,3 +249,32 @@ export function AccountValue({
     </span>
   )
 }
+
+const coverMoney = new Intl.NumberFormat('en-AU', {
+  style: 'currency',
+  currency: 'AUD',
+  maximumFractionDigits: 0,
+})
+
+/**
+ * A policy's cover, as one readable figure.
+ *
+ * Lump sums and income streams are never added together: $750,000 of life cover
+ * plus $6,500 a month is not $756,500. A policy holding both shows both, joined
+ * rather than summed — which is why the database keeps the two totals in
+ * separate columns rather than leaving it to each caller to remember.
+ *
+ * Returns null when there is nothing to show, so the caller renders no figure
+ * rather than a misleading zero.
+ */
+export function coverSummary(
+  lumpSum: string | number | null | undefined,
+  monthly: string | number | null | undefined,
+) {
+  const parts: string[] = []
+  if (lumpSum != null && Number(lumpSum) > 0) parts.push(coverMoney.format(Number(lumpSum)))
+  if (monthly != null && Number(monthly) > 0) {
+    parts.push(`${coverMoney.format(Number(monthly))}/mo`)
+  }
+  return parts.length ? parts.join(' + ') : null
+}

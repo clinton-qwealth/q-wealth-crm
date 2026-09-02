@@ -74,6 +74,26 @@ test.describe('authenticated staff access', () => {
     expect(a!.x).toBeGreaterThan(h!.x) // heading left, action right
   })
 
+  test('insurance sits as its own section beneath accounts', async ({ page }) => {
+    await page.goto('/groups')
+    await page.getByRole('tab', { name: 'Accounts' }).click()
+
+    const accounts = page.getByRole('heading', { level: 3, name: 'Investment Accounts' })
+    const insurance = page.getByRole('heading', { level: 3, name: 'Insurance Policies' })
+    await expect(accounts).toBeVisible()
+    await expect(insurance).toBeVisible()
+
+    // Order matters: insurance sits beneath accounts, not above or beside.
+    const [a, i] = [await accounts.boundingBox(), await insurance.boundingBox()]
+    expect(i!.y).toBeGreaterThan(a!.y)
+
+    /* An income-protection benefit must never be rendered as a bare amount — it
+       is a monthly stream, and dropping the unit overstates nothing but
+       understates the cover by a factor of twelve when read as annual. */
+    const ip = page.locator('li', { hasText: 'Income protection' }).first()
+    if (await ip.count()) await expect(ip).toContainText('/mo')
+  })
+
   /**
    * Signing out has to actually restore the boundary, not just clear the visible
    * chrome. This is the case a cookie-handling mistake breaks.
