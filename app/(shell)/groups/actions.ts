@@ -141,3 +141,163 @@ export async function createPolicy(
   revalidatePath('/groups')
   return { ok: true }
 }
+
+export type MemberState = { error: string } | { ok: true } | null
+
+/** Shared by create and update: the panel's field set, read off the form. */
+function readPersonFields(formData: FormData) {
+  const str = (k: string) => String(formData.get(k) ?? '').trim()
+  return {
+    p_title: str('title') || null,
+    p_first_name: str('first_name'),
+    p_middle_name: str('middle_name') || null,
+    p_last_name: str('last_name'),
+    p_preferred_name: str('preferred_name') || null,
+    p_date_of_birth: str('date_of_birth') || null,
+    p_gender: str('gender') || null,
+    p_marital_status: str('marital_status') || null,
+    p_email: str('email') || null,
+    p_mobile: str('mobile') || null,
+    p_phone_other: str('phone_other') || null,
+    p_addr_line1: str('addr_line1') || null,
+    p_addr_line2: str('addr_line2') || null,
+    p_addr_suburb: str('addr_suburb') || null,
+    p_addr_state: str('addr_state') || null,
+    p_addr_postcode: str('addr_postcode') || null,
+    p_notes: str('notes') || null,
+  }
+}
+
+/** Checked here so a typo is a clear message rather than a database error. */
+function fieldProblem(f: ReturnType<typeof readPersonFields>) {
+  if (!f.p_first_name) return 'Enter a first name.'
+  if (!f.p_last_name) return 'Enter a last name.'
+  if (f.p_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.p_email)) {
+    return 'That email address does not look right.'
+  }
+  return null
+}
+
+export async function createMember(
+  _prev: MemberState,
+  formData: FormData,
+): Promise<MemberState> {
+  const groupId = String(formData.get('group_id') ?? '')
+  const memberRole = String(formData.get('member_role') ?? 'other_person')
+  if (!groupId) return { error: 'No group selected.' }
+
+  const fields = readPersonFields(formData)
+  const problem = fieldProblem(fields)
+  if (problem) return { error: problem }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_person_in_group', {
+    p_group_id: groupId,
+    p_member_role: memberRole,
+    ...fields,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+export async function updateMember(
+  _prev: MemberState,
+  formData: FormData,
+): Promise<MemberState> {
+  const partyId = String(formData.get('party_id') ?? '')
+  const groupId = String(formData.get('group_id') ?? '') || null
+  const memberRole = String(formData.get('member_role') ?? '') || null
+  if (!partyId) return { error: 'No individual selected.' }
+
+  const fields = readPersonFields(formData)
+  const problem = fieldProblem(fields)
+  if (problem) return { error: problem }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_person', {
+    p_party_id: partyId,
+    ...fields,
+    p_group_id: groupId,
+    p_member_role: memberRole,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/** Attach someone who already exists — the reason the party model exists. */
+export async function linkMember(
+  _prev: MemberState,
+  formData: FormData,
+): Promise<MemberState> {
+  const groupId = String(formData.get('group_id') ?? '')
+  const partyId = String(formData.get('party_id') ?? '')
+  const memberRole = String(formData.get('member_role') ?? 'other_person')
+  if (!groupId || !partyId) return { error: 'Choose someone to add.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('add_party_to_group', {
+    p_group_id: groupId,
+    p_party_id: partyId,
+    p_member_role: memberRole,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+export type PersonMatch = { party_id: string; display_name: string; detail: string }
+
+/**
+ * Search existing individuals, so an adviser adding someone already on file
+ * links to that record rather than typing a second copy of them.
+ *
+ * Scoped by RLS like everything else: it can only surface people the caller can
+ * already see. Excludes anyone already in this group.
+ */
+export async function searchPeople(groupId: string, query: string): Promise<PersonMatch[]> {
+  if (query.trim().length < 2) return []
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data: existing } = await supabase
+    .from('client_group_members')
+    .select('party_id')
+    .eq('group_id', groupId)
+    .is('end_date', null)
+  const already = new Set((existing ?? []).map((m) => m.party_id as string))
+
+  const { data, error } = await supabase
+    .from('parties')
+    .select('id, display_name, persons(date_of_birth), contact_points(kind, value, is_preferred)')
+    .eq('party_type', 'person')
+    .eq('status', 'active')
+    .ilike('display_name', `%${query.trim()}%`)
+    .limit(12)
+  if (error) return []
+
+  return (data ?? [])
+    .filter((p) => !already.has(p.id as string))
+    .map((p) => {
+      const row = p as Record<string, unknown>
+      const person = (Array.isArray(row.persons) ? row.persons[0] : row.persons) as
+        | { date_of_birth?: string }
+        | null
+      const points = (row.contact_points ?? []) as Record<string, unknown>[]
+      const email = points.find((c) => c.kind === 'email' && c.is_preferred)?.value as
+        | string
+        | undefined
+      // Enough to tell two people with the same name apart.
+      const detail = [email, person?.date_of_birth ? `born ${person.date_of_birth}` : null]
+        .filter(Boolean)
+        .join(' · ')
+      return {
+        party_id: row.id as string,
+        display_name: (row.display_name as string) ?? 'Unnamed',
+        detail: detail || 'No contact details on file',
+      }
+    })
+}

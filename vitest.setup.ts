@@ -20,3 +20,21 @@ if (!('ResizeObserver' in globalThis)) {
     disconnect() {}
   } as unknown as typeof ResizeObserver
 }
+
+// jsdom implements the dialog element but not showModal/close — there is no top
+// layer without a layout engine. The stub toggles the `open` attribute and fires
+// `close`, which is enough for a component's own logic to be tested.
+//
+// What it deliberately does NOT reproduce is modality: focus trapping and an
+// inert background come from the real top layer, so those are verified in the
+// browser rather than here.
+if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.showModal) {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    if (!this.hasAttribute('open')) return
+    this.removeAttribute('open')
+    this.dispatchEvent(new Event('close'))
+  }
+}

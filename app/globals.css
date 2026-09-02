@@ -143,3 +143,77 @@ dialog.qw-modal[open]::backdrop {
     transform: none;
   }
 }
+
+/*
+ * Slide-out drawer, same native <dialog> foundation as .qw-modal.
+ *
+ * Why a dialog rather than a fixed div: the brief is that the rest of the UI is
+ * inactive until the panel is saved or closed. That is exactly what a modal
+ * dialog gives — the top layer, an inert background, focus held inside, and
+ * Escape handled by the browser. Reproducing it by hand means reimplementing a
+ * focus trap, and a focus trap with a bug is worse than none.
+ *
+ * Positioning: a dialog centres itself by default, so `margin: 0` and the inset
+ * rules are what pin it to the right edge and let it take the full height. The
+ * default `max-height: calc(100% - 6px)` would otherwise leave a hairline gap.
+ */
+dialog.qw-drawer {
+  margin: 0 0 0 auto;
+  height: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  transform: translateX(16px);
+  opacity: 0;
+  transition:
+    opacity 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    overlay 220ms allow-discrete,
+    display 220ms allow-discrete;
+}
+
+dialog.qw-drawer[open] {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* The "before open" state, since the element is display:none until it opens. */
+@starting-style {
+  dialog.qw-drawer[open] {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+}
+
+dialog.qw-drawer::backdrop {
+  background-color: rgb(23 23 23 / 0);
+  backdrop-filter: blur(0px);
+  transition:
+    background-color 220ms ease-out,
+    backdrop-filter 220ms ease-out,
+    overlay 220ms allow-discrete,
+    display 220ms allow-discrete;
+}
+
+dialog.qw-drawer[open]::backdrop {
+  background-color: rgb(23 23 23 / 0.35);
+  backdrop-filter: blur(2px);
+}
+
+@starting-style {
+  dialog.qw-drawer[open]::backdrop {
+    background-color: rgb(23 23 23 / 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.qw-drawer,
+  dialog.qw-drawer::backdrop {
+    transition-duration: 1ms;
+  }
+  dialog.qw-drawer,
+  dialog.qw-drawer[open] {
+    transform: none;
+  }
+}

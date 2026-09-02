@@ -6,6 +6,8 @@ import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
+import { MemberPanel } from '@/components/member-panel'
+import { getGroupMemberDetail } from '@/lib/person'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -268,7 +270,10 @@ export default async function GroupsPage({
   const { phone, adviser } = group
     ? await getGroupContacts(group.group_id)
     : { phone: null, adviser: null }
-  const members = parseMembers(group?.members ?? null)
+  // The panel needs the whole record, not the rolled-up name string the card
+  // used before. Individuals only — a trust or company in the group has no
+  // persons row, so those keep rendering from `members`.
+  const memberDetail = group ? await getGroupMemberDetail(group.group_id) : []
   const { accounts, policies, members: ownerOptions, providers } = group
     ? await getAccountsData(group.group_id)
     : { accounts: [], policies: [], members: [], providers: [] }
@@ -351,33 +356,59 @@ export default async function GroupsPage({
                   Members
                 </h3>
 
-                {members.length ? (
+                {memberDetail.length ? (
                   <ul className="mt-2.5 flex flex-col gap-1.5">
-                    {members.map((m) => (
-                      <li
-                        key={`${m.name}-${m.role}`}
-                        className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
-                      >
-                        <span className="truncate text-sm text-neutral-700">{m.name}</span>
-                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
-                          {m.role}
-                        </span>
-                      </li>
-                    ))}
+                    {memberDetail.map((m) =>
+                      m.is_person ? (
+                      <li key={m.party_id}>
+                          <MemberPanel
+                            groupId={group.group_id}
+                            members={memberDetail}
+                            initialMode="view"
+                            initialPartyId={m.party_id}
+                          >
+                            <span className="truncate text-sm text-neutral-700">
+                              {m.display_name}
+                            </span>
+                            <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
+                              {(m.member_role ?? '').replace(/_/g, ' ')}
+                            </span>
+                          </MemberPanel>
+                        </li>
+                      ) : (
+                        /* A trust or company in the group. Listed for
+                           completeness; there is no individual record to open. */
+                        <li
+                          key={m.party_id}
+                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
+                        >
+                          <span className="truncate text-sm text-neutral-700">
+                            {m.display_name}
+                          </span>
+                          <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
+                            {(m.member_role ?? '').replace(/_/g, ' ')}
+                          </span>
+                        </li>
+                      ),
+                    )}
                   </ul>
                 ) : (
                   <p className="mt-2.5 text-sm text-neutral-400">No members yet.</p>
                 )}
 
                 {/* Reads as the next row of the list rather than a separate
-                    control. Placeholder target — adding members is not built yet. */}
-                <a
-                  href="#"
-                  className="mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-white hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+                    control. Opens the panel searching people already on file,
+                    because linking an existing record is the case that keeps
+                    duplicate people out of the database. */}
+                <MemberPanel
+                  groupId={group.group_id}
+                  members={memberDetail}
+                  initialMode="search"
+                  variant="link"
                 >
                   <PlusIcon className="h-3.5 w-3.5" />
                   Add member
-                </a>
+                </MemberPanel>
               </div>
 
               <p className="mt-3 text-xs text-neutral-400">
