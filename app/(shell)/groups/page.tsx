@@ -7,7 +7,7 @@ import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
 import { MemberPanel } from '@/components/member-panel'
-import { getGroupMemberDetail } from '@/lib/person'
+import { getGroupMemberDetail, type PersonDetail } from '@/lib/person'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -127,23 +127,28 @@ type AccountRow = {
 async function getAccountsData(groupId: string) {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const { data: memberRows } = await supabase
-    .from('client_group_members')
-    .select('party_id, parties(display_name)')
-    .eq('group_id', groupId)
-    .is('end_date', null)
+  /* Wave one: the group's members and the provider list have nothing to do with
+     each other, so they go together. Every round trip to Supabase costs about
+     170ms regardless of how small the query is, so the depth of this chain
+     matters far more than the shape of any single query in it. */
+  const [{ data: memberRows }, { data: providerRows }] = await Promise.all([
+    supabase
+      .from('client_group_members')
+      .select('party_id, parties(display_name)')
+      .eq('group_id', groupId)
+      .is('end_date', null),
+    supabase
+      .from('party_roles')
+      .select('party_id, parties(display_name)')
+      .eq('role', 'product_provider')
+      .eq('status', 'active'),
+  ])
 
   const members = (memberRows ?? []).map((m) => {
     const raw = (m as Record<string, unknown>).parties
     const party = (Array.isArray(raw) ? raw[0] : raw) as { display_name?: string } | null
     return { id: m.party_id as string, name: party?.display_name ?? 'Unnamed' }
   })
-
-  const { data: providerRows } = await supabase
-    .from('party_roles')
-    .select('party_id, parties(display_name)')
-    .eq('role', 'product_provider')
-    .eq('status', 'active')
 
   const providers = (providerRows ?? []).map((r) => {
     const raw = (r as Record<string, unknown>).parties
@@ -158,40 +163,31 @@ async function getAccountsData(groupId: string) {
 
   /* Accounts and policies are fetched independently: a group can hold cover
      without holding an investment account, and vice versa. Returning early from
-     one path would silently empty the other. */
-  const { data: ownerRows } = await supabase
-    .from('financial_account_owners')
-    .select('account_id')
-    .in('party_id', partyIds)
+     one path would silently empty the other.
+
+     Wave two finds which accounts and policies these parties are attached to —
+     the second is through any policy role, since a person whose life is insured
+     on a policy someone else owns still belongs to this list. */
+  const [{ data: ownerRows }, { data: policyPartyRows }] = await Promise.all([
+    supabase.from('financial_account_owners').select('account_id').in('party_id', partyIds),
+    supabase.from('insurance_policy_parties').select('policy_id').in('party_id', partyIds),
+  ])
 
   const accountIds = [...new Set((ownerRows ?? []).map((o) => o.account_id as string))]
-  const accounts = accountIds.length
-    ? ((
-        await supabase
-          .from('financial_accounts_summary')
-          .select('*')
-          .in('account_id', accountIds)
-          .order('label')
-      ).data ?? [])
-    : []
-
-  // Same derivation as accounts, but through any policy role — a person whose
-  // life is insured on a policy someone else owns still belongs to this list.
-  const { data: policyPartyRows } = await supabase
-    .from('insurance_policy_parties')
-    .select('policy_id')
-    .in('party_id', partyIds)
-
   const policyIds = [...new Set((policyPartyRows ?? []).map((r) => r.policy_id as string))]
-  const policies = policyIds.length
-    ? ((
-        await supabase
-          .from('insurance_policies_summary')
-          .select('*')
-          .in('policy_id', policyIds)
-          .order('label')
-      ).data ?? [])
-    : []
+
+  // Wave three: the two summary views. An empty id list is resolved locally
+  // rather than sent, so a group with no cover pays nothing for the policy half.
+  const [accountsRes, policiesRes] = await Promise.all([
+    accountIds.length
+      ? supabase.from('financial_accounts_summary').select('*').in('account_id', accountIds).order('label')
+      : Promise.resolve({ data: [] as unknown[] }),
+    policyIds.length
+      ? supabase.from('insurance_policies_summary').select('*').in('policy_id', policyIds).order('label')
+      : Promise.resolve({ data: [] as unknown[] }),
+  ])
+  const accounts = accountsRes.data ?? []
+  const policies = policiesRes.data ?? []
 
   return {
     accounts: accounts as AccountRow[],
@@ -258,16 +254,28 @@ export default async function GroupsPage({
 
   const { id } = await searchParams
   const group = await getGroup(id)
-  const { phone, adviser } = group
-    ? await getGroupContacts(group.group_id)
-    : { phone: null, adviser: null }
-  // The panel needs the whole record, not the rolled-up name string the card
-  // used before. Individuals only — a trust or company in the group has no
-  // persons row, so those keep rendering from `members`.
-  const memberDetail = group ? await getGroupMemberDetail(group.group_id) : []
-  const { accounts, policies, members: ownerOptions, providers } = group
-    ? await getAccountsData(group.group_id)
-    : { accounts: [], policies: [], members: [], providers: [] }
+
+  /* All three need the group id and nothing from each other, so they run
+     together rather than one after another. memberDetail exists because the
+     panel needs the whole record, not the rolled-up name string the card used
+     before — individuals only, since a trust or company in the group has no
+     persons row and those keep rendering from `members`. */
+  const [{ phone, adviser }, memberDetail, accountsData]: [
+    Awaited<ReturnType<typeof getGroupContacts>>,
+    PersonDetail[],
+    Awaited<ReturnType<typeof getAccountsData>>,
+  ] = group
+    ? await Promise.all([
+        getGroupContacts(group.group_id),
+        getGroupMemberDetail(group.group_id),
+        getAccountsData(group.group_id),
+      ])
+    : [
+        { phone: null, adviser: null },
+        [],
+        { accounts: [], policies: [], members: [], providers: [] },
+      ]
+  const { accounts, policies, members: ownerOptions, providers } = accountsData
 
 
   return (

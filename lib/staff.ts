@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export type AccessProfile = {
@@ -29,8 +30,14 @@ export type Staff = {
  * Filters on auth_user_id deliberately. staff_users is readable for your own
  * row (or by manage_staff), so an unfiltered query would not reliably return
  * the caller — the bug that broke the MCP server's add_note in August.
+ *
+ * Memoised for the life of one request. The shell layout and the page inside it
+ * both need the current staff member, and each call costs two round trips —
+ * auth.getUser() against GoTrue plus the staff_users select. Without this the
+ * pair is paid twice on every render, including the re-render that follows
+ * every save.
  */
-export async function getCurrentStaff(): Promise<Staff | null> {
+export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const supabase = await createSupabaseServerClient({ writable: false })
 
   const {
@@ -69,4 +76,4 @@ export async function getCurrentStaff(): Promise<Staff | null> {
     status: row.status as string,
     access_profiles: profile,
   }
-}
+})
