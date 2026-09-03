@@ -993,23 +993,49 @@ export function MemberPanel({
                     ),
                   },
                   {
-                    id: 'other',
-                    label: 'Other',
+                    id: 'memberships',
+                    label: 'Memberships',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
-                        <Section title="Group membership">
+                        <Section title="This group">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
                             <Row label="Primary group" value={person.is_primary_group ? 'Yes' : 'No'} />
-                            <Row
-                              span="full"
-                              label="Other groups"
-                              value={person.other_groups
-                                .map((g) => `${g.name} (${g.member_role.replace(/_/g, ' ')})`)
-                                .join(', ')}
-                            />
                           </dl>
                         </Section>
+                        <Section title="Other groups">
+                          {/* One line each rather than the comma-joined string
+                              this was when it shared a tab. Someone who sits in
+                              several groups is exactly who this tab is for, and
+                              a run-on sentence is the wrong shape for that. */}
+                          {person.other_groups.length ? (
+                            <ul className="flex flex-col gap-2">
+                              {person.other_groups.map((g) => (
+                                <li
+                                  key={`${g.name}-${g.member_role}`}
+                                  className="flex items-baseline justify-between gap-3 border-b border-neutral-100 pb-2 last:border-0 last:pb-0"
+                                >
+                                  <span className="text-sm text-neutral-900">{g.name}</span>
+                                  <span className="shrink-0 text-xs text-neutral-500">
+                                    {ROLE_LABEL[g.member_role] ?? g.member_role.replace(/_/g, ' ')}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-neutral-400">
+                              Belongs to no other group.
+                            </p>
+                          )}
+                        </Section>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'activity',
+                    label: 'Activity',
+                    panel: (
+                      <div className="flex flex-col gap-7 px-5 pb-6">
                         <Section title="Notes">
                           {person.notes ? (
                             <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
@@ -1019,6 +1045,21 @@ export function MemberPanel({
                             <p className="text-sm text-neutral-400">Nothing recorded.</p>
                           )}
                         </Section>
+                        {/* Honest empty state, the same treatment the Estate tab
+                            gets. audit_log already records every change to this
+                            record — who, when and which fields — but nothing
+                            reads it back yet, so saying so beats a tab that
+                            looks finished and is not. */}
+                        <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-6">
+                          <p className="text-sm font-medium text-neutral-700">
+                            No history shown yet
+                          </p>
+                          <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+                            Every change to this record is already written to the audit trail with
+                            the name of whoever made it. Reading that back into a timeline here is
+                            not built.
+                          </p>
+                        </div>
                       </div>
                     ),
                   },

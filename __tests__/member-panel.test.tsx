@@ -97,21 +97,41 @@ describe('MemberPanel', () => {
     expect(container.querySelectorAll('dialog input').length).toBe(0)
   })
 
-  test('the record is split across five tabs', async () => {
+  test('the record is split across six tabs', async () => {
     const user = userEvent.setup()
     open('view')
     await user.click(screen.getByRole('button', { name: 'trigger' }))
 
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
-    expect(tabs).toEqual(['Personal', 'Contact', 'Compliance', 'Estate', 'Other'])
+    expect(tabs).toEqual([
+      'Personal', 'Contact', 'Compliance', 'Estate', 'Memberships', 'Activity',
+    ])
 
     // Exactly one panel is exposed at a time; `hidden` keeps the others out of
     // the accessibility tree even though they stay mounted.
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
 
-    await user.click(screen.getByRole('tab', { name: 'Other' }))
-    expect(screen.getByRole('tab', { name: 'Other' }).getAttribute('aria-selected')).toBe('true')
+    await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+    expect(screen.getByRole('tab', { name: 'Memberships' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tabpanel').textContent).toContain('Primary group')
+  })
+
+  /* Group standing and record history are different questions asked by
+     different people, which is why they stopped sharing a tab. */
+  test('memberships holds the groups, activity holds the notes', async () => {
+    const user = userEvent.setup()
+    open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+    await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+    const memberships = screen.getByRole('tabpanel').textContent ?? ''
+    expect(memberships).toContain('Faketrade Pty Ltd Group')
+    expect(memberships).not.toContain('Prefers email.')
+
+    await user.click(screen.getByRole('tab', { name: 'Activity' }))
+    const activity = screen.getByRole('tabpanel').textContent ?? ''
+    expect(activity).toContain('Prefers email.')
+    expect(activity).not.toContain('Faketrade Pty Ltd Group')
   })
 
   test('an absent value reads as a gap rather than being hidden', async () => {
