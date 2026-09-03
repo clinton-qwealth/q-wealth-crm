@@ -193,6 +193,28 @@ describe('MemberPanel', () => {
     expect(names.sort()).toEqual(['coffee_preference', 'group_id', 'party_id'])
   })
 
+  /* Reachable on was a plain section for a while: no border, and no way to
+     correct a mistyped email without going to the database. It sat directly
+     above an editable, bordered address section, so the tab looked half-built. */
+  test('Reachable on is editable, and carries only its own three fields', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('tab', { name: 'Contact' }))
+    await user.click(screen.getByRole('button', { name: /edit reachable on/i }))
+
+    expect(screen.getByDisplayValue('priya@example.com')).toBeDefined()
+    expect(screen.getByDisplayValue('0412 555 901')).toBeDefined()
+
+    const form = container.querySelector('dialog form:has(input[name="mobile"])')
+    const names = [...form!.querySelectorAll('input[name], select[name], textarea[name]')].map(
+      (el) => el.getAttribute('name'),
+    )
+    // The address must not come along: it is patched as a unit by its own
+    // section, and a form carrying both could blank half an address.
+    expect(names.sort()).toEqual(['email', 'group_id', 'mobile', 'party_id', 'phone_other'])
+  })
+
   test('Cancel on a section returns it to read-only', async () => {
     const user = userEvent.setup()
     open('view')

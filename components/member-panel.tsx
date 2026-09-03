@@ -1099,13 +1099,35 @@ export function MemberPanel({
                     label: 'Contact',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
-                        <Section title="Reachable on">
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <Row label="Email" value={person.email} />
-                            <Row label="Mobile" value={person.mobile} />
-                            <Row label="Other phone" value={person.phone_other} />
-                          </dl>
-                        </Section>
+                        <EditableSection
+                          title="Reachable on"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                              <Row label="Email" value={person.email} />
+                              <Row label="Mobile" value={person.mobile} />
+                              <Row label="Other phone" value={person.phone_other} />
+                            </dl>
+                          }
+                          edit={
+                            /* Unlike the address, these three are independent contact
+                               points: update_person_patch touches each only when its key
+                               is present, and clearing one deletes that contact point
+                               rather than leaving a blank row behind. So all three can
+                               safely be edited together.
+
+                               Email takes the full width because an address like
+                               firstname.lastname@somelongdomain.com.au does not fit in
+                               half of a drawer. */
+                            <div className="grid grid-cols-6 gap-3">
+                              <Field label="Email" name="email" type="email" defaultValue={person.email} className="col-span-6" />
+                              <Field label="Mobile" name="mobile" type="tel" defaultValue={person.mobile} className="col-span-3" />
+                              <Field label="Other phone" name="phone_other" type="tel" defaultValue={person.phone_other} className="col-span-3" />
+                            </div>
+                          }
+                        />
                         <EditableSection
                           title="Residential address"
                           partyId={person.party_id}

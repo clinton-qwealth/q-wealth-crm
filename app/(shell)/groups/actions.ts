@@ -368,6 +368,29 @@ export async function patchMember(
   if (patch.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(patch.email)) {
     return { error: 'That email address does not look right.' }
   }
+  /*
+   * The mobile is not just a contact detail: it is where an identity-verification
+   * code is sent, and the database refuses a number it cannot read with
+   * confidence. Without this check that refusal surfaces mid-telephone-call,
+   * months after somebody typed a landline into the wrong box. Better to say so
+   * while they are still looking at the field.
+   *
+   * Mirrors public.to_e164_au EXACTLY rather than being stricter — a rule that
+   * rejects what the database would accept is its own kind of bug. Clearing the
+   * field is still allowed; only a value that could never be dialled is refused.
+   */
+  if (patch.mobile) {
+    const digits = patch.mobile.replace(/[^0-9]/g, '')
+    const ok = patch.mobile.trim().startsWith('+')
+      ? /^[1-9][0-9]{7,14}$/.test(digits)
+      : /^04[0-9]{8}$/.test(digits) || /^614[0-9]{8}$/.test(digits)
+    if (!ok) {
+      return {
+        error:
+          'That does not read as a mobile number. Use 04xx xxx xxx, or full international form such as +64 21 555 901. A landline belongs in Other phone.',
+      }
+    }
+  }
   if ('first_name' in patch && !patch.first_name) return { error: 'Enter a first name.' }
   if ('last_name' in patch && !patch.last_name) return { error: 'Enter a last name.' }
 
