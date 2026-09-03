@@ -1,0 +1,18 @@
+-- Finishing the root-cause fix for functions (3 Sep 2026)
+--
+-- The previous migration revoked the default table and function privileges from
+-- `anon`, and a probe confirmed a new TABLE now grants anon nothing. But a new
+-- FUNCTION was still executable by anon, and the reason is the same one that
+-- caught revoke_public_execute_on_note_rpcs in August:
+--
+--   PostgreSQL grants EXECUTE on every new function to PUBLIC as built-in
+--   behaviour, and every role is a member of PUBLIC. Revoking the privilege
+--   from `anon` by name leaves the PUBLIC grant untouched, and anon still has
+--   it by inheritance.
+--
+-- So the default has to be revoked from PUBLIC, not from anon. This is why
+-- every migration adding a function has had to write
+-- `revoke all on function ... from public, anon` — it was undoing a grant
+-- applied automatically a moment earlier. From here, a new function is private
+-- until a migration grants it, which is the direction that fails safely.
+alter default privileges in schema public revoke execute on functions from public;

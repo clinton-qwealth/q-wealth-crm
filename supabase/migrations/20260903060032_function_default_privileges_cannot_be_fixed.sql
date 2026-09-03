@@ -1,0 +1,39 @@
+-- Correcting the previous migration's claim (3 Sep 2026)
+--
+-- revoke_default_public_execute_on_functions said that from then on "a new
+-- function is private until a migration grants it". THAT IS NOT TRUE, and it
+-- was tested rather than assumed, which is how the error surfaced.
+--
+-- What was measured: a function created immediately after the ALTER — in the
+-- same transaction as it, ruling out ordering — still receives the access list
+--
+--   {=X/postgres, postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}
+--
+-- where the empty grantee is PUBLIC. Every role inherits from PUBLIC, so anon
+-- can execute it. Once a pg_default_acl entry exists for (postgres, public,
+-- functions), PostgreSQL applies its hardwired "EXECUTE TO PUBLIC" default for
+-- functions in addition to that entry, and ALTER DEFAULT PRIVILEGES has no way
+-- to represent a suppression of it — a revoke can only show up as an absence,
+-- and an absence does not suppress the built-in grant.
+--
+-- The ALTER itself is left in place: it is inert, not harmful, and removing it
+-- would leave this history harder to follow.
+--
+-- CONSEQUENCE, and the reason this is written down rather than dropped:
+--
+--   Every new function in schema public is executable by anon at the moment it
+--   is created. The line
+--
+--     revoke all on function public.<name>(<args>) from public, anon;
+--
+--   in every migration that adds a function is therefore LOAD-BEARING and must
+--   never be treated as boilerplate. It cannot be automated away at the schema
+--   level. `revoke ... from anon` alone is not enough — it leaves the PUBLIC
+--   grant, which anon inherits.
+--
+-- Audited at the same time: every function currently in schema public was
+-- checked for a PUBLIC grant, and none has one. The discipline has held so far.
+--
+-- The table and sequence defaults ARE fixed and verified: a newly created table
+-- grants anon nothing. Only functions are affected by this limitation.
+select 1;
