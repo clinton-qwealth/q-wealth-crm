@@ -46,6 +46,32 @@ export type PersonDetail = {
   }
   roles: { role: string; status: string; start_date: string }[]
   other_groups: { name: string; member_role: string }[]
+  /** Identity-verification history, newest first. Read from the masked summary
+   *  view, so the client's mobile number is never carried in this object. */
+  verifications: VerificationEntry[]
+}
+
+/**
+ * One identity-verification attempt as the Activity tab shows it.
+ *
+ * `outcome_source` is the field that matters most and the one most likely to be
+ * dropped as detail: `code_checked` means the provider confirmed the code the
+ * client read back, `adviser_attested` means a named person vouched without a
+ * code. They are different strengths of evidence and must never be collapsed
+ * into one "verified" flag.
+ */
+export type VerificationEntry = {
+  id: string
+  provider: string
+  destination_masked: string | null
+  status: 'pending' | 'passed' | 'failed' | 'expired' | 'cancelled'
+  attempts: number
+  failure_reason: string | null
+  requested_at: string
+  requested_by_name: string | null
+  outcome_source: 'code_checked' | 'adviser_attested' | null
+  outcome_at: string | null
+  outcome_by_name: string | null
 }
 
 /**
@@ -99,13 +125,19 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       member_role: r.member_role, is_primary_group: r.is_primary_group,
       email: null, mobile: null, phone_other: null,
       address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
-      roles: [], other_groups: [],
+      roles: [], other_groups: [], verifications: [],
     }))
 
   if (ids.length === 0) return organisations.sort((a, b) => a.display_name.localeCompare(b.display_name))
 
-  const [{ data: persons }, { data: contacts }, { data: roles }, { data: allMemberships }, hintResults] =
-    await Promise.all([
+  const [
+    { data: persons },
+    { data: contacts },
+    { data: roles },
+    { data: allMemberships },
+    { data: verifications },
+    hintResults,
+  ] = await Promise.all([
       supabase.from('persons').select('*').in('party_id', ids),
       supabase.from('contact_points').select('*').in('party_id', ids).eq('is_preferred', true),
       supabase.from('party_roles').select('party_id, role, status, start_date').in('party_id', ids).is('end_date', null),
@@ -115,6 +147,20 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
         .in('party_id', ids)
         .is('end_date', null)
         .neq('group_id', groupId),
+      // Joined onto this wave rather than fetched when the panel opens: one more
+      // query costs nothing here, while a fetch on open would add a round trip
+      // to every panel and give the tab a loading state to design.
+      //
+      // Read from the SUMMARY view, never the base table. The view masks the
+      // destination, so a client's mobile number cannot reach the browser
+      // through this path even by accident.
+      supabase
+        .from('identity_verification_summary')
+        .select(
+          'id, party_id, provider, destination_masked, status, attempts, failure_reason, requested_at, requested_by_name, outcome_source, outcome_at, outcome_by_name',
+        )
+        .in('party_id', ids)
+        .order('requested_at', { ascending: false }),
       // One call per person rather than one per field: get_masked_hints returns
       // every encrypted kind held against a party in a single object.
       Promise.all(
@@ -139,6 +185,27 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
 
   const pick = (id: string, kind: string) =>
     ((contactsBy.get(id) ?? []).find((c) => c.kind === kind)?.value as string | null) ?? null
+
+  // Already ordered newest-first by the query, and Array.prototype.push keeps
+  // that order per person, so no second sort is needed.
+  const verificationsBy = new Map<string, VerificationEntry[]>()
+  for (const v of (verifications ?? []) as Record<string, unknown>[]) {
+    const key = v.party_id as string
+    if (!verificationsBy.has(key)) verificationsBy.set(key, [])
+    verificationsBy.get(key)!.push({
+      id: v.id as string,
+      provider: (v.provider as string) ?? 'twilio_verify',
+      destination_masked: (v.destination_masked as string) ?? null,
+      status: v.status as VerificationEntry['status'],
+      attempts: (v.attempts as number) ?? 0,
+      failure_reason: (v.failure_reason as string) ?? null,
+      requested_at: v.requested_at as string,
+      requested_by_name: (v.requested_by_name as string) ?? null,
+      outcome_source: (v.outcome_source as VerificationEntry['outcome_source']) ?? null,
+      outcome_at: (v.outcome_at as string) ?? null,
+      outcome_by_name: (v.outcome_by_name as string) ?? null,
+    })
+  }
 
   return people
     .map((m): PersonDetail => {
@@ -193,6 +260,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
             status: r.status as string,
             start_date: r.start_date as string,
           })),
+        verifications: verificationsBy.get(m.party_id) ?? [],
         other_groups: (allMemberships ?? [])
           .filter((g) => g.party_id === m.party_id)
           .map((g) => {

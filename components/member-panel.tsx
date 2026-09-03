@@ -9,8 +9,11 @@ import {
   searchPeople,
   type MemberState,
   type PersonMatch,
+  startVerification,
+  checkVerification,
+  attestVerification,
 } from '@/app/(shell)/groups/actions'
-import type { PersonDetail } from '@/lib/person'
+import type { PersonDetail, VerificationEntry } from '@/lib/person'
 import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { Pill } from './ui'
@@ -222,51 +225,106 @@ function Encrypted({
 }
 
 /**
- * Identity verification, as an adviser does it on a phone call: a one-time code
- * goes to the client, they read it back, and the adviser records whether it
- * matched.
+ * Identity verification, as an adviser does it on a telephone call.
  *
- * The code here is a PLACEHOLDER, generated in the browser and shown on screen.
- * That is fine while it stands in for the real thing, and unacceptable once it
- * is wired to Twilio: a code the browser knows is a code the person at the
- * keyboard can read without the client ever receiving it, which defeats the
- * whole check. When this is wired up, the code must be generated on the server,
- * sent to the client's mobile, and the browser must only ever submit what the
- * client read back for comparison.
+ * A code goes to the mobile ALREADY ON FILE, the client reads it back, and the
+ * adviser types it in. The adviser never sees the code, so a pass requires the
+ * client to have actually received the message — which is the whole reason the
+ * earlier design, where the code was displayed on screen, was thrown away.
  *
- * The outcome is not stored anywhere. It lives here until the panel closes.
+ * The tick and cross survive as the FALLBACK, for when no message can be
+ * delivered. That path is recorded as `adviser_attested` rather than
+ * `code_checked`, and the two stay distinguishable in the record forever.
+ *
+ * Nothing here is trusted: the permission, the second-factor requirement,
+ * access to the client and both rate limits are all enforced in the database.
+ * This component only has to be honest about what it is showing.
  */
 type VerifyState =
   | { step: 'idle' }
-  | { step: 'sent'; code: string }
-  | { step: 'done'; ok: boolean }
+  | { step: 'sending' }
+  | { step: 'sent'; id: string; masked: string; provider: string; stubCode?: string }
+  | { step: 'checking'; id: string; masked: string; provider: string; stubCode?: string }
+  | { step: 'done'; passed: boolean; source: string }
+  | { step: 'error'; message: string }
 
-function VerifyIdentity() {
+function VerifyIdentity({ partyId, groupId }: { partyId: string; groupId: string }) {
   const [state, setState] = useState<VerifyState>({ step: 'idle' })
+  const [code, setCode] = useState('')
 
-  const start = () => {
-    // getRandomValues rather than Math.random. It costs nothing here, and the
-    // habit is the one this code should keep when it stops being a placeholder.
-    const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000
-    setState({ step: 'sent', code: String(n).padStart(6, '0') })
+  const start = async () => {
+    setState({ step: 'sending' })
+    setCode('')
+    const res = await startVerification(partyId, groupId)
+    if ('error' in res) {
+      setState({ step: 'error', message: res.error })
+      return
+    }
+    setState({
+      step: 'sent',
+      id: res.verification_id,
+      masked: res.destination_masked,
+      provider: res.provider,
+      stubCode: res.stub_code,
+    })
   }
 
-  /* One place for the spacing off the name, without giving up the narrowing
-     that each step of the union needs — ml-2 sits on top of the row's own
-     gap-2.5, so the control reads as its own control rather than part of the
-     name. */
+  const submit = async () => {
+    if (state.step !== 'sent') return
+    const { id, masked, provider, stubCode } = state
+    setState({ step: 'checking', id, masked, provider, stubCode })
+    const res = await checkVerification(id, code)
+    if ('error' in res) {
+      // A wrong code is not an error state to back out of — the adviser is
+      // still on the call and can try again, so the entry stays on screen.
+      setState({ step: 'sent', id, masked, provider, stubCode })
+      setCode('')
+      window.setTimeout(() => setState({ step: 'error', message: res.error }), 0)
+      return
+    }
+    setState({ step: 'done', passed: res.passed, source: res.outcome_source })
+  }
+
+  const attest = async (passed: boolean) => {
+    if (state.step !== 'sent') return
+    const res = await attestVerification(state.id, passed)
+    if ('error' in res) {
+      setState({ step: 'error', message: res.error })
+      return
+    }
+    setState({ step: 'done', passed: res.passed, source: res.outcome_source })
+  }
+
   const shell = (children: ReactNode) => <div className="ml-2 shrink-0">{children}</div>
 
-  if (state.step === 'idle') {
+  if (state.step === 'idle' || state.step === 'sending') {
     return shell(
       <button
         type="button"
         onClick={start}
-        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600 outline-none transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+        disabled={state.step === 'sending'}
+        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600 outline-none transition-colors hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-brand/30"
       >
         <SmsIcon className="h-3.5 w-3.5" />
-        Verify
+        {state.step === 'sending' ? 'Sending…' : 'Verify'}
       </button>,
+    )
+  }
+
+  if (state.step === 'error') {
+    return shell(
+      <div className="flex items-center gap-1.5">
+        <span role="alert" className="max-w-[22rem] text-[11px] leading-snug text-red-600">
+          {state.message}
+        </span>
+        <button
+          type="button"
+          onClick={() => setState({ step: 'idle' })}
+          className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 outline-none hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          Dismiss
+        </button>
+      </div>,
     )
   }
 
@@ -276,48 +334,183 @@ function VerifyIdentity() {
         type="button"
         onClick={start}
         title="Verify again"
-        /* The visible pill reads "Verified", which as an accessible name would
-           describe a state and not the action the button performs. Named
-           explicitly so it carries both. */
-        aria-label={state.ok ? 'Verified. Verify again' : 'Not verified. Verify again'}
+        aria-label={`${state.passed ? 'Verified' : 'Not verified'}. Verify again`}
         className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >
-        <Pill tone={state.ok ? 'success' : 'danger'}>
+        <Pill tone={state.passed ? 'success' : 'danger'}>
           <span className="inline-flex items-center gap-1">
-            {state.ok ? <TickIcon className="h-3 w-3" /> : <CrossIcon className="h-3 w-3" />}
-            {state.ok ? 'Verified' : 'Not verified'}
+            {state.passed ? <TickIcon className="h-3 w-3" /> : <CrossIcon className="h-3 w-3" />}
+            {state.passed ? 'Verified' : 'Not verified'}
+            {state.source === 'adviser_attested' ? ' (attested)' : ''}
           </span>
         </Pill>
       </button>,
     )
   }
 
+  const busy = state.step === 'checking'
   return shell(
-    <div className="flex items-center gap-1.5 rounded-md border border-neutral-200 bg-neutral-50 py-0.5 pl-2 pr-1">
-      {/* Announced when it appears, since the adviser is on a call and reading
-          it aloud rather than looking at the screen. */}
-      <span role="status" className="font-mono text-sm tabular-nums tracking-widest text-neutral-900">
-        {state.code}
+    <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 py-1 pl-2 pr-1">
+      <span className="text-[11px] leading-snug text-neutral-500">
+        Code sent to <span className="font-medium text-neutral-700">{state.masked}</span>
+        {state.stubCode ? (
+          /* Only ever present when the server is running without telephony
+             credentials, and the record says `stub` for good. */
+          <span className="ml-1 text-amber-700">· test mode, use {state.stubCode}</span>
+        ) : null}
       </span>
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && code.length === 6) submit()
+        }}
+        inputMode="numeric"
+        autoComplete="off"
+        aria-label="Code the client read back"
+        placeholder="000000"
+        disabled={busy}
+        className="w-[5.5rem] rounded border border-neutral-300 bg-white px-1.5 py-0.5 font-mono text-sm tabular-nums tracking-widest text-neutral-900 outline-none placeholder:text-neutral-300 focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30"
+      />
       <button
         type="button"
-        onClick={() => setState({ step: 'done', ok: true })}
-        aria-label="Mark verification as passed"
-        title="Client read the code back"
-        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-emerald-50 hover:text-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+        onClick={submit}
+        disabled={busy || code.length !== 6}
+        className="rounded-md bg-brand px-2 py-0.5 text-[11px] font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-brand/40"
+      >
+        {busy ? 'Checking…' : 'Check'}
+      </button>
+      {/* The fallback, kept small: a code the client cannot receive is a real
+          situation, but it must not be the easy path. */}
+      <button
+        type="button"
+        onClick={() => attest(true)}
+        disabled={busy}
+        aria-label="No code received; confirm identity another way"
+        title="Confirmed another way (recorded as an attestation)"
+        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-emerald-50 hover:text-emerald-600 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-emerald-500/30"
       >
         <TickIcon className="h-3.5 w-3.5" />
       </button>
       <button
         type="button"
-        onClick={() => setState({ step: 'done', ok: false })}
-        aria-label="Mark verification as failed"
-        title="Code did not match"
-        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-red-500/30"
+        onClick={() => attest(false)}
+        disabled={busy}
+        aria-label="Mark this verification as failed"
+        title="Could not be verified"
+        className="rounded p-1 text-neutral-400 outline-none transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-red-500/30"
       >
         <CrossIcon className="h-3.5 w-3.5" />
       </button>
     </div>,
+  )
+}
+
+/** DD-MM-YYYY plus the time, in the reader's own timezone. */
+function formatWhen(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const date = d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })
+  const time = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })
+  return `${date} at ${time}`
+}
+
+const VERIFY_STATUS: Record<
+  VerificationEntry['status'],
+  { label: string; tone: 'success' | 'danger' | 'warning' | 'neutral' }
+> = {
+  passed: { label: 'Verified', tone: 'success' },
+  failed: { label: 'Not verified', tone: 'danger' },
+  pending: { label: 'Awaiting read-back', tone: 'warning' },
+  expired: { label: 'Code expired', tone: 'neutral' },
+  cancelled: { label: 'Not completed', tone: 'neutral' },
+}
+
+/**
+ * The identity-verification history.
+ *
+ * Written for someone asking "was this client's identity checked, when, and by
+ * whom" — which is the question this record exists to answer. So every entry
+ * states the outcome, the time, the person who requested it, the person who
+ * recorded the result, and HOW it was decided.
+ *
+ * That last one is the reason this is not a one-line-per-event list: a code the
+ * provider confirmed and an adviser's word are both legitimate, and they are
+ * not the same evidence. Showing them identically would quietly destroy the
+ * distinction the database goes to some trouble to keep.
+ */
+function VerificationHistory({ entries }: { entries: VerificationEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-sm text-neutral-400">
+        No identity verification has been requested for this person.
+      </p>
+    )
+  }
+
+  return (
+    <ol className="flex flex-col gap-3">
+      {entries.map((v) => {
+        const s = VERIFY_STATUS[v.status] ?? VERIFY_STATUS.cancelled
+        return (
+          <li
+            key={v.id}
+            className="rounded-lg border border-neutral-200 px-3.5 py-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Pill tone={s.tone}>{s.label}</Pill>
+              {v.outcome_source === 'adviser_attested' ? (
+                /* Named plainly rather than shown as a subtle variant. Someone
+                   auditing this needs to see at a glance that no code was
+                   matched here. */
+                <Pill tone="warning">Adviser attested</Pill>
+              ) : null}
+              {v.provider === 'stub' ? (
+                <Pill tone="neutral">Test — no message sent</Pill>
+              ) : null}
+              <span className="ml-auto text-xs tabular-nums text-neutral-500">
+                {formatWhen(v.requested_at)}
+              </span>
+            </div>
+
+            <dl className="mt-2.5 grid grid-cols-1 gap-x-8 gap-y-1.5 sm:grid-cols-2">
+              <div className="flex gap-2">
+                <dt className="text-xs text-neutral-500">Code sent to</dt>
+                <dd className="text-xs text-neutral-800">{v.destination_masked ?? '—'}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="text-xs text-neutral-500">Requested by</dt>
+                <dd className="text-xs text-neutral-800">{v.requested_by_name ?? 'Unknown'}</dd>
+              </div>
+              {v.outcome_at ? (
+                <>
+                  <div className="flex gap-2">
+                    <dt className="text-xs text-neutral-500">
+                      {v.outcome_source === 'code_checked' ? 'Code confirmed' : 'Attested'}
+                    </dt>
+                    <dd className="text-xs text-neutral-800">{formatWhen(v.outcome_at)}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="text-xs text-neutral-500">Recorded by</dt>
+                    <dd className="text-xs text-neutral-800">{v.outcome_by_name ?? 'Unknown'}</dd>
+                  </div>
+                </>
+              ) : null}
+              {v.attempts > 0 ? (
+                <div className="flex gap-2">
+                  <dt className="text-xs text-neutral-500">Attempts</dt>
+                  <dd className="text-xs text-neutral-800">{v.attempts}</dd>
+                </div>
+              ) : null}
+            </dl>
+
+            {v.failure_reason ? (
+              <p className="mt-2 text-xs leading-relaxed text-neutral-500">{v.failure_reason}</p>
+            ) : null}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -674,7 +867,9 @@ export function MemberPanel({
                 {person?.date_of_death ? <Pill tone="danger">Deceased</Pill> : null}
                 {/* Only for a record that exists — there is no one to call while
                     a new person is still being typed in. */}
-                {mode === 'view' && person ? <VerifyIdentity key={person.party_id} /> : null}
+                {mode === 'view' && person ? (
+                  <VerifyIdentity key={person.party_id} partyId={person.party_id} groupId={groupId} />
+                ) : null}
               </div>
               {mode === 'view' && person ? (
                 <p className="mt-0.5 text-xs text-neutral-500">
@@ -1036,6 +1231,9 @@ export function MemberPanel({
                     label: 'Activity',
                     panel: (
                       <div className="flex flex-col gap-7 px-5 pb-6">
+                        <Section title="Identity verification">
+                          <VerificationHistory entries={person.verifications} />
+                        </Section>
                         <Section title="Notes">
                           {person.notes ? (
                             <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
@@ -1045,19 +1243,18 @@ export function MemberPanel({
                             <p className="text-sm text-neutral-400">Nothing recorded.</p>
                           )}
                         </Section>
-                        {/* Honest empty state, the same treatment the Estate tab
-                            gets. audit_log already records every change to this
-                            record — who, when and which fields — but nothing
-                            reads it back yet, so saying so beats a tab that
-                            looks finished and is not. */}
+                        {/* Still honest about what is missing: identity checks
+                            are here now, but every OTHER change to this record
+                            is written to audit_log with the name of whoever made
+                            it, and nothing reads that back. */}
                         <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-6">
                           <p className="text-sm font-medium text-neutral-700">
-                            No history shown yet
+                            Record changes are not shown here yet
                           </p>
                           <p className="mt-1 text-xs leading-relaxed text-neutral-500">
-                            Every change to this record is already written to the audit trail with
-                            the name of whoever made it. Reading that back into a timeline here is
-                            not built.
+                            Every edit to this record is already written to the audit trail with the
+                            name of whoever made it. Reading that back into this timeline is not
+                            built.
                           </p>
                         </div>
                       </div>

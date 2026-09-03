@@ -382,3 +382,101 @@ export async function patchMember(
   revalidatePath('/groups')
   return { ok: true }
 }
+
+// ---------------------------------------------------------------------------
+// Identity verification
+// ---------------------------------------------------------------------------
+// These call the identity-verify edge function rather than the database
+// directly, for one reason: the function is the only place the Twilio
+// credentials exist. It sits beside the database in Sydney while these actions
+// run in a Vercel function, so it is also the faster place to do the work.
+//
+// The caller's own access token is forwarded, so the database evaluates every
+// statement as that staff member. Nothing here decides whether the action is
+// allowed — the permission, the second-factor requirement, access to the client
+// and both rate limits all live in the database functions the edge function
+// calls, and cannot be routed around from here.
+
+type VerifyStart =
+  | { ok: true; verification_id: string; destination_masked: string; provider: string; expires_in_seconds: number; stub_code?: string }
+  | { error: string }
+
+type VerifyOutcome = { ok: true; passed: boolean; outcome_source: string } | { error: string }
+
+/**
+ * The session's access token, for forwarding to the edge function.
+ *
+ * getSession reads the cookie rather than calling Supabase, so this costs no
+ * round trip. getUser would.
+ */
+async function accessToken() {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+async function callVerify(path: string, payload: unknown, method = 'POST') {
+  const token = await accessToken()
+  if (!token) return { error: 'Your session has expired. Sign in again.' as string }
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return { error: 'Identity verification is not configured.' as string }
+
+  try {
+    const res = await fetch(`${base}/functions/v1/identity-verify${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      ...(method === 'POST' ? { body: JSON.stringify(payload) } : {}),
+      cache: 'no-store',
+    })
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (!res.ok) {
+      // The edge function already writes messages fit to show an adviser, so
+      // they are passed through rather than replaced with something vaguer.
+      return { error: (body.error as string) ?? 'The verification could not be completed.' }
+    }
+    return body
+  } catch {
+    return { error: 'Could not reach the verification service.' as string }
+  }
+}
+
+export async function startVerification(partyId: string, groupId: string | null): Promise<VerifyStart> {
+  const body = await callVerify('/start', { party_id: partyId, group_id: groupId })
+  if ('error' in body) return { error: body.error as string }
+  return {
+    ok: true,
+    verification_id: body.verification_id as string,
+    destination_masked: body.destination_masked as string,
+    provider: body.provider as string,
+    expires_in_seconds: (body.expires_in_seconds as number) ?? 600,
+    ...(body.stub_code ? { stub_code: body.stub_code as string } : {}),
+  }
+}
+
+export async function checkVerification(id: string, code: string): Promise<VerifyOutcome> {
+  const body = await callVerify('/check', { verification_id: id, code })
+  if ('error' in body) return { error: body.error as string }
+  revalidatePath('/groups')
+  return { ok: true, passed: body.passed as boolean, outcome_source: body.outcome_source as string }
+}
+
+/** The fallback path: no code could be delivered and a named adviser vouched. */
+export async function attestVerification(id: string, passed: boolean): Promise<VerifyOutcome> {
+  const body = await callVerify('/attest', { verification_id: id, passed })
+  if ('error' in body) return { error: body.error as string }
+  revalidatePath('/groups')
+  return { ok: true, passed: body.passed as boolean, outcome_source: body.outcome_source as string }
+}
+
+export async function abandonVerification(id: string, reason?: string) {
+  const body = await callVerify('/abandon', { verification_id: id, status: 'cancelled', reason })
+  if ('error' in body) return { error: body.error as string }
+  revalidatePath('/groups')
+  return { ok: true as const }
+}
