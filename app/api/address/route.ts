@@ -35,8 +35,37 @@ import {
  * daily quota cap on the key in the Cloud console. Client-side debouncing and a
  * minimum query length reduce the volume; only the quota cap bounds it.
  */
+/*
+ * Per-instance memo of "is this subject active staff".
+ *
+ * Measured on the first deploy: auth 11ms, staff 360ms, google 527ms. A
+ * one-row indexed lookup on a four-row table in the same region is not 360ms
+ * of query — it is the DNS and TLS handshake for the first HTTPS call to
+ * Supabase in a fresh function instance, paid inside the measurement.
+ *
+ * Autocomplete arrives as a burst of keystrokes hitting the same warm
+ * instance, so memoising the answer means the burst pays that once instead of
+ * once per character.
+ *
+ * WHAT THIS TRADES: a staff member deactivated mid-burst keeps address lookup
+ * for up to a minute. That is an acceptable staleness for this endpoint and
+ * would NOT be for anything touching client data — this check exists to stop a
+ * non-staff account spending money on lookups, and a minute of that is bounded
+ * by the Google quota cap anyway. It is a memo, not a change to where the
+ * boundary sits: the check still runs, just not more than once a minute per
+ * person per instance.
+ *
+ * Module scope deliberately: it must outlive the request to be worth anything.
+ */
+const STAFF_TTL_MS = 60_000
+const staffSeen = new Map<string, number>()
+/** First invocation on this instance? Cold-start cost lands here, not in the code. */
+let warmedUp = false
+
 export async function GET(request: Request) {
   const t0 = performance.now()
+  const wasCold = !warmedUp
+  warmedUp = true
   const supabase = await createSupabaseServerClient({ writable: false })
 
   /*
@@ -77,15 +106,24 @@ export async function GET(request: Request) {
   const tAuth = performance.now()
 
   // Being signed in is not the same as being staff, and this endpoint costs
-  // money on every call.
-  const { data: staff } = await supabase
-    .from('staff_users')
-    .select('id')
-    .eq('auth_user_id', claims.sub)
-    .eq('status', 'active')
-    .maybeSingle()
-  if (!staff) {
-    return Response.json({ error: 'Not an active Q Wealth staff member' }, { status: 403 })
+  // money on every call. Asked at most once a minute per person per instance —
+  // see the note above the memo.
+  const seenAt = staffSeen.get(claims.sub)
+  const memoised = seenAt !== undefined && Date.now() - seenAt < STAFF_TTL_MS
+  if (!memoised) {
+    const { data: staff } = await supabase
+      .from('staff_users')
+      .select('id')
+      .eq('auth_user_id', claims.sub)
+      .eq('status', 'active')
+      .maybeSingle()
+    if (!staff) {
+      // Not remembered, so a deactivated account is refused from the next
+      // request rather than being cached as a failure.
+      staffSeen.delete(claims.sub)
+      return Response.json({ error: 'Not an active Q Wealth staff member' }, { status: 403 })
+    }
+    staffSeen.set(claims.sub, Date.now())
   }
   const tStaff = performance.now()
 
@@ -108,7 +146,14 @@ export async function GET(request: Request) {
    * the request, and the Timing panel breaks it into auth / staff / google.
    */
   const timing = (google: number) =>
-    `auth;dur=${(tAuth - t0).toFixed(1)}, staff;dur=${(tStaff - tAuth).toFixed(1)}, google;dur=${google.toFixed(1)}`
+    [
+      `auth;dur=${(tAuth - t0).toFixed(1)}`,
+      // `desc` says whether the staff lookup actually ran. A memoised request
+      // reads ~0, which is how to tell a cold instance from a slow query.
+      `staff;dur=${(tStaff - tAuth).toFixed(1)};desc="${memoised ? 'memoised' : 'looked up'}"`,
+      `google;dur=${google.toFixed(1)}`,
+      `instance;dur=0;desc="${wasCold ? 'cold' : 'warm'}"`,
+    ].join(', ')
 
   const placeId = url.searchParams.get('place_id')
   if (placeId) {
