@@ -514,6 +514,179 @@ function VerificationHistory({ entries }: { entries: VerificationEntry[] }) {
   )
 }
 
+/**
+ * The five address inputs, with Google-backed lookup above them.
+ *
+ * Controlled rather than `defaultValue`, because that is what lets a chosen
+ * suggestion fill them. They keep the same `name` attributes, so
+ * update_person_patch and patchMember are untouched — a controlled input still
+ * submits its value.
+ *
+ * THE FIELDS STAY EDITABLE, always. Rural properties, new subdivisions and
+ * anything overseas will not be found, and a form that refuses an address a
+ * client actually lives at is worse than no lookup at all. Autocomplete fills;
+ * it never constrains.
+ *
+ * The lookup goes to /api/address — a route handler, not a Server Action,
+ * because Next dispatches Server Actions one at a time per client and
+ * per-keystroke lookups would queue behind one another.
+ */
+function AddressFields({ address }: { address: PersonDetail['address'] }) {
+  const [line1, setLine1] = useState(address.line1 ?? '')
+  const [line2, setLine2] = useState(address.line2 ?? '')
+  const [suburb, setSuburb] = useState(address.suburb ?? '')
+  const [state, setState] = useState(address.state ?? '')
+  const [postcode, setPostcode] = useState(address.postcode ?? '')
+
+  const [query, setQuery] = useState('')
+  const [hits, setHits] = useState<{ place_id: string; label: string }[]>([])
+  const [note, setNote] = useState<string | null>(null)
+  // Null until the first lookup tells us. When false the search box is removed
+  // entirely rather than left there failing.
+  const [available, setAvailable] = useState(true)
+
+  // One token spans the keystrokes of a search AND the resolve that ends it, so
+  // Google bills a session rather than every request. A new one starts after
+  // each chosen address.
+  const token = useRef<string | null>(null)
+  if (token.current == null) token.current = crypto.randomUUID()
+  const sessionToken = () => token.current ?? ''
+
+  const abort = useRef<AbortController | null>(null)
+
+  // Below four characters there is nothing to show. Derived at render rather
+  // than cleared here: clearing state synchronously inside an effect causes a
+  // cascading render, and leaving stale hits in state is harmless when nothing
+  // renders them.
+  const visibleHits = query.trim().length >= 4 ? hits : []
+
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 4) return
+    // Debounced, because every request is billed and the adviser is mid-word.
+    const t = window.setTimeout(async () => {
+      abort.current?.abort()
+      const controller = new AbortController()
+      abort.current = controller
+      try {
+        const res = await fetch(
+          `/api/address?q=${encodeURIComponent(q)}&token=${sessionToken()}`,
+          { signal: controller.signal },
+        )
+        if (res.status === 501) {
+          setAvailable(false)
+          return
+        }
+        const body = await res.json()
+        if ('error' in body) {
+          setNote(body.error as string)
+          setHits([])
+          return
+        }
+        setNote(null)
+        setHits(body.suggestions ?? [])
+      } catch {
+        // An aborted request is the normal case — the adviser typed again.
+      }
+    }, 250)
+    return () => window.clearTimeout(t)
+  }, [query])
+
+  const choose = async (placeId: string) => {
+    setHits([])
+    const res = await fetch(
+      `/api/address?place_id=${encodeURIComponent(placeId)}&token=${sessionToken()}`,
+    )
+    const body = await res.json()
+    if ('error' in body) {
+      setNote(body.error as string)
+      return
+    }
+    setLine1(body.line1 ?? '')
+    setLine2(body.line2 ?? '')
+    setSuburb(body.suburb ?? '')
+    setState(body.state ?? '')
+    setPostcode(body.postcode ?? '')
+    setQuery('')
+    setNote(null)
+    // That session is spent; the next search starts a new one.
+    token.current = crypto.randomUUID()
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {available ? (
+        <div className="relative">
+          <label className="flex flex-col gap-1.5">
+            <span className={LABEL}>Find an address</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Start typing, or fill the fields below by hand"
+              autoComplete="off"
+              className={FIELD}
+            />
+          </label>
+          {visibleHits.length > 0 ? (
+            <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
+              {visibleHits.map((h) => (
+                <li key={h.place_id}>
+                  <button
+                    type="button"
+                    onClick={() => choose(h.place_id)}
+                    className="block w-full px-2.5 py-1.5 text-left text-sm text-neutral-800 outline-none hover:bg-brand-50 focus-visible:bg-brand-50"
+                  >
+                    {h.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {note ? <p className="mt-1 text-xs text-amber-700">{note}</p> : null}
+        </div>
+      ) : null}
+
+      {/* All five together, always. The address is one row with several columns,
+          so update_person_patch takes them as a unit — a form submitting only
+          some would blank the rest. */}
+      <div className="grid grid-cols-6 gap-3">
+        <ControlledField label="Street" name="addr_line1" value={line1} onChange={setLine1} className="col-span-6" />
+        <ControlledField label="Line 2" name="addr_line2" value={line2} onChange={setLine2} className="col-span-6" />
+        <ControlledField label="Suburb" name="addr_suburb" value={suburb} onChange={setSuburb} className="col-span-3" />
+        <ControlledField label="State" name="addr_state" value={state} onChange={setState} className="col-span-1" />
+        <ControlledField label="Postcode" name="addr_postcode" value={postcode} onChange={setPostcode} className="col-span-2" />
+      </div>
+    </div>
+  )
+}
+
+/** Field, but controlled, so a chosen suggestion can write into it. */
+function ControlledField({
+  label,
+  name,
+  value,
+  onChange,
+  className = '',
+}: {
+  label: string
+  name: string
+  value: string
+  onChange: (v: string) => void
+  className?: string
+}) {
+  return (
+    <label className={`flex flex-col gap-1.5 ${className}`}>
+      <span className={LABEL}>{label}</span>
+      <input
+        name={name}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={FIELD}
+      />
+    </label>
+  )
+}
+
 function Select({
   label,
   name,
@@ -1141,18 +1314,7 @@ export function MemberPanel({
                               <Row label="Postcode" value={person.address.postcode} />
                             </dl>
                           }
-                          edit={
-                            /* All five address inputs together, always. The address is one
-                               row with several columns, so update_person_patch takes them as
-                               a unit — a form submitting only some would blank the rest. */
-                            <div className="grid grid-cols-6 gap-3">
-                              <Field label="Street" name="addr_line1" defaultValue={person.address.line1} className="col-span-6" />
-                              <Field label="Line 2" name="addr_line2" defaultValue={person.address.line2} className="col-span-6" />
-                              <Field label="Suburb" name="addr_suburb" defaultValue={person.address.suburb} className="col-span-3" />
-                              <Field label="State" name="addr_state" defaultValue={person.address.state} className="col-span-1" />
-                              <Field label="Postcode" name="addr_postcode" defaultValue={person.address.postcode} className="col-span-2" />
-                            </div>
-                          }
+                          edit={<AddressFields address={person.address} />}
                         />
                       </div>
                     ),

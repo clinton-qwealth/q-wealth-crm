@@ -215,6 +215,51 @@ describe('MemberPanel', () => {
     expect(names.sort()).toEqual(['email', 'group_id', 'mobile', 'party_id', 'phone_other'])
   })
 
+  /**
+   * The address inputs became controlled so a chosen suggestion could fill
+   * them. That swap is invisible if it goes wrong: the fields would still
+   * render, still look right, and quietly submit nothing.
+   */
+  test('the address fields are still named and prefilled after becoming controlled', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('tab', { name: 'Contact' }))
+    await user.click(screen.getByRole('button', { name: /edit residential address/i }))
+
+    expect(screen.getByDisplayValue('12 Bay Street')).toBeDefined()
+    expect(screen.getByDisplayValue('Mosman')).toBeDefined()
+    expect(screen.getByDisplayValue('NSW')).toBeDefined()
+    expect(screen.getByDisplayValue('2088')).toBeDefined()
+
+    const form = container.querySelector('dialog form:has(input[name="addr_suburb"])')
+    const names = [...form!.querySelectorAll('input[name], select[name], textarea[name]')].map(
+      (el) => el.getAttribute('name'),
+    )
+    // All five together — update_person_patch takes the address as a unit, so a
+    // form carrying only some of them would blank the rest.
+    expect(names.sort()).toEqual([
+      'addr_line1', 'addr_line2', 'addr_postcode', 'addr_state', 'addr_suburb',
+      'group_id', 'party_id',
+    ])
+  })
+
+  /* Autocomplete fills; it must never constrain. A rural or overseas address
+     will not be found, and a form that refuses one is worse than no lookup. */
+  test('the address fields remain editable by hand', async () => {
+    const user = userEvent.setup()
+    open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('tab', { name: 'Contact' }))
+    await user.click(screen.getByRole('button', { name: /edit residential address/i }))
+
+    const suburb = screen.getByDisplayValue('Mosman') as HTMLInputElement
+    expect(suburb.readOnly).toBe(false)
+    await user.clear(suburb)
+    await user.type(suburb, 'Wagga Wagga')
+    expect((screen.getByDisplayValue('Wagga Wagga') as HTMLInputElement).name).toBe('addr_suburb')
+  })
+
   test('Cancel on a section returns it to read-only', async () => {
     const user = userEvent.setup()
     open('view')
