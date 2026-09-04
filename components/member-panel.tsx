@@ -531,6 +531,17 @@ function VerificationHistory({ entries }: { entries: VerificationEntry[] }) {
  * because Next dispatches Server Actions one at a time per client and
  * per-keystroke lookups would queue behind one another.
  */
+/*
+ * Lookup tuning, in one place.
+ *
+ * These were written into a comment as well as the code, and the two drifted:
+ * the comment claimed 120ms while the setTimeout still said 250. The comment
+ * read as true and nothing checked it. Naming the values means there is one
+ * source of truth to change.
+ */
+const LOOKUP_DEBOUNCE_MS = 120
+const LOOKUP_MIN_CHARS = 4
+
 function AddressFields({ address }: { address: PersonDetail['address'] }) {
   const [line1, setLine1] = useState(address.line1 ?? '')
   const [line2, setLine2] = useState(address.line2 ?? '')
@@ -568,21 +579,20 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
   // than cleared here: clearing state synchronously inside an effect causes a
   // cascading render, and leaving stale hits in state is harmless when nothing
   // renders them.
-  const visibleHits = query.trim().length >= 4 ? hits : []
+  const visibleHits = query.trim().length >= LOOKUP_MIN_CHARS ? hits : []
 
   useEffect(() => {
     const q = query.trim()
-    if (q.length < 4) return
+    if (q.length < LOOKUP_MIN_CHARS) return
     // Already answered — the change handler has put it on screen, and there is
     // nothing to ask for.
     if (cache.current.has(q)) return
     /*
-     * 120ms, not 250ms.
-     *
-     * A debounce is a floor on how responsive this can feel, so it wants to be
-     * as short as the billing allows. The cache above is what makes 120ms
-     * affordable: repeats and backspacing no longer reach the network at all,
-     * so the request count did not rise in proportion.
+     * A debounce is a floor on how responsive this can possibly feel, so it
+     * wants to be as short as the billing allows. The cache above is what makes
+     * a short one affordable: repeats and backspacing no longer reach the
+     * network at all, so shortening it did not raise the request count in
+     * proportion. Value in LOOKUP_DEBOUNCE_MS.
      */
     const t = window.setTimeout(async () => {
       abort.current?.abort()
@@ -612,7 +622,7 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
       } catch {
         // An aborted request is the normal case — the adviser typed again.
       }
-    }, 250)
+    }, LOOKUP_DEBOUNCE_MS)
     return () => window.clearTimeout(t)
   }, [query])
 
