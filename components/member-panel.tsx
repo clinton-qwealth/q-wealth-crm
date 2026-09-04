@@ -540,6 +540,16 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
 
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<{ place_id: string; label: string }[]>([])
+  /*
+   * Every query this session has already answered.
+   *
+   * Autocomplete feels slow mostly when it goes quiet: backspace a character
+   * and the list vanishes until the network answers again, even though the
+   * answer was on screen a moment ago. Serving a repeat from memory makes
+   * editing a search genuinely instant — no debounce, no request, no billing —
+   * and that is most of what "it should be instant" is asking for.
+   */
+  const cache = useRef(new Map<string, { place_id: string; label: string }[]>())
   const [note, setNote] = useState<string | null>(null)
   // Null until the first lookup tells us. When false the search box is removed
   // entirely rather than left there failing.
@@ -563,7 +573,17 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
   useEffect(() => {
     const q = query.trim()
     if (q.length < 4) return
-    // Debounced, because every request is billed and the adviser is mid-word.
+    // Already answered — the change handler has put it on screen, and there is
+    // nothing to ask for.
+    if (cache.current.has(q)) return
+    /*
+     * 120ms, not 250ms.
+     *
+     * A debounce is a floor on how responsive this can feel, so it wants to be
+     * as short as the billing allows. The cache above is what makes 120ms
+     * affordable: repeats and backspacing no longer reach the network at all,
+     * so the request count did not rise in proportion.
+     */
     const t = window.setTimeout(async () => {
       abort.current?.abort()
       const controller = new AbortController()
@@ -584,7 +604,11 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
           return
         }
         setNote(null)
-        setHits(body.suggestions ?? [])
+        const fresh = (body.suggestions ?? []) as { place_id: string; label: string }[]
+        setHits(fresh)
+        // Bounded: a long editing session should not grow a map without limit.
+        if (cache.current.size > 60) cache.current.clear()
+        cache.current.set(q, fresh)
       } catch {
         // An aborted request is the normal case — the adviser typed again.
       }
@@ -621,7 +645,14 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
             <span className={LABEL}>Find an address</span>
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value
+                setQuery(next)
+                /* Answered before? Show it in this same render — no debounce,
+                   no request. This is the path that makes it feel instant. */
+                const remembered = cache.current.get(next.trim())
+                if (remembered) setHits(remembered)
+              }}
               placeholder="Start typing, or fill the fields below by hand"
               autoComplete="off"
               className={FIELD}

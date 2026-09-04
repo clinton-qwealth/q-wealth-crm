@@ -1,5 +1,4 @@
-import { getCurrentStaff } from '@/lib/staff'
-import { getMfaState } from '@/lib/mfa'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 import {
   addressLookupConfigured,
   resolveAddress,
@@ -37,25 +36,58 @@ import {
  * minimum query length reduce the volume; only the quota cap bounds it.
  */
 export async function GET(request: Request) {
-  const staff = await getCurrentStaff()
-  if (!staff) {
-    return Response.json({ error: 'Not an active Q Wealth staff member' }, { status: 403 })
+  const t0 = performance.now()
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  /*
+   * getClaims(), NOT getCurrentStaff().
+   *
+   * This runs on every keystroke, so the difference matters. getCurrentStaff()
+   * costs two network round trips — auth.getUser() against GoTrue, then a
+   * staff_users select — and its React cache() wrapper is per-request, so it
+   * memoises nothing across separate fetches.
+   *
+   * This project signs tokens with ES256 and publishes a JWKS, so getClaims()
+   * verifies the signature LOCALLY with WebCrypto against a cached key: no
+   * round trip on a warm function, and the `aal` claim comes back with it, so
+   * the second-factor check is free too. (It falls back to getUser() only for
+   * symmetric keys, which is not this project.)
+   *
+   * The staff lookup below is still a real round trip, and stays sequential
+   * rather than racing the Google call: this endpoint spends money, so it
+   * refuses first and asks second.
+   */
+  const { data: verified, error: claimsError } = await supabase.auth.getClaims()
+  const claims = verified?.claims as { sub?: string; aal?: string } | undefined
+  if (claimsError || !claims?.sub) {
+    return Response.json({ error: 'Not signed in.' }, { status: 403 })
   }
 
   /*
-   * `currentLevel === 'aal2'` and NOT `!stepUpRequired`. The latter is
-   * `enrolled && currentLevel === 'aal1'`, so it reads false for somebody with
-   * no factor at all — who is single-factor and should be refused. Asking
-   * whether the session actually reached aal2 is the same question
-   * public.has_mfa() asks in the database, which is the answer worth matching.
+   * `aal === 'aal2'`, not "step-up not required". The latter reads false for
+   * somebody with no factor at all — who is single-factor and should be
+   * refused. This is the same question public.has_mfa() asks in the database.
    */
-  const mfa = await getMfaState()
-  if (mfa.currentLevel !== 'aal2') {
+  if (claims.aal !== 'aal2') {
     return Response.json(
       { error: 'A verified second factor is required.' },
       { status: 403 },
     )
   }
+  const tAuth = performance.now()
+
+  // Being signed in is not the same as being staff, and this endpoint costs
+  // money on every call.
+  const { data: staff } = await supabase
+    .from('staff_users')
+    .select('id')
+    .eq('auth_user_id', claims.sub)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (!staff) {
+    return Response.json({ error: 'Not an active Q Wealth staff member' }, { status: 403 })
+  }
+  const tStaff = performance.now()
 
   if (!addressLookupConfigured()) {
     // 501 rather than 500: nothing is broken, the feature simply is not set up,
@@ -70,11 +102,21 @@ export async function GET(request: Request) {
   }
 
   // One handler, two operations, so the checks above are written once.
+  /*
+   * Server-Timing, so "it feels laggy" can be answered with numbers from the
+   * browser that feels it rather than from a guess. Open the network tab, pick
+   * the request, and the Timing panel breaks it into auth / staff / google.
+   */
+  const timing = (google: number) =>
+    `auth;dur=${(tAuth - t0).toFixed(1)}, staff;dur=${(tStaff - tAuth).toFixed(1)}, google;dur=${google.toFixed(1)}`
+
   const placeId = url.searchParams.get('place_id')
   if (placeId) {
+    const before = performance.now()
     const resolved = await resolveAddress(placeId, token)
-    if ('error' in resolved) return Response.json(resolved, { status: 502 })
-    return Response.json(resolved)
+    const headers = { 'Server-Timing': timing(performance.now() - before) }
+    if ('error' in resolved) return Response.json(resolved, { status: 502, headers })
+    return Response.json(resolved, { headers })
   }
 
   const q = (url.searchParams.get('q') ?? '').trim()
@@ -82,7 +124,9 @@ export async function GET(request: Request) {
   // The client enforces this too; this is the copy that matters.
   if (q.length < 4) return Response.json({ suggestions: [] })
 
+  const before = performance.now()
   const suggestions = await suggestAddresses(q, token, request.signal)
-  if ('error' in suggestions) return Response.json(suggestions, { status: 502 })
-  return Response.json({ suggestions })
+  const headers = { 'Server-Timing': timing(performance.now() - before) }
+  if ('error' in suggestions) return Response.json(suggestions, { status: 502, headers })
+  return Response.json({ suggestions }, { headers })
 }

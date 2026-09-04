@@ -1,6 +1,6 @@
 import type { VerificationEntry } from '@/lib/person'
 import { describe, expect, test, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 /**
@@ -258,6 +258,78 @@ describe('MemberPanel', () => {
     await user.clear(suburb)
     await user.type(suburb, 'Wagga Wagga')
     expect((screen.getByDisplayValue('Wagga Wagga') as HTMLInputElement).name).toBe('addr_suburb')
+  })
+
+  /**
+   * "It should be instant" is mostly about not going quiet. These pin the two
+   * behaviours that decide whether it feels instant, both of which are
+   * invisible in a screenshot.
+   */
+  describe('address lookup responsiveness', () => {
+    function stubLookup() {
+      const calls: string[] = []
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        calls.push(url)
+        return new Response(
+          JSON.stringify({
+            suggestions: [{ place_id: 'p1', label: '12 Bay Street, Mosman NSW 2088' }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      return { calls, forQuery: (q: string) => calls.filter((u) => u.includes(`q=${encodeURIComponent(q)}`)).length }
+    }
+
+    async function openAddressEditor() {
+      const user = userEvent.setup()
+      open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Contact' }))
+      await user.click(screen.getByRole('button', { name: /edit residential address/i }))
+      return user
+    }
+
+    test('a query already answered is served from memory, with no second request', async () => {
+      const lookup = stubLookup()
+      const user = await openAddressEditor()
+      const box = screen.getByLabelText('Find an address')
+
+      await user.type(box, '12 bay street')
+      await waitFor(() => expect(screen.getByText(/12 Bay Street, Mosman/)).toBeDefined())
+      expect(lookup.forQuery('12 bay street')).toBe(1)
+
+      // Clear and type the identical query. The answer is remembered, so the
+      // network must not be asked for it again.
+      await user.clear(box)
+      await user.type(box, '12 bay street')
+      await waitFor(() => expect(screen.getByText(/12 Bay Street, Mosman/)).toBeDefined())
+
+      /*
+       * Waiting past the debounce before asserting, which is the whole point.
+       *
+       * The first version of this test checked the call count as soon as the
+       * results appeared — and they appear instantly from memory, before the
+       * debounce could have fired. So it passed even with the cache removed:
+       * it proved the results were shown, not that the network was spared.
+       */
+      await new Promise((r) => setTimeout(r, 300))
+      expect(lookup.forQuery('12 bay street')).toBe(1)
+
+      vi.unstubAllGlobals()
+    })
+
+    /* Below four characters there is nothing worth showing and every call is
+       billed, so nothing should leave the browser at all. */
+    test('a short query makes no request', async () => {
+      const lookup = stubLookup()
+      const user = await openAddressEditor()
+      await user.type(screen.getByLabelText('Find an address'), '12')
+      await new Promise((r) => setTimeout(r, 250))
+      expect(lookup.calls.filter((u) => u.includes('/api/address')).length).toBe(0)
+      vi.unstubAllGlobals()
+    })
   })
 
   test('Cancel on a section returns it to read-only', async () => {
