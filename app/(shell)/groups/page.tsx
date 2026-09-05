@@ -347,11 +347,19 @@ export default async function GroupsPage({
                 </div>
               </dl>
 
-              {/* Its own panel rather than a ruled-off region: a light ground
-                  plus a hairline edge separates the collection from the single
-                  facts above it, without adding another divider line. */}
-              <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              {/* Its own panel rather than a ruled-off region, and a CHARCOAL
+                  ground rather than the light one it began with: the members
+                  are the most-used thing on this page, and the white rows read
+                  as raised cards against dark in a way they never did against
+                  near-white.
+
+                  Measured rather than eyeballed, because inverting a ground
+                  quietly breaks whatever text was tuned for the old one — a
+                  white row now sits at 15:1 against this, and every piece of
+                  text directly on the charcoal was re-picked to clear WCAG AA
+                  rather than left at a value chosen for a light background. */}
+              <div className="mt-5 rounded-lg border border-neutral-700 bg-neutral-800 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
                   Members
                 </h3>
 
