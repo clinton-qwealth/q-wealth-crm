@@ -299,17 +299,23 @@ export default async function GroupsPage({
         <Card title="Group profile">
           {group ? (
             <>
-              {/* Label above value, matching the member panel.
-                  
+              {/* Label above value in two columns, matching the member panel.
+
                   These were label-left / value-right, which reads well when
                   values are short and alike. They are not: a name, a telephone
                   number and a pill, each a different height and weight, so the
                   right edge never lined up and the eye had to travel the width
                   of the card for every one. Stacked, each label sits directly
                   over what it describes and every value starts at the same left
-                  edge. One column, not the panel's two — this card is a quarter
-                  of the page and a name would wrap in half of it. */}
-              <dl className="flex flex-col gap-4">
+                  edge.
+
+                  gap-x-6 rather than the panel's gap-x-8: this card is a quarter
+                  of the page, so a column measures about 123px. A long name does
+                  wrap there — "Konstantinos Papadopoulos" takes two lines — and
+                  that was checked rather than assumed. It reads fine; the card
+                  simply grows. The phone never wraps, being tabular figures of
+                  fixed width. */}
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <dt className="text-xs leading-snug text-neutral-500">Primary contact</dt>
                   <dd className="mt-0.5 text-sm leading-snug text-neutral-900">
