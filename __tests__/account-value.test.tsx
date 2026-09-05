@@ -79,9 +79,40 @@ describe('AccountValue', () => {
     expect(spacer?.className).toContain('size-[18px]')
   })
 
-  test('an account with no valuation renders nothing at all', () => {
+  /**
+   * This used to assert that an unvalued account rendered NOTHING, and that was
+   * changed deliberately on 5 Sep 2026: a blank right-hand side reads as a
+   * rendering fault rather than as missing data, and the section total now
+   * states how many accounts it excludes, so the rows it means should say so
+   * themselves.
+   */
+  test('an account with no valuation says so rather than rendering blank', () => {
     const { container } = render(<AccountValue value={null} />)
-    expect(container.firstChild).toBeNull()
+    expect(container.firstChild).not.toBeNull()
+    expect(container.textContent).toContain('No value recorded')
+  })
+
+  /* Quiet on purpose. The row styles values large and dark, and this is the
+     absence of a figure — it must not be mistaken for one at a glance. */
+  test('the no-value note is not styled like an amount', () => {
+    const { container } = render(<AccountValue value={null} />)
+    /* The element that actually HOLDS the text, not its wrapper: the wrapper's
+       textContent is identical, so matching on text alone finds the outer span
+       and reads the wrong classes off it. */
+    const note = [...container.querySelectorAll('span')].find(
+      (el) => el.children.length === 0 && el.textContent === 'No value recorded',
+    )
+    expect(note?.className).toContain('text-neutral-400')
+    expect(note?.className).toContain('text-xs')
+    expect(note?.className).toContain('font-normal')
+    expect(note?.className).not.toContain('tabular-nums')
+  })
+
+  /* Still on the column's right edge, like every valued row. */
+  test('the no-value case holds the badge width open too', () => {
+    const { container } = render(<AccountValue value={null} />)
+    const spacer = container.querySelector('[aria-hidden="true"]')
+    expect(spacer?.className).toContain('size-[18px]')
   })
 
   /* Exactly on the average is not a direction either. */

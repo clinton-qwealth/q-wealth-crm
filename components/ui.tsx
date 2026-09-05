@@ -172,7 +172,10 @@ export function Pill({
   )
 }
 
-const accountMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
+/* Exported so a section total is formatted by the same rule as the rows it
+   sums — a total that renders cents differently from its own list reads as a
+   different kind of number. */
+export const accountMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
 /**
  * An account's latest value with a direction mark: green up, red down.
@@ -198,7 +201,30 @@ export function AccountValue({
   baselineValue?: string | number | null
   baselinePoints?: number | null
 }) {
-  if (value == null) return null
+  if (value == null) {
+    /*
+     * Says so, rather than rendering nothing.
+     *
+     * A blank right-hand side reads as a rendering fault, not as an absence of
+     * data — and now that the section total states how many accounts it leaves
+     * out, the rows it means should account for themselves. Two of the five
+     * real accounts are in this state, because nothing writes a valuation after
+     * the opening one.
+     *
+     * Deliberately quiet — smaller, lighter and not tabular — because this is
+     * the absence of a figure and must not be mistaken for one at a glance. The
+     * row's own styling makes values large and dark, so all three are overridden
+     * here.
+     */
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-xs font-normal text-neutral-400">No value recorded</span>
+        {/* The same spacer the valued rows carry, so this sits on the column's
+            right edge instead of 18px adrift of every amount above it. */}
+        <span className="block size-[18px] shrink-0" aria-hidden="true" />
+      </span>
+    )
+  }
 
   const change = changeAmount == null ? null : Number(changeAmount)
   const up = change != null && change > 0

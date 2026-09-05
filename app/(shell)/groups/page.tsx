@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { AccountValue, Card, coverSummary, PageHeading, Pill } from '@/components/ui'
+import { accountMoney, AccountValue, Card, coverSummary, PageHeading, Pill } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
@@ -221,6 +221,33 @@ const ACCOUNT_STATUS_LABEL: Record<string, string> = {
   active: 'Active',
   suspended: 'Suspended',
   closed: 'Closed',
+}
+
+/**
+ * The footer figure for the accounts list.
+ *
+ * Sums every account shown, including suspended and closed ones — decided
+ * 5 Sep 2026, so the number always reconciles with what is on screen.
+ *
+ * THE NOTE IS THE IMPORTANT PART. An account with no recorded valuation
+ * contributes nothing, and there is no way for it to: at the time of writing
+ * two of the five real accounts have never had a value written, because nothing
+ * records valuations after the opening one. A bare total would look like the
+ * group's holdings while quietly omitting those, which is exactly the kind of
+ * figure someone repeats in a client conversation. So the count is stated
+ * whenever any row is missing a value.
+ */
+function accountsTotal(rows: AccountRow[]) {
+  const valued = rows.filter((r) => r.latest_value != null)
+  const missing = rows.length - valued.length
+  return {
+    label: 'Total',
+    value: accountMoney.format(valued.reduce((sum, r) => sum + Number(r.latest_value), 0)),
+    note:
+      missing === 0
+        ? undefined
+        : `Excludes ${missing} account${missing === 1 ? '' : 's'} with no recorded value`,
+  }
 }
 
 /** Strip formatting so the dialler gets something it can use. */
@@ -498,9 +525,14 @@ export default async function GroupsPage({
                       description:
                         'Investment and superannuation accounts owned by this group\u2019s members.',
                     }}
+                    /* Accounts only. The insurance section below deliberately has
+                       no total: a lump sum and a monthly benefit cannot be added
+                       together, which is the whole reason coverSummary() joins
+                       them rather than summing. */
+                    total={accounts.length ? accountsTotal(accounts) : undefined}
                   >
                     {accounts.length ? (
-                      <ul className="flex flex-col gap-1.5">
+                      <ul className="flex flex-col gap-2">
                         {accounts.map((a) => (
                           <DataRow
                             key={a.account_id}
@@ -557,7 +589,7 @@ export default async function GroupsPage({
                       }}
                     >
                       {policies.length ? (
-                        <ul className="flex flex-col gap-1.5">
+                        <ul className="flex flex-col gap-2">
                           {policies.map((p) => (
                             <DataRow
                               key={p.policy_id}

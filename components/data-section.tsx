@@ -28,6 +28,7 @@ export function DataSection({
   emptyAction,
   empty,
   children,
+  total,
 }: {
   /** e.g. "Add account" — used on both the toolbar link and the empty button. */
   addLabel: string
@@ -50,6 +51,19 @@ export function DataSection({
   /** The records. When absent — including when a caller passes a falsy list —
    *  the empty state is shown instead. */
   children?: ReactNode
+  /**
+   * Optional footer figure, e.g. the sum of the accounts listed.
+   *
+   * The caller computes it, deliberately: NOT every section can be summed. An
+   * insurance section must never total its cover, because a lump sum and a
+   * monthly benefit are different units and joining them is the rule the whole
+   * coverSummary() helper exists to enforce. Leaving the arithmetic outside
+   * this component keeps that decision where the units are known.
+   *
+   * `note` is for saying what the figure leaves out. A total that quietly
+   * excludes rows is worse than no total at all.
+   */
+  total?: { label: string; value: string; note?: string }
 }) {
   if (!children) {
     return (
@@ -102,11 +116,38 @@ export function DataSection({
         )}
       </div>
       {children}
+      {total ? (
+        <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-neutral-200 px-3 pt-2.5">
+          <span className="min-w-0">
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              {total.label}
+            </span>
+            {total.note ? (
+              <span className="block text-xs leading-snug text-neutral-400">{total.note}</span>
+            ) : null}
+          </span>
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-neutral-900">
+            {total.value}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }
 
-/** A record row inside a DataSection. White on the panel, like the member rows. */
+/**
+ * A record row inside a DataSection.
+ *
+ * These used to be white on `border-neutral-200/70`, described as "white on the
+ * panel, like the member rows" — but the member rows sit on a grey ground and
+ * these sit straight on a white Card. Measured, the fill was 1.00:1 against the
+ * card and the border 1.26:1, so the records ran together into one block.
+ *
+ * A full-strength border and a one-pixel shadow lift each row off the card.
+ * And the money now carries the weight the name used to: for a list of
+ * holdings the figure is what gets scanned, and it was the lightest, smallest
+ * thing on the row.
+ */
 export function DataRow({
   primary,
   secondary,
@@ -121,10 +162,10 @@ export function DataRow({
   badge?: ReactNode
 }) {
   return (
-    <li className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-3 py-2">
+    <li className="flex items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 py-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
       <span className="min-w-0">
         <span className="flex items-center gap-2">
-          <span className="truncate text-sm text-neutral-800">{primary}</span>
+          <span className="truncate text-sm font-medium text-neutral-900">{primary}</span>
           {badge}
         </span>
         {secondary ? (
@@ -132,7 +173,7 @@ export function DataRow({
         ) : null}
       </span>
       {meta ? (
-        <span className="shrink-0 text-xs tabular-nums text-neutral-600">{meta}</span>
+        <span className="shrink-0 text-sm font-medium tabular-nums text-neutral-900">{meta}</span>
       ) : null}
     </li>
   )
