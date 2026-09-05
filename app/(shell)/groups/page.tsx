@@ -347,19 +347,22 @@ export default async function GroupsPage({
                 </div>
               </dl>
 
-              {/* Its own panel rather than a ruled-off region, and a CHARCOAL
-                  ground rather than the light one it began with: the members
-                  are the most-used thing on this page, and the white rows read
-                  as raised cards against dark in a way they never did against
-                  near-white.
+              {/* Its own panel rather than a ruled-off region. The ground is a
+                  step darker than the near-white it began with, so the panel
+                  reads as a distinct region on the card — the members are the
+                  most-used thing on this page and were too easily skimmed past.
 
-                  Measured rather than eyeballed, because inverting a ground
-                  quietly breaks whatever text was tuned for the old one — a
-                  white row now sits at 15:1 against this, and every piece of
-                  text directly on the charcoal was re-picked to clear WCAG AA
-                  rather than left at a value chosen for a light background. */}
-              <div className="mt-5 rounded-lg border border-neutral-700 bg-neutral-800 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
+                  A charcoal version was tried and rejected as too heavy. Worth
+                  knowing what that trade actually was: against dark the white
+                  rows separate at 15:1, against this they separate at 1.3:1, so
+                  here the definition has to come from the panel's own edge and
+                  the rows' borders rather than from the ground beneath them.
+
+                  Text colours are re-picked for THIS ground, not inherited from
+                  the lighter one: neutral-500 was fine on near-white and is only
+                  3.8:1 here, under AA. */}
+              <div className="mt-5 rounded-lg border border-neutral-300 bg-neutral-200 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-600">
                   Members
                 </h3>
 
@@ -390,7 +393,7 @@ export default async function GroupsPage({
                            completeness; there is no individual record to open. */
                         <li
                           key={m.party_id}
-                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
+                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5"
                         >
                           <span className="truncate text-sm text-neutral-700">
                             {m.display_name}

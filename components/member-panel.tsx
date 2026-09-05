@@ -1046,12 +1046,14 @@ export function MemberPanel({
 
   const triggerClass =
     variant === 'row'
-      ? 'flex w-full items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5 text-left outline-none transition-colors hover:border-brand-300 hover:bg-brand-50/40 focus-visible:ring-2 focus-visible:ring-brand/30'
-      /* Coloured for the charcoal members panel, which is its only home.
-         brand-500 on that ground is 4.15:1 — under AA for text this small —
-         so the lighter brand-300 carries it at 8.4:1. Hovering to white would
-         also have been a flash against dark, hence the neutral-700 wash. */
-      : 'mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand-300 outline-none transition-colors hover:bg-neutral-700 hover:text-brand-200 focus-visible:ring-2 focus-visible:ring-brand/40'
+      ? 'flex w-full items-baseline justify-between gap-3 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-left outline-none transition-colors hover:border-brand-300 hover:bg-brand-50/40 focus-visible:ring-2 focus-visible:ring-brand/30'
+      /* Coloured for the members panel, which is its only home. brand-500 —
+         what this used to be — is 2.9:1 on that ground and was already only
+         3.5:1 on the near-white it sat on before, so it never cleared AA for
+         text this small. brand-700 carries it at 5.2:1. The hover is a white
+         wash rather than a colour change, since the text is already as dark as
+         the brand goes. */
+      : 'mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand-700 outline-none transition-colors hover:bg-white focus-visible:ring-2 focus-visible:ring-brand/30'
 
   return (
     <>
