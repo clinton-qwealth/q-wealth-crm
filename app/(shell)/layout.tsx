@@ -34,7 +34,14 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (mfa.stepUpRequired) redirect('/mfa?next=%2F')
 
   return (
-    <div className="flex min-h-dvh flex-col bg-white">
+    /* No background colour on this container, deliberately. A negative
+       z-index child paints after the STACKING CONTEXT ROOT's background but
+       before its parent's, and this div creates no stacking context — so a
+       bg-white here painted straight over the artwork below. The image had been
+       in the markup and invisible; the login and MFA screens showed it only
+       because their container has no background of its own. The layer below
+       carries its own fallback colour, so nothing is lost. */
+    <div className="flex min-h-dvh flex-col">
       <TopNav staffName={staff.full_name} staffEmail={staff.email} />
 
       {/*
@@ -45,7 +52,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-white bg-[url('/investing.png')] bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none fixed inset-0 -z-10 bg-neutral-100 bg-[url('/investing.png')] bg-cover bg-center bg-no-repeat"
       />
 
       <main className="grid flex-1 auto-rows-min grid-cols-4 gap-4 px-3 py-5 sm:grid-cols-8 sm:px-5 lg:grid-cols-12 lg:gap-6 lg:py-7">

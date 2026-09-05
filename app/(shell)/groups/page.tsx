@@ -296,7 +296,21 @@ export default async function GroupsPage({
 
       {/* Left — group profile */}
       <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
-        <Card title="Group profile">
+        <Card>
+          {/* One left edge for the whole card.
+
+              The members box is a panel inside this card's padding, so its text
+              starts 13px in — a 1px border plus p-3. Everything above it used to
+              start at the card's own content edge, which put the heading, the
+              fields and the members list on three different indents.
+
+              Rather than pull the members box out, everything else is pushed in
+              to meet it: the title comes out of Card so it can carry the same
+              inset, and the trailing note carries it too. The box itself still
+              spans the full width — only what is inside it was ever indented. */}
+          <h2 className="mb-3 pl-[13px] text-xs font-semibold uppercase tracking-wider text-neutral-500">
+            Group profile
+          </h2>
           {group ? (
             <>
               {/* Label above value in two columns, matching the member panel.
@@ -315,7 +329,7 @@ export default async function GroupsPage({
                   that was checked rather than assumed. It reads fine; the card
                   simply grows. The phone never wraps, being tabular figures of
                   fixed width. */}
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 pl-[13px]">
                 <div>
                   <dt className="text-xs leading-snug text-neutral-500">Primary contact</dt>
                   <dd className="mt-0.5 text-sm leading-snug text-neutral-900">
@@ -429,7 +443,7 @@ export default async function GroupsPage({
                 </MemberPanel>
               </div>
 
-              <p className="mt-3 text-xs text-neutral-400">
+              <p className="mt-3 pl-[13px] text-xs text-neutral-400">
                 Choosing a different group is not built yet.
               </p>
             </>
