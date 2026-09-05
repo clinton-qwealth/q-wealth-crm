@@ -299,16 +299,26 @@ export default async function GroupsPage({
         <Card title="Group profile">
           {group ? (
             <>
-              <dl className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-xs text-neutral-500">Primary contact</dt>
-                  <dd className="text-right text-sm text-neutral-900">
-                    {group.primary_contact ?? '—'}
+              {/* Label above value, matching the member panel.
+                  
+                  These were label-left / value-right, which reads well when
+                  values are short and alike. They are not: a name, a telephone
+                  number and a pill, each a different height and weight, so the
+                  right edge never lined up and the eye had to travel the width
+                  of the card for every one. Stacked, each label sits directly
+                  over what it describes and every value starts at the same left
+                  edge. One column, not the panel's two — this card is a quarter
+                  of the page and a name would wrap in half of it. */}
+              <dl className="flex flex-col gap-4">
+                <div>
+                  <dt className="text-xs leading-snug text-neutral-500">Primary contact</dt>
+                  <dd className="mt-0.5 text-sm leading-snug text-neutral-900">
+                    {group.primary_contact ?? <span className="text-neutral-400">—</span>}
                   </dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-xs text-neutral-500">Phone</dt>
-                  <dd className="text-right text-sm">
+                <div>
+                  <dt className="text-xs leading-snug text-neutral-500">Phone</dt>
+                  <dd className="mt-0.5 text-sm leading-snug">
                     {phone ? (
                       /* Reads as data first: same weight and colour as the name
                          above it, with tabular figures so the digits sit evenly.
@@ -331,9 +341,9 @@ export default async function GroupsPage({
                     )}
                   </dd>
                 </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-xs text-neutral-500">Primary adviser</dt>
-                  <dd className="text-right">
+                <div>
+                  <dt className="text-xs leading-snug text-neutral-500">Primary adviser</dt>
+                  <dd className="mt-0.5 leading-snug">
                     {adviser ? (
                       /* A pill rather than plain text: the adviser is a reference
                          to another record, not a value of this one. Neutral tone —
@@ -347,22 +357,11 @@ export default async function GroupsPage({
                 </div>
               </dl>
 
-              {/* Its own panel rather than a ruled-off region. The ground is a
-                  step darker than the near-white it began with, so the panel
-                  reads as a distinct region on the card — the members are the
-                  most-used thing on this page and were too easily skimmed past.
-
-                  A charcoal version was tried and rejected as too heavy. Worth
-                  knowing what that trade actually was: against dark the white
-                  rows separate at 15:1, against this they separate at 1.3:1, so
-                  here the definition has to come from the panel's own edge and
-                  the rows' borders rather than from the ground beneath them.
-
-                  Text colours are re-picked for THIS ground, not inherited from
-                  the lighter one: neutral-500 was fine on near-white and is only
-                  3.8:1 here, under AA. */}
-              <div className="mt-5 rounded-lg border border-neutral-300 bg-neutral-200 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-600">
+              {/* Its own panel rather than a ruled-off region: a light ground
+                  plus a hairline edge separates the collection from the single
+                  facts above it, without adding another divider line. */}
+              <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                   Members
                 </h3>
 
@@ -393,7 +392,7 @@ export default async function GroupsPage({
                            completeness; there is no individual record to open. */
                         <li
                           key={m.party_id}
-                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5"
+                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
                         >
                           <span className="truncate text-sm text-neutral-700">
                             {m.display_name}
