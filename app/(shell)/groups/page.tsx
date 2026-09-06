@@ -2,11 +2,11 @@ import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, PolicyTile } from '@/components/ui'
-import { PhoneIcon, PlusIcon } from '@/components/icons'
+import { PhoneIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
-import { MemberPanel } from '@/components/member-panel'
+import { GroupMembers } from '@/components/group-members'
 import { getGroupMemberDetail, type PersonDetail } from '@/lib/person'
 import { getGroupNotes } from '@/lib/notes'
 import { FileNotes } from '@/components/file-notes'
@@ -333,16 +333,15 @@ export default async function GroupsPage({
         <Card>
           {/* One left edge for the whole card.
 
-              The members box is a panel inside this card's padding, so its text
-              starts 13px in — a 1px border plus p-3. Everything above it used to
-              start at the card's own content edge, which put the heading, the
-              fields and the members list on three different indents.
-
-              Rather than pull the members box out, everything else is pushed in
-              to meet it: the title comes out of Card so it can carry the same
-              inset, and the trailing note carries it too. The box itself still
-              spans the full width — only what is inside it was ever indented. */}
-          <h2 className="mb-3 pl-[13px] text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              The members well is padded p-3, so its heading starts 12px in.
+              Everything above it used to start at the card's own content edge,
+              which put the heading, the fields and the members list on
+              different indents. Rather than pull the well out, everything else
+              is pushed in to meet it: the title comes out of Card so it can
+              carry the same inset, and the trailing note carries it too. (This
+              was 13px while the well had a border; it no longer does — see
+              GroupMembers.) */}
+          <h2 className="mb-3 pl-3 text-xs font-semibold uppercase tracking-wider text-neutral-500">
             Group profile
           </h2>
           {group ? (
@@ -363,7 +362,7 @@ export default async function GroupsPage({
                   that was checked rather than assumed. It reads fine; the card
                   simply grows. The phone never wraps, being tabular figures of
                   fixed width. */}
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 pl-[13px]">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 pl-3">
                 <div>
                   <dt className="text-xs leading-snug text-neutral-500">Primary contact</dt>
                   <dd className="mt-0.5 text-sm leading-snug text-neutral-900">
@@ -411,73 +410,9 @@ export default async function GroupsPage({
                 </div>
               </dl>
 
-              {/* Its own panel rather than a ruled-off region: a light ground
-                  plus a hairline edge separates the collection from the single
-                  facts above it, without adding another divider line. */}
-              <div className="mt-5 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                  Members
-                </h3>
+              <GroupMembers groupId={group.group_id} members={memberDetail} />
 
-                {memberDetail.length ? (
-                  <ul className="mt-2.5 flex flex-col gap-1.5">
-                    {memberDetail.map((m) =>
-                      m.is_person ? (
-                      <li key={m.party_id}>
-                          <MemberPanel
-                            groupId={group.group_id}
-                            members={memberDetail}
-                            initialMode="view"
-                            initialPartyId={m.party_id}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="truncate text-sm text-neutral-700">
-                                {m.display_name}
-                              </span>
-                              {m.date_of_death ? <Pill tone="danger">Deceased</Pill> : null}
-                            </span>
-                            <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
-                              {(m.member_role ?? '').replace(/_/g, ' ')}
-                            </span>
-                          </MemberPanel>
-                        </li>
-                      ) : (
-                        /* A trust or company in the group. Listed for
-                           completeness; there is no individual record to open. */
-                        <li
-                          key={m.party_id}
-                          className="flex items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5"
-                        >
-                          <span className="truncate text-sm text-neutral-700">
-                            {m.display_name}
-                          </span>
-                          <span className="shrink-0 text-[11px] uppercase tracking-wide text-neutral-400">
-                            {(m.member_role ?? '').replace(/_/g, ' ')}
-                          </span>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                ) : (
-                  <p className="mt-2.5 text-sm text-neutral-400">No members yet.</p>
-                )}
-
-                {/* Reads as the next row of the list rather than a separate
-                    control. Opens the panel searching people already on file,
-                    because linking an existing record is the case that keeps
-                    duplicate people out of the database. */}
-                <MemberPanel
-                  groupId={group.group_id}
-                  members={memberDetail}
-                  initialMode="search"
-                  variant="link"
-                >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Add member
-                </MemberPanel>
-              </div>
-
-              <p className="mt-3 pl-[13px] text-xs text-neutral-400">
+              <p className="mt-3 pl-3 text-xs text-neutral-400">
                 Choosing a different group is not built yet.
               </p>
             </>

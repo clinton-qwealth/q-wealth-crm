@@ -46,6 +46,23 @@ export function PageHeading({
   )
 }
 
+/*
+ * Elevation, in two steps and no more.
+ *
+ * A card lifts off the page ground; a sheet lifts off a well inside a card.
+ * Both use the same two-layer shadow — a 1px contact edge plus a soft, offset
+ * ambient — so the page reads as paper on a desk rather than as outlined
+ * regions. Until 6 Sep 2026 the card shadow was 4% and the page ground was
+ * white (see layout.tsx), so cards had nothing to lift off and nothing to lift
+ * with; the wells inside them carried more tone than the page around them.
+ *
+ * SHEET is exported because DataSection and the members list must be the same
+ * object: one white surface with hairline rows, the only elevated thing in its
+ * well.
+ */
+export const SHEET =
+  'overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+
 export function Card({
   children,
   className = '',
@@ -59,7 +76,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] ${className}`}
+      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
       {title || action ? (
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -89,7 +106,7 @@ export function StatTile({
 }) {
   return (
     <div
-      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] ${className}`}
+      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
       <p className="text-xs font-medium text-neutral-500">{label}</p>
       <p className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
@@ -304,6 +321,31 @@ export function AccountTypeTile({ type }: { type: string }) {
       aria-hidden="true"
     >
       {superannuation ? <ShieldTickIcon className="h-[18px] w-[18px]" /> : <TrendUpIcon className="h-[18px] w-[18px]" />}
+    </span>
+  )
+}
+
+/**
+ * A person's initials in a circle — the leading tile for a member row.
+ *
+ * A circle, where accounts get a square: people and things should not look
+ * like the same kind of object. Neutral tone, because a member row has no
+ * type to colour by and a wash of brand orange down the members list would
+ * shout over the one pill that matters there, "Deceased".
+ */
+export function InitialsTile({ name }: { name: string }) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('')
+  return (
+    <span
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[11px] font-semibold tracking-wide text-neutral-600 ring-1 ring-neutral-200/70"
+      aria-hidden="true"
+    >
+      {initials || '·'}
     </span>
   )
 }

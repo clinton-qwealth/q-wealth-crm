@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { PlusIcon } from './icons'
+import { SHEET } from './ui'
 
 /**
  * The container pattern for a tab panel that holds records.
@@ -134,7 +135,7 @@ export function DataSection({
           the rows are its contents. The shadow is the sheet lifting off the
           tabs' grey ground — the only elevation move in the list, and the
           reason the rows need none of their own. */}
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]">
+      <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">{children}</ul>
         {total ? (
           /* Inside the sheet, on a tinted band: the total belongs to the list it

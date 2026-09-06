@@ -1109,10 +1109,14 @@ export function MemberPanel({
     : mode === 'search' ? 'Add an existing person'
     : (person?.display_name ?? 'Individual')
 
+  /* Both variants live inside the members SHEET (see GroupMembers), so neither
+     carries a border, background or radius of its own — the sheet has them.
+     Rings are inset: the sheet clips overflow, so an outer ring would be cut
+     off on the first and last rows. */
   const triggerClass =
     variant === 'row'
-      ? 'flex w-full items-baseline justify-between gap-3 rounded-md border border-neutral-200/70 bg-white px-2.5 py-1.5 text-left outline-none transition-colors hover:border-brand-300 hover:bg-brand-50/40 focus-visible:ring-2 focus-visible:ring-brand/30'
-      : 'mt-2 inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-white hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
+      ? 'flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition-colors hover:bg-brand-50/40 focus-visible:bg-brand-50/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30'
+      : 'flex w-full items-center gap-1 px-3 py-2 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50/60 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30'
 
   return (
     <>

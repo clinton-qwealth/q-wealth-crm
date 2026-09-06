@@ -49,10 +49,19 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         `background-attachment: fixed` is unreliable on iOS Safari and interacts
         badly with the backdrop-filter on the navbar; a fixed element behind the
         content gives the same effect predictably.
+
+        bg-blend-multiply is what makes the colour beneath the image matter.
+        investing.png is an OPAQUE WHITE image with faint grey marks, so on its
+        own it painted the page white and the bg-neutral-100 under it was never
+        seen — white cards on a white page, which is why the layout read flat
+        however the cards were styled. Multiplying lets the white take the
+        ground colour and the marks darken it slightly, so the page is a real
+        desk for the cards to sit on. Measured after the change: the ground
+        samples at #f5f5f5, not #ffffff.
       */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-neutral-100 bg-[url('/investing.png')] bg-cover bg-center bg-no-repeat"
+        className="pointer-events-none fixed inset-0 -z-10 bg-neutral-100 bg-[url('/investing.png')] bg-cover bg-center bg-no-repeat bg-blend-multiply"
       />
 
       <main className="grid flex-1 auto-rows-min grid-cols-4 gap-4 px-3 py-5 sm:grid-cols-8 sm:px-5 lg:grid-cols-12 lg:gap-6 lg:py-7">
