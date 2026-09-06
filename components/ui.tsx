@@ -158,7 +158,7 @@ export function StatTile({
   value,
   hint,
   title,
-  accent = false,
+  bare = false,
   size = 'md',
   className = '',
 }: {
@@ -172,22 +172,21 @@ export function StatTile({
    *  dropped for being noise under a headline. */
   title?: string
   /**
-   * A 3px brand rule across the top. The one accent a headline tile gets.
+   * No card at all: the label and figure sit straight on whatever is behind
+   * them. The wealth summary uses this in the group header.
    *
-   * How the wealth summary came to this, 6 Sep 2026: charcoal tiles with
-   * inverted type were tried and rejected on sight — as charcoal had been for
-   * the tab strip earlier the same day. Twice is a pattern: this palette does
-   * not want a dark surface anywhere. Emphasis here comes from SCALE (`size`)
-   * and ONE ACCENT (this), which is how a KPI pops on a light page without
-   * becoming a different object. Brand orange is a rule here, not a button —
-   * it reads as identity, not as an action.
+   * How it got here, 6 Sep 2026: charcoal tiles (rejected — twice in one day,
+   * as chrome and as accent), then white cards with a brand rule (rejected —
+   * still a row of boxes competing with the title). A headline figure does not
+   * need a container; the page's cards are for records. Emphasis comes from
+   * SCALE alone, which is the one thing every attempt had in common.
    */
-  accent?: boolean
+  bare?: boolean
   /**
    * `lg` steps the figure up to 30px at `xl` and above — the largest type on
    * the page, which is what a headline should be. It stays at 24px below `xl`:
-   * at 1024px three tiles beside the title are 172px wide and a seven-figure
-   * amount at 30px does not fit (measured), while at 1280px they are 230px and
+   * at 1024px three figures beside the title are 172px wide and a seven-figure
+   * amount at 30px does not fit (measured), while at 1280px they are 222px and
    * it does.
    */
   size?: 'md' | 'lg'
@@ -196,22 +195,23 @@ export function StatTile({
   return (
     <div
       title={title}
-      className={`overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
+      className={
+        bare
+          ? className
+          : `rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`
+      }
     >
-      {accent ? <div className="h-[3px] bg-brand" aria-hidden="true" /> : null}
-      <div className={accent ? 'p-4 pt-3' : 'p-4'}>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
-        <p
-          className={`mt-1 font-semibold tabular-nums tracking-tight text-neutral-900 ${
-            size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-2xl'
-          }`}
-        >
-          {value}
-        </p>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
+      <p
+        className={`mt-1 font-semibold tabular-nums tracking-tight text-neutral-900 ${
+          size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-2xl'
+        }`}
+      >
+        {value}
+      </p>
       {hint ? (
-          <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p>
-        ) : null}
-      </div>
+        <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p>
+      ) : null}
     </div>
   )
 }

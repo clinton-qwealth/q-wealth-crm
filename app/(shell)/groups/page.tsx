@@ -332,13 +332,27 @@ export default async function GroupsPage({
             /* Three headline figures. Today they are the same number — see
                wealthSummary for why, and for where property and debts join
                the arithmetic when they exist. The caveat is not printed
-               (decided 6 Sep: header and number only) but rides on the tile as
-               a tooltip, so it is one hover away rather than gone. */
-            <div className="grid grid-cols-3 gap-6">
+               (decided 6 Sep: header and number only) but rides on each figure
+               as a tooltip, so it is one hover away rather than gone.
+
+               No cards. Charcoal, then white cards with a brand rule, were both
+               tried and rejected on sight the same day; a row of boxes competes
+               with the title, however the boxes are styled. Bare figures on
+               the page ground, tied into one strip by hairline dividers, read
+               as part of the header rather than as furniture beside it. */
+            <div className="grid grid-cols-3 divide-x divide-neutral-300/80">
               {(() => {
                 const w = wealthSummary(accounts)
-                return [w.wealth, w.investments, w.assets].map((f) => (
-                  <StatTile key={f.label} label={f.label} value={f.value} title={f.note} accent size="lg" />
+                return [w.wealth, w.investments, w.assets].map((f, i) => (
+                  <StatTile
+                    key={f.label}
+                    label={f.label}
+                    value={f.value}
+                    title={f.note}
+                    bare
+                    size="lg"
+                    className={i === 0 ? 'pr-6' : 'px-6'}
+                  />
                 ))
               })()}
             </div>
