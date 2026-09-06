@@ -43,6 +43,12 @@ function stubClient() {
     insurance_policy_parties: [{ policy_id: 'i1' }],
     insurance_policies_summary: [{ policy_id: 'i1', label: 'Life' }],
     staff_users: [{ id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active' }],
+    group_notes_summary: [
+      { note_id: 'n1', note_type: 'file_note', title: 'Review meeting', occurred_at: '2026-07-06T02:00:00Z',
+        author_name: 'A Adviser', source: 'manual', workflow_id: 'w1', workflow_name: 'Annual review 2026',
+        workflow_status: 'in_progress' },
+    ],
+    workflows: [{ id: 'w1', name: 'Annual review 2026', workflow_type: 'annual_review', status: 'in_progress' }],
   }
 
   const builder = (table: string) => {
@@ -92,6 +98,10 @@ describe('/groups round-trip depth', () => {
        one more wave without failing, while still catching a fetch that gets
        chained onto the end of the sequence instead of joining a wave. */
     expect(calls.length).toBeGreaterThanOrEqual(10)
+    // The notes pair must actually have been reached, or the depth below is
+    // measuring a page that never fetched them.
+    expect(calls).toContain('group_notes_summary')
+    expect(calls).toContain('workflows')
     expect(depth).toBeLessThanOrEqual(5)
   })
 })

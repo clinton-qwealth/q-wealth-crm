@@ -503,3 +503,160 @@ export async function abandonVerification(id: string, reason?: string) {
   revalidatePath('/groups')
   return { ok: true as const }
 }
+
+// ---------------------------------------------------------------------------
+// File notes and workflows
+// ---------------------------------------------------------------------------
+
+export type NoteState = { error: string } | { ok: true } | null
+
+/**
+ * A date the adviser picked, as an instant Postgres can store.
+ *
+ * notes.occurred_at is timestamptz — a moment, not a calendar date — but a file
+ * note is dated by day. Turning one into the other has a trap: '2026-09-06'
+ * alone is read as midnight in the server's timezone (UTC), and midnight UTC is
+ * still the 5th anywhere west of Greenwich. Noon UTC is the same calendar date
+ * in every timezone from UTC-11 to UTC+12, so it is the only choice of instant
+ * that cannot render as the wrong day for anybody.
+ */
+function dayAsInstant(day: string) {
+  return `${day}T12:00:00Z`
+}
+
+/**
+ * Write a file note against the group.
+ *
+ * Subjects are what a note is *about*, and here that is the group: a file note
+ * added from a group's workspace concerns the household, not one named member.
+ * create_note_with_subjects also accepts party ids for a note about one person;
+ * that belongs with the member panel, which knows who is being looked at.
+ */
+export async function createFileNote(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const groupId = String(formData.get('group_id') ?? '')
+  const title = String(formData.get('title') ?? '').trim()
+  const body = String(formData.get('body') ?? '').trim()
+  const noteType = String(formData.get('note_type') ?? 'file_note')
+  const day = String(formData.get('occurred_on') ?? '').trim()
+  const workflowId = String(formData.get('workflow_id') ?? '') || null
+
+  if (!groupId) return { error: 'No group selected.' }
+  // Checked here as well as in the database: a server action is reachable
+  // without the form ever rendering, so `required` binds nobody.
+  if (!body) return { error: 'Write something in the note.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_note_with_subjects', {
+    p_body: body,
+    p_party_ids: null,
+    p_group_id: groupId,
+    p_title: title || null,
+    p_note_type: noteType,
+    p_occurred_at: day ? dayAsInstant(day) : null,
+    p_workflow_id: workflowId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/**
+ * Start a piece of work for the group.
+ *
+ * Everything about who may do this, and for which group, is in the database:
+ * create_workflow requires active staff and the insert policy requires access
+ * to the group. Nothing is decided here.
+ */
+export async function startWorkflow(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const groupId = String(formData.get('group_id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  const workflowType = String(formData.get('workflow_type') ?? 'ad_hoc')
+
+  if (!groupId) return { error: 'No group selected.' }
+  if (!name) return { error: 'Give the workflow a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_workflow', {
+    p_group_id: groupId,
+    p_workflow_type: workflowType,
+    p_name: name,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/**
+ * File a note under a workflow, or take it back out.
+ *
+ * Not an ordinary update: notes are append-only, and workflow_id is one of the
+ * two columns the trigger permits to change. The rule that a note and its
+ * workflow must concern the same client group lives in set_note_workflow, so it
+ * holds for the MCP and psql too — not only for this button.
+ */
+export async function attachNoteToWorkflow(
+  noteId: string,
+  workflowId: string | null,
+): Promise<NoteState> {
+  if (!noteId) return { error: 'No note selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_note_workflow', {
+    p_note_id: noteId,
+    p_workflow_id: workflowId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/**
+ * Start a workflow and file the note under it in one gesture.
+ *
+ * Two round trips rather than one, because the second needs the id the first
+ * returns. Worth it: the alternative is making an adviser start a workflow,
+ * find the note again and then attach it — three screens for one thought.
+ *
+ * NOT transactional, and it does not pretend to be. If the attach fails the
+ * workflow still exists, which is the harmless half: a workflow with no notes
+ * yet is an ordinary state, whereas a note filed under nothing is what the
+ * adviser was trying to fix. The error says which half happened.
+ */
+export async function fileNoteUnderNewWorkflow(
+  noteId: string,
+  groupId: string,
+  name: string,
+  workflowType: string,
+): Promise<NoteState> {
+  if (!noteId) return { error: 'No note selected.' }
+  if (!groupId) return { error: 'No group selected.' }
+  if (!name.trim()) return { error: 'Give the workflow a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data: workflowId, error } = await supabase.rpc('create_workflow', {
+    p_group_id: groupId,
+    p_workflow_type: workflowType,
+    p_name: name.trim(),
+  })
+  if (error) return { error: error.message }
+
+  const { error: attachError } = await supabase.rpc('set_note_workflow', {
+    p_note_id: noteId,
+    p_workflow_id: workflowId,
+  })
+  if (attachError) {
+    return { error: `The workflow was created, but the note could not be filed under it: ${attachError.message}` }
+  }
+
+  revalidatePath('/groups')
+  return { ok: true }
+}

@@ -8,6 +8,9 @@ import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
 import { MemberPanel } from '@/components/member-panel'
 import { getGroupMemberDetail, type PersonDetail } from '@/lib/person'
+import { getGroupNotes } from '@/lib/notes'
+import { FileNotes } from '@/components/file-notes'
+import { WorkflowSection } from '@/components/workflow-section'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
@@ -287,22 +290,26 @@ export default async function GroupsPage({
      panel needs the whole record, not the rolled-up name string the card used
      before — individuals only, since a trust or company in the group has no
      persons row and those keep rendering from `members`. */
-  const [{ phone, adviser }, memberDetail, accountsData]: [
+  const [{ phone, adviser }, memberDetail, accountsData, notesData]: [
     Awaited<ReturnType<typeof getGroupContacts>>,
     PersonDetail[],
     Awaited<ReturnType<typeof getAccountsData>>,
+    Awaited<ReturnType<typeof getGroupNotes>>,
   ] = group
     ? await Promise.all([
         getGroupContacts(group.group_id),
         getGroupMemberDetail(group.group_id),
         getAccountsData(group.group_id),
+        getGroupNotes(group.group_id),
       ])
     : [
         { phone: null, adviser: null },
         [],
         { accounts: [], policies: [], members: [], providers: [] },
+        { notes: [], workflows: [] },
       ]
   const { accounts, policies, members: ownerOptions, providers } = accountsData
+  const { notes, workflows } = notesData
 
 
   return (
@@ -491,15 +498,10 @@ export default async function GroupsPage({
               {
                 id: 'workflows',
                 label: 'Workflows',
-                panel: (
-                  <DataSection
-                    addLabel="Start workflow"
-                    empty={{
-                      title: 'No workflows running',
-                      description:
-                        'Onboarding, annual reviews and advice production appear here once started.',
-                    }}
-                  />
+                panel: group ? (
+                  <WorkflowSection groupId={group.group_id} workflows={workflows} />
+                ) : (
+                  <Placeholder>No client group is visible to you yet</Placeholder>
                 ),
               },
               {
@@ -645,10 +647,14 @@ export default async function GroupsPage({
         </Card>
       </div>
 
-      {/* Right — reserved */}
+      {/* Right — the group's file notes */}
       <div className="col-span-full lg:col-span-3">
         <Card>
-          <Placeholder className="h-56">Reserved</Placeholder>
+          {group ? (
+            <FileNotes groupId={group.group_id} notes={notes} workflows={workflows} />
+          ) : (
+            <Placeholder className="h-56">Reserved</Placeholder>
+          )}
         </Card>
       </div>
     </>

@@ -162,8 +162,16 @@ export function DataRow({
   badge?: ReactNode
 }) {
   return (
-    <li className="flex items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 py-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
-      <span className="min-w-0">
+    /* Wraps rather than truncating into uselessness.
+       In the centre column there is room for the name and its figure on one
+       line, and nothing wraps. In the narrow right-hand column a note's title
+       and byline were being cut to "Annual review meet…" / "3 Sep 2026 ·
+       Clinton Ha…" to make room for a workflow pill — losing exactly the
+       metadata the row exists to show. The text keeps a 10rem basis, so when
+       the meta cannot fit beside it the meta drops to its own line and stays
+       right-aligned instead. */
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-neutral-200 bg-white px-3 py-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+      <span className="min-w-0 flex-1 basis-40">
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-neutral-900">{primary}</span>
           {badge}
@@ -173,7 +181,9 @@ export function DataRow({
         ) : null}
       </span>
       {meta ? (
-        <span className="shrink-0 text-sm font-medium tabular-nums text-neutral-900">{meta}</span>
+        <span className="ml-auto shrink-0 text-sm font-medium tabular-nums text-neutral-900">
+          {meta}
+        </span>
       ) : null}
     </li>
   )
