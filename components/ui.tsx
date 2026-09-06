@@ -188,10 +188,11 @@ export function StatTile({
    * should be the page title, and a figure that outweighs the name of the
    * client it describes has the hierarchy backwards.
    *
-   * `sm` is the supporting figure: 16px, with a smaller label. In the group
-   * header Total wealth is the headline at `lg` and the two figures that make
-   * it up — investments and assets — stack beside it at `sm`, so the eye reads
-   * one number first and two in support, rather than three equals.
+   * `sm` is a supporting figure: 16px, with a smaller label. The group header
+   * used it briefly for investments and assets stacked beside a `lg` Total
+   * wealth; that was reversed in favour of three equals, so nothing uses `sm`
+   * at the time of writing. Kept: it is the right size for a secondary figure
+   * and the next one will want it.
    */
   size?: 'sm' | 'md' | 'lg'
   className?: string

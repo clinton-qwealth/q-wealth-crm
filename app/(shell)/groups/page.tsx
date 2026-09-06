@@ -340,21 +340,24 @@ export default async function GroupsPage({
                with the title, however the boxes are styled. Bare figures on
                the page ground, tied into one strip by hairline dividers, read
                as part of the header rather than as furniture beside it. */
-            <div className="flex items-center divide-x divide-neutral-300/80">
+            <div className="grid grid-cols-3 divide-x divide-neutral-300/80">
               {(() => {
                 const w = wealthSummary(accounts)
-                return (
-                  <>
-                    {/* The headline. */}
-                    <StatTile label={w.wealth.label} value={w.wealth.value} title={w.wealth.note} bare size="lg" className="pr-6" />
-                    {/* Its two components, stacked and smaller: one number
-                        read first, two in support, rather than three equals. */}
-                    <div className="flex flex-col gap-2 pl-6">
-                      <StatTile label={w.investments.label} value={w.investments.value} title={w.investments.note} bare size="sm" />
-                      <StatTile label={w.assets.label} value={w.assets.value} title={w.assets.note} bare size="sm" />
-                    </div>
-                  </>
-                )
+                /* Three equals, one size. A headline-plus-two-in-support layout
+                   was tried and reversed: the reader wanted the three figures
+                   weighed side by side, not ranked. The dividers still say
+                   "one set". */
+                return [w.wealth, w.investments, w.assets].map((f, i) => (
+                  <StatTile
+                    key={f.label}
+                    label={f.label}
+                    value={f.value}
+                    title={f.note}
+                    bare
+                    size="lg"
+                    className={i === 0 ? 'pr-6' : 'px-6'}
+                  />
+                ))
               })()}
             </div>
           ) : undefined
