@@ -32,6 +32,7 @@ export function Tabs({
   alignFirst = false,
   bleed = true,
   ground = false,
+  chrome = 'light',
 }: {
   items: TabItem[]
   label: string
@@ -79,6 +80,16 @@ export function Tabs({
    * rather than records, and its ground was deliberately left white.
    */
   ground?: boolean
+  /**
+   * The strip's own treatment, kept separate from `ground` because the two are
+   * adjusted independently: the body is a field the records sit on, the strip
+   * is chrome above it.
+   *
+   * `charcoal` inverts the label colours with it. A dark strip with dark labels
+   * is not a variant, it is unreadable — so the two move together rather than
+   * being two props a caller could set inconsistently.
+   */
+  chrome?: 'light' | 'charcoal'
 }) {
   const [active, setActive] = useState(items[0]?.id)
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
@@ -165,8 +176,17 @@ export function Tabs({
 
   /* The strip is one step darker than the ground it caps. Reversed — a lighter
      strip over a darker body — the strip reads as part of the content rather
-     than as the chrome above it. */
-  const stripTone = ground ? 'bg-neutral-200/70' : 'bg-neutral-50'
+     than as the chrome above it.
+
+     Charcoal drops the bottom border with it: a light hairline under a dark bar
+     reads as a seam the design did not intend, and the bar's own darkness
+     already separates it from the body. */
+  const dark = chrome === 'charcoal'
+  const stripTone = dark
+    ? 'bg-neutral-800 border-neutral-800'
+    : ground
+      ? 'bg-neutral-200/70 border-neutral-200'
+      : 'bg-neutral-50 border-neutral-200'
 
   return (
     <div className={fill ? 'flex min-h-0 flex-1 flex-col' : undefined}>
@@ -175,7 +195,7 @@ export function Tabs({
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className={`no-scrollbar relative ${pull} ${pad} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 ${stripTone} pt-1`}
+        className={`no-scrollbar relative ${pull} ${pad} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b ${stripTone} pt-1`}
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
@@ -194,7 +214,13 @@ export function Tabs({
               className={[
                 'shrink-0 rounded-t px-3 py-2 text-sm font-medium outline-none transition-colors',
                 'focus-visible:bg-brand-50 focus-visible:text-brand-700',
-                selected ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-800',
+                dark
+                  ? selected
+                    ? 'text-white'
+                    : 'text-neutral-400 hover:text-neutral-100'
+                  : selected
+                    ? 'text-neutral-900'
+                    : 'text-neutral-500 hover:text-neutral-800',
               ].join(' ')}
             >
               {tab.label}

@@ -494,6 +494,7 @@ export default async function GroupsPage({
         <Card>
           <Tabs
             ground
+            chrome="charcoal"
             label="Group detail"
             items={[
               {
