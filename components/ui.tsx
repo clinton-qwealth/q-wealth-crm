@@ -64,7 +64,7 @@ export function PageHeading({
 
   if (summary) {
     return (
-      <div className="col-span-full grid grid-cols-1 items-end gap-4 lg:grid-cols-12 lg:gap-6">
+      <div className="col-span-full grid grid-cols-1 items-center gap-4 lg:grid-cols-12 lg:gap-6">
         <div className="flex flex-wrap items-end justify-between gap-3 lg:col-span-5">
           {heading}
           {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
@@ -183,11 +183,12 @@ export function StatTile({
    */
   bare?: boolean
   /**
-   * `lg` steps the figure up to 30px at `xl` and above — the largest type on
-   * the page, which is what a headline should be. It stays at 24px below `xl`,
-   * where the space beside the title is narrower (measured).
+   * `lg` is the headline: 24px at `xl` and above, 20px below. It was 30px for
+   * an afternoon and came down a step on sight — the largest type on the page
+   * should be the page title, and a figure that outweighs the name of the
+   * client it describes has the hierarchy backwards.
    *
-   * `sm` is the supporting figure: 18px, with a smaller label. In the group
+   * `sm` is the supporting figure: 16px, with a smaller label. In the group
    * header Total wealth is the headline at `lg` and the two figures that make
    * it up — investments and assets — stack beside it at `sm`, so the eye reads
    * one number first and two in support, rather than three equals.
@@ -213,7 +214,7 @@ export function StatTile({
       </p>
       <p
         className={`font-semibold tabular-nums tracking-tight text-neutral-900 ${
-          size === 'lg' ? 'mt-1 text-2xl xl:text-3xl' : size === 'sm' ? 'mt-0.5 text-lg' : 'mt-1 text-2xl'
+          size === 'lg' ? 'mt-1 text-xl xl:text-2xl' : size === 'sm' ? 'mt-0.5 text-base' : 'mt-1 text-2xl'
         }`}
       >
         {value}

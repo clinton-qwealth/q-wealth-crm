@@ -340,7 +340,7 @@ export default async function GroupsPage({
                with the title, however the boxes are styled. Bare figures on
                the page ground, tied into one strip by hairline dividers, read
                as part of the header rather than as furniture beside it. */
-            <div className="flex items-end divide-x divide-neutral-300/80">
+            <div className="flex items-center divide-x divide-neutral-300/80">
               {(() => {
                 const w = wealthSummary(accounts)
                 return (
