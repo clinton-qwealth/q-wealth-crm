@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, PolicyTile } from '@/components/ui'
+import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, PolicyTile, StatTile } from '@/components/ui'
+import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
@@ -326,6 +327,21 @@ export default async function GroupsPage({
           ) : null
         }
         description={group ? undefined : 'No client group is visible to you yet.'}
+        summary={
+          group ? (
+            /* Three headline figures. Today they are the same number — see
+               wealthSummary for why, and for where property and debts join
+               the arithmetic when they exist. Each tile says what it lacks. */
+            <div className="grid grid-cols-3 gap-3">
+              {(() => {
+                const w = wealthSummary(accounts)
+                return [w.wealth, w.investments, w.assets].map((f) => (
+                  <StatTile key={f.label} label={f.label} value={f.value} hint={f.note} />
+                ))
+              })()}
+            </div>
+          ) : undefined
+        }
       />
 
       {/* Left — group profile */}

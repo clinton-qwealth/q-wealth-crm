@@ -26,6 +26,7 @@ export function PageHeading({
   description,
   meta,
   actions,
+  summary,
 }: {
   eyebrow?: string
   title: string
@@ -34,10 +35,20 @@ export function PageHeading({
    *  which renders a paragraph — pills inside a <p> would be wrong markup. */
   meta?: ReactNode
   actions?: ReactNode
+  /**
+   * Headline figures sharing the header row, e.g. a group's wealth summary.
+   *
+   * With a summary the header becomes a grid: the title takes the first seven
+   * of twelve columns and the summary the last five — the nearest grid stop
+   * to "cards start three-fifths of the way across", which is what was asked
+   * for. Below `xl` the summary drops under the title at full width: at 1024px
+   * the three tiles would be 124px each and a seven-figure amount overflowed
+   * them (measured), whereas the three-column layout beneath still has room.
+   */
+  summary?: ReactNode
 }) {
-  return (
-    <div className="col-span-full flex flex-wrap items-end justify-between gap-3">
-      <div>
+  const heading = (
+    <div>
         {eyebrow ? (
           <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">
             {eyebrow}
@@ -50,7 +61,24 @@ export function PageHeading({
         {description ? (
           <p className="mt-1 max-w-prose text-sm text-neutral-500">{description}</p>
         ) : null}
+    </div>
+  )
+
+  if (summary) {
+    return (
+      <div className="col-span-full grid grid-cols-1 items-end gap-4 xl:grid-cols-12 xl:gap-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 xl:col-span-7">
+          {heading}
+          {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        </div>
+        <div className="xl:col-span-5">{summary}</div>
       </div>
+    )
+  }
+
+  return (
+    <div className="col-span-full flex flex-wrap items-end justify-between gap-3">
+      {heading}
       {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
     </div>
   )
@@ -142,11 +170,14 @@ export function StatTile({
     <div
       className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
+      {/* One size down from before: three of these share five of twelve columns
+          on the group page, about 180px each, and a seven-figure amount at
+          text-2xl did not fit. Still the largest type on the page. */}
+      <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-neutral-900">
         {value}
       </p>
-      {hint ? <p className="mt-1 text-xs text-neutral-400">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p> : null}
     </div>
   )
 }
