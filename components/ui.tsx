@@ -38,12 +38,10 @@ export function PageHeading({
   /**
    * Headline figures sharing the header row, e.g. a group's wealth summary.
    *
-   * With a summary the header becomes a grid: the title takes the first seven
-   * of twelve columns and the summary the last five — the nearest grid stop
-   * to "cards start three-fifths of the way across", which is what was asked
-   * for. Below `xl` the summary drops under the title at full width: at 1024px
-   * the three tiles would be 124px each and a seven-figure amount overflowed
-   * them (measured), whereas the three-column layout beneath still has room.
+   * With a summary the header becomes a grid: the title takes the first five
+   * of twelve columns and the summary the last seven — cards start two-fifths
+   * of the way across (41.7%), which is where they were asked to start. Below
+   * `lg` the summary drops under the title at full width.
    */
   summary?: ReactNode
 }) {
@@ -66,12 +64,12 @@ export function PageHeading({
 
   if (summary) {
     return (
-      <div className="col-span-full grid grid-cols-1 items-end gap-4 xl:grid-cols-12 xl:gap-6">
-        <div className="flex flex-wrap items-end justify-between gap-3 xl:col-span-7">
+      <div className="col-span-full grid grid-cols-1 items-end gap-4 lg:grid-cols-12 lg:gap-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 lg:col-span-5">
           {heading}
           {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
         </div>
-        <div className="xl:col-span-5">{summary}</div>
+        <div className="lg:col-span-7">{summary}</div>
       </div>
     )
   }
@@ -159,22 +157,27 @@ export function StatTile({
   label,
   value,
   hint,
+  title,
   className = '',
 }: {
   label: string
   value: string
+  /** Printed beneath the value. */
   hint?: string
+  /** NOT printed — a native tooltip on the tile. For a caveat that should be
+   *  discoverable without being on the page: the wealth summary's "no
+   *  liabilities recorded yet" lives here after the printed version was
+   *  dropped for being noise under a headline. */
+  title?: string
   className?: string
 }) {
   return (
     <div
+      title={title}
       className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
       <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
-      {/* One size down from before: three of these share five of twelve columns
-          on the group page, about 180px each, and a seven-figure amount at
-          text-2xl did not fit. Still the largest type on the page. */}
-      <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-neutral-900">
+      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
         {value}
       </p>
       {hint ? <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p> : null}
