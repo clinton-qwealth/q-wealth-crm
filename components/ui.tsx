@@ -184,12 +184,15 @@ export function StatTile({
   bare?: boolean
   /**
    * `lg` steps the figure up to 30px at `xl` and above — the largest type on
-   * the page, which is what a headline should be. It stays at 24px below `xl`:
-   * at 1024px three figures beside the title are 172px wide and a seven-figure
-   * amount at 30px does not fit (measured), while at 1280px they are 222px and
-   * it does.
+   * the page, which is what a headline should be. It stays at 24px below `xl`,
+   * where the space beside the title is narrower (measured).
+   *
+   * `sm` is the supporting figure: 18px, with a smaller label. In the group
+   * header Total wealth is the headline at `lg` and the two figures that make
+   * it up — investments and assets — stack beside it at `sm`, so the eye reads
+   * one number first and two in support, rather than three equals.
    */
-  size?: 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg'
   className?: string
 }) {
   return (
@@ -201,10 +204,16 @@ export function StatTile({
           : `rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`
       }
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
       <p
-        className={`mt-1 font-semibold tabular-nums tracking-tight text-neutral-900 ${
-          size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-2xl'
+        className={`font-semibold uppercase tracking-wider text-neutral-500 ${
+          size === 'sm' ? 'text-[10px]' : 'text-[11px]'
+        }`}
+      >
+        {label}
+      </p>
+      <p
+        className={`font-semibold tabular-nums tracking-tight text-neutral-900 ${
+          size === 'lg' ? 'mt-1 text-2xl xl:text-3xl' : size === 'sm' ? 'mt-0.5 text-lg' : 'mt-1 text-2xl'
         }`}
       >
         {value}
