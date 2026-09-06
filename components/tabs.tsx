@@ -164,14 +164,14 @@ export function Tabs({
         : `-mx-4 px-4 pb-4 -mb-4 rounded-b-[7px] ${WELL}`
       : WELL
 
-  /* The strip is one step darker than the ground it caps. Reversed — a lighter
-     strip over a darker body — the strip reads as part of the content rather
-     than as the chrome above it.
+  /* The strip is one step darker than the well it caps (see WELL in ui.tsx for
+     why the well is so light). Reversed — a lighter strip over a darker body —
+     the strip reads as part of the content rather than as the chrome above it.
 
      A charcoal strip with inverted labels was tried on 6 Sep 2026 and rejected:
      it measured well (15:1 labels, 4.2:1 indicator) but a dark bar under a white
      top nav read as a foreign element rather than as this card's chrome. */
-  const stripTone = ground ? 'bg-neutral-200 border-neutral-300/70' : 'bg-neutral-50 border-neutral-200'
+  const stripTone = ground ? 'bg-neutral-100 border-neutral-200' : 'bg-neutral-50 border-neutral-200'
 
   return (
     <div className={fill ? 'flex min-h-0 flex-1 flex-col' : undefined}>

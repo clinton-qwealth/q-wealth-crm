@@ -78,14 +78,24 @@ export const SHEET =
  * tabs body and the members list, so the two wells on the page are the same
  * tone by construction.
  *
- * It is darker than the PAGE ground on purpose. On 6 Sep 2026 both were
- * #f5f5f5 and the tabs body dissolved into the page — a well the same colour as
- * the desk outside the card does not read as a well. It has to be the darkest
- * surface in its card, and distinguishably darker than the page beyond it, or
- * the card's thin edge is all that separates them. neutral-200/80 composites to
- * #eaeaea on white.
+ * It is LIGHTER than the page ground, and only barely off white. Three tones
+ * were tried on 6 Sep 2026 and the history is the reason for the value:
+ *
+ *   #f5f5f5  — the same as the page. The well dissolved into it; only the
+ *              card's hairline edge separated them.
+ *   #eaeaea  — darker than the page. Read as a continuation of the page's
+ *              background image, whose chart marks sit at about that grey.
+ *   #fafafa  — lighter than the page. The card reads as one clean white object
+ *              lifted off the grey, with a faint inset where the records sit.
+ *
+ * The lesson: a well cannot be told apart from the page by being a nearby
+ * grey in either direction. What separates the SHEETS is their shadow and
+ * border — that is what the ledger was built to do — so the well's job is now
+ * only to hint at an inset, not to carry contrast. A cool slate tint was
+ * offered as the alternative (separation by hue rather than tone) and declined
+ * to keep the palette in one neutral family.
  */
-export const WELL = 'bg-neutral-200/80'
+export const WELL = 'bg-neutral-50'
 
 export function Card({
   children,
