@@ -22,6 +22,14 @@
   --brand-500: #e85524;
   --brand-600: #c5481f;
   --brand-700: #a33c19;
+
+  /* Gold: money. Investment accounts wear it. Deliberately NOT amber — amber is
+     the warning tone on the status pills, and a gold tile next to a Suspended
+     pill must not read as two warnings. Warmer and slightly greener than amber,
+     the 700 clears 4.5:1 on the 50 so a glyph in it is always legible. */
+  --gold-50: #fbf6e4;
+  --gold-100: #f3e6b8;
+  --gold-700: #8a6508;
 }
 
 @theme inline {
@@ -35,6 +43,10 @@
   --color-brand: var(--brand-500);
   --color-brand-600: var(--brand-600);
   --color-brand-700: var(--brand-700);
+
+  --color-gold-50: var(--gold-50);
+  --color-gold-100: var(--gold-100);
+  --color-gold-700: var(--gold-700);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

@@ -87,6 +87,15 @@ describe('file notes list', () => {
     expect(row.textContent).not.toContain('Annual review 2026')
   })
 
+  test('a note row leads with a glyph tile for its kind, ahead of the text', () => {
+    show([unfiled]) // a phone call
+    const first = rows()[0].firstElementChild!
+    expect(first.getAttribute('aria-hidden')).toBe('true')
+    expect(first.querySelector('svg')).toBeTruthy()
+    // Decorative: the tile adds nothing to the row's text.
+    expect(first.textContent).toBe('')
+  })
+
   test('an untitled note falls back to its kind rather than rendering nameless', () => {
     show([{ ...unfiled, title: null }])
     expect(rows()[0].textContent).toContain('Phone call')

@@ -203,3 +203,56 @@ export function UmbrellaIcon({ className = 'h-4 w-4' }: { className?: string }) 
     </svg>
   )
 }
+
+const STROKE = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+
+/** A page with lines: a file note. */
+export function DocumentIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M5 2.5h7l3.5 3.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z" />
+      <path d="M12 2.5V6h3.5M7.5 10h5M7.5 13h5" />
+    </svg>
+  )
+}
+
+/** Two people: a meeting. */
+export function MeetingIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <circle cx="7" cy="7" r="2.5" />
+      <circle cx="13.5" cy="8" r="2" />
+      <path d="M2.5 16c.5-3 2.5-4.5 4.5-4.5S11 13 11.5 16M12 16c.2-2 1.2-3.2 2.5-3.5 1.6-.3 2.8.8 3 2.5" />
+    </svg>
+  )
+}
+
+/** An envelope: an email record. */
+export function EnvelopeIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+      <path d="m3 5.5 7 5.5 7-5.5" />
+    </svg>
+  )
+}
+
+/** A ticked box: a task note. */
+export function TaskIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="3" y="3" width="14" height="14" rx="2" />
+      <path d="m6.5 10 2.3 2.3L13.5 7.5" />
+    </svg>
+  )
+}
+
+/** A pen over lines: any other kind of note. */
+export function NoteIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3.5 16.5h13M3.5 13h6" />
+      <path d="m12.2 4.3 2.5 2.5-6.2 6.2H6v-2.5l6.2-6.2Z" />
+    </svg>
+  )
+}

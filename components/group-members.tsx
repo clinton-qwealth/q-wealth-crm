@@ -1,6 +1,6 @@
 import type { PersonDetail } from '@/lib/person'
 import { MemberPanel } from './member-panel'
-import { InitialsTile, Pill, SHEET } from './ui'
+import { InitialsTile, Pill, SHEET, WELL } from './ui'
 import { PlusIcon } from './icons'
 
 /**
@@ -32,7 +32,7 @@ export function GroupMembers({
   const role = (m: PersonDetail) => (m.member_role ?? '').replace(/_/g, ' ')
 
   return (
-    <div className="mt-5 rounded-lg bg-neutral-100 p-3">
+    <div className={`mt-5 rounded-lg p-3 ${WELL}`}>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Members</h3>
 
       <div className={`mt-2.5 ${SHEET}`}>

@@ -8,7 +8,7 @@ import {
 import type { NoteHeader, WorkflowOption, WorkflowStatus, WorkflowType } from '@/lib/notes'
 import { DataRow, DataSection } from './data-section'
 import { AddNoteModal, NOTE_TYPE_LABEL } from './add-note-modal'
-import { Pill } from './ui'
+import { NoteTypeTile, Pill } from './ui'
 import { PlusIcon } from './icons'
 
 export const WORKFLOW_TYPE_LABEL: Record<WorkflowType, string> = {
@@ -341,6 +341,7 @@ export function FileNotes({
           ? notes.map((n) => (
               <DataRow
                 key={n.note_id}
+                leading={<NoteTypeTile type={n.note_type} />}
                 /* An untitled note is not nameless — its kind is the next most
                    useful thing to read, and every note has one. */
                 primary={n.title ?? NOTE_TYPE_LABEL[n.note_type] ?? 'Note'}

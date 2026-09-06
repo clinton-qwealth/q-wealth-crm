@@ -1,5 +1,15 @@
 import type { ReactNode } from 'react'
-import { ShieldTickIcon, TrendUpIcon, UmbrellaIcon } from './icons'
+import {
+  DocumentIcon,
+  EnvelopeIcon,
+  MeetingIcon,
+  NoteIcon,
+  PhoneIcon,
+  ShieldTickIcon,
+  TaskIcon,
+  TrendUpIcon,
+  UmbrellaIcon,
+} from './icons'
 
 /**
  * Wireframe primitives.
@@ -62,6 +72,20 @@ export function PageHeading({
  */
 export const SHEET =
   'overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+
+/*
+ * WELL is the ground a sheet sits on, inside a card. One token, used by the
+ * tabs body and the members list, so the two wells on the page are the same
+ * tone by construction.
+ *
+ * It is darker than the PAGE ground on purpose. On 6 Sep 2026 both were
+ * #f5f5f5 and the tabs body dissolved into the page — a well the same colour as
+ * the desk outside the card does not read as a well. It has to be the darkest
+ * surface in its card, and distinguishably darker than the page beyond it, or
+ * the card's thin edge is all that separates them. neutral-200/80 composites to
+ * #eaeaea on white.
+ */
+export const WELL = 'bg-neutral-200/80'
 
 export function Card({
   children,
@@ -303,9 +327,10 @@ export function AccountValue({
  * because the problem was hierarchy, not tone. A tile gives each record an
  * anchor and a spot of colour without adding a single border.
  *
- * Tones: superannuation borrows the success green (protected, long-horizon
- * money); investment takes the brand orange. Both are the 50/700 pair the pills
- * already use, so the tiles stay in step with the rest of the palette.
+ * Tones, each 50/100/700 so they sit alike: superannuation borrows the success
+ * green (protected, long-horizon money); investment is GOLD, because it is
+ * money — see the token in globals.css for why that is not amber. Brand orange
+ * is kept out of the tiles altogether so it still means "action" on this page.
  */
 const TILE = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1'
 
@@ -316,7 +341,7 @@ export function AccountTypeTile({ type }: { type: string }) {
       className={`${TILE} ${
         superannuation
           ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-          : 'bg-brand-50 text-brand-700 ring-brand-100'
+          : 'bg-gold-50 text-gold-700 ring-gold-100'
       }`}
       aria-hidden="true"
     >
@@ -351,12 +376,37 @@ export function InitialsTile({ name }: { name: string }) {
 }
 
 /** Insurance has no per-policy type to colour by — a policy bundles covers —
- *  so one neutral umbrella tile gives the rows the same anchor as accounts
- *  without inventing a distinction the data does not make. */
+ *  so one umbrella tile gives the rows the same anchor as accounts without
+ *  inventing a distinction the data does not make. Blue: cover, shelter,
+ *  the one colour on the page that is neither money nor a state. */
 export function PolicyTile() {
   return (
-    <span className={`${TILE} bg-neutral-100 text-neutral-600 ring-neutral-200/70`} aria-hidden="true">
+    <span className={`${TILE} bg-sky-50 text-sky-700 ring-sky-100`} aria-hidden="true">
       <UmbrellaIcon className="h-[18px] w-[18px]" />
+    </span>
+  )
+}
+
+/**
+ * A note's kind as a glyph. Neutral, like a person's initials: a note records
+ * something that happened, not a category of holding, and the right-hand
+ * column should stay calm beside the coloured centre. The glyph carries the
+ * difference between a call, a meeting and an email; the tone does not.
+ */
+const NOTE_GLYPH: Record<string, (p: { className?: string }) => ReactNode> = {
+  file_note: DocumentIcon,
+  meeting_summary: MeetingIcon,
+  phone_call: PhoneIcon,
+  email_record: EnvelopeIcon,
+  task_note: TaskIcon,
+  other: NoteIcon,
+}
+
+export function NoteTypeTile({ type }: { type: string }) {
+  const Glyph = NOTE_GLYPH[type] ?? NoteIcon
+  return (
+    <span className={`${TILE} bg-neutral-100 text-neutral-600 ring-neutral-200/70`} aria-hidden="true">
+      <Glyph className="h-[18px] w-[18px]" />
     </span>
   )
 }
