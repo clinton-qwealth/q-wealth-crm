@@ -338,7 +338,7 @@ export default async function GroupsPage({
               {(() => {
                 const w = wealthSummary(accounts)
                 return [w.wealth, w.investments, w.assets].map((f) => (
-                  <StatTile key={f.label} label={f.label} value={f.value} title={f.note} tone="dark" />
+                  <StatTile key={f.label} label={f.label} value={f.value} title={f.note} accent size="lg" />
                 ))
               })()}
             </div>

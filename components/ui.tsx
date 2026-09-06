@@ -158,7 +158,8 @@ export function StatTile({
   value,
   hint,
   title,
-  tone = 'light',
+  accent = false,
+  size = 'md',
   className = '',
 }: {
   label: string
@@ -171,46 +172,46 @@ export function StatTile({
    *  dropped for being noise under a headline. */
   title?: string
   /**
-   * `dark` is charcoal with inverted type, for a headline figure that has to
-   * pop against a page of white cards. The group workspace uses it for the
-   * wealth summary. Not the default: on the home page four tiles sit alone
-   * and have nothing to pop against.
+   * A 3px brand rule across the top. The one accent a headline tile gets.
    *
-   * A charcoal TAB STRIP was tried and rejected on 6 Sep 2026 — a full-width
-   * dark bar under a white nav read as a foreign element. Three small dark
-   * tiles are a different thing: accents, not chrome, and the eye is meant to
-   * go to them first.
+   * How the wealth summary came to this, 6 Sep 2026: charcoal tiles with
+   * inverted type were tried and rejected on sight — as charcoal had been for
+   * the tab strip earlier the same day. Twice is a pattern: this palette does
+   * not want a dark surface anywhere. Emphasis here comes from SCALE (`size`)
+   * and ONE ACCENT (this), which is how a KPI pops on a light page without
+   * becoming a different object. Brand orange is a rule here, not a button —
+   * it reads as identity, not as an action.
    */
-  tone?: 'light' | 'dark'
+  accent?: boolean
+  /**
+   * `lg` steps the figure up to 30px at `xl` and above — the largest type on
+   * the page, which is what a headline should be. It stays at 24px below `xl`:
+   * at 1024px three tiles beside the title are 172px wide and a seven-figure
+   * amount at 30px does not fit (measured), while at 1280px they are 230px and
+   * it does.
+   */
+  size?: 'md' | 'lg'
   className?: string
 }) {
-  const dark = tone === 'dark'
   return (
     <div
       title={title}
-      className={`rounded-lg border p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${
-        dark ? 'border-neutral-800 bg-neutral-800' : 'border-neutral-200 bg-white'
-      } ${className}`}
+      className={`overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
-      <p
-        className={`text-[11px] font-semibold uppercase tracking-wider ${
-          dark ? 'text-neutral-400' : 'text-neutral-500'
-        }`}
-      >
-        {label}
-      </p>
-      <p
-        className={`mt-1 text-2xl font-semibold tabular-nums tracking-tight ${
-          dark ? 'text-white' : 'text-neutral-900'
-        }`}
-      >
-        {value}
-      </p>
-      {hint ? (
-        <p className={`mt-1 text-xs leading-snug ${dark ? 'text-neutral-400' : 'text-neutral-400'}`}>
-          {hint}
+      {accent ? <div className="h-[3px] bg-brand" aria-hidden="true" /> : null}
+      <div className={accent ? 'p-4 pt-3' : 'p-4'}>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
+        <p
+          className={`mt-1 font-semibold tabular-nums tracking-tight text-neutral-900 ${
+            size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-2xl'
+          }`}
+        >
+          {value}
         </p>
-      ) : null}
+      {hint ? (
+          <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p>
+        ) : null}
+      </div>
     </div>
   )
 }
