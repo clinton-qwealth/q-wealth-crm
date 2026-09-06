@@ -1,4 +1,4 @@
-import type { VerificationEntry } from '@/lib/person'
+import type { PersonDetail, VerificationEntry } from '@/lib/person'
 import { describe, expect, test, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -23,7 +23,10 @@ const actions = await import('@/app/(shell)/groups/actions')
 const { MemberPanel } = await import('@/components/member-panel')
 const { default: React } = await import('react')
 
-const person = {
+/* Typed, so the fixture has to keep up with PersonDetail rather than drifting
+   into a shape the app no longer produces — and so a field can be overridden
+   with a real value instead of the null TypeScript would otherwise infer. */
+const person: PersonDetail = {
   party_id: 'p1',
   display_name: 'Pri Drawertest',
   is_person: true,
@@ -59,6 +62,8 @@ const person = {
   address: { line1: '12 Bay Street', line2: null, suburb: 'Mosman', state: 'NSW', postcode: '2088' },
   roles: [{ role: 'client', status: 'active', start_date: '2026-09-02' }],
   other_groups: [{ name: 'Faketrade Pty Ltd Group', member_role: 'director' }],
+  postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
+  postal_same_as_residential: true,
   verifications: [],
 }
 
@@ -329,6 +334,88 @@ describe('MemberPanel', () => {
       await new Promise((r) => setTimeout(r, 250))
       expect(lookup.calls.filter((u) => u.includes('/api/address')).length).toBe(0)
       vi.unstubAllGlobals()
+    })
+  })
+
+  describe('the postal address', () => {
+    async function openPostal(person_: typeof person) {
+      const user = userEvent.setup()
+      render(
+        <MemberPanel groupId="g1" members={[person_]} initialMode="view" initialPartyId="p1">
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Contact' }))
+      return user
+    }
+
+    test('reads as "Same as residential" when the tick is set', async () => {
+      await openPostal(person)
+      expect(screen.getByText('Same as residential')).toBeDefined()
+    })
+
+    test('shows the postal address when it differs', async () => {
+      await openPostal({
+        ...person,
+        postal_same_as_residential: false,
+        postal_address: { line1: 'PO Box 42', line2: null, suburb: 'Neutral Bay', state: 'NSW', postcode: '2089' },
+      })
+      expect(screen.getByText('PO Box 42')).toBeDefined()
+      expect(screen.getByText('Neutral Bay')).toBeDefined()
+    })
+
+    /**
+     * Ticked, the fields are ABSENT rather than disabled. The database keeps no
+     * postal row while the flag is set, so a filled-in form behind the tick
+     * would show an address that does not exist and is not where post goes.
+     */
+    test('the tick hides the fields entirely, rather than disabling them', async () => {
+      const user = await openPostal(person)
+      const { container } = { container: document.body }
+      await user.click(screen.getByRole('button', { name: /edit postal address/i }))
+
+      expect((screen.getByRole('checkbox', { name: /same as residential/i }) as HTMLInputElement).checked).toBe(true)
+      expect(container.querySelector('dialog input[name="post_line1"]')).toBeNull()
+
+      await user.click(screen.getByRole('checkbox', { name: /same as residential/i }))
+      expect(container.querySelector('dialog input[name="post_line1"]')).not.toBeNull()
+    })
+
+    /**
+     * An unchecked checkbox submits NOTHING, and an absent key means "leave it
+     * alone" to update_person_patch — so the tick could never be cleared
+     * without something else carrying the value.
+     *
+     * This asserts there is exactly ONE entry for the key. The first version of
+     * this component used a hidden `false` beside a checkbox `true` sharing the
+     * name, which works only if the reader takes the last of the two —
+     * FormData.get() takes the first, and would have read false however the box
+     * was set, silently.
+     */
+    test('the tick submits exactly one unambiguous value', async () => {
+      const user = await openPostal(person)
+      await user.click(screen.getByRole('button', { name: /edit postal address/i }))
+      const form = document.querySelector(
+        'dialog form:has(input[name="postal_same_as_residential"])',
+      ) as HTMLFormElement
+
+      expect(new FormData(form).getAll('postal_same_as_residential')).toEqual(['true'])
+
+      await user.click(screen.getByRole('checkbox', { name: /same as residential/i }))
+      expect(new FormData(form).getAll('postal_same_as_residential')).toEqual(['false'])
+    })
+
+    /* The postal form must not carry the residential fields: they are separate
+       rows, and a form holding both could blank one while saving the other. */
+    test('the postal form carries only postal fields', async () => {
+      const user = await openPostal({ ...person, postal_same_as_residential: false })
+      await user.click(screen.getByRole('button', { name: /edit postal address/i }))
+      const form = document.querySelector('dialog form:has(input[name="post_suburb"])')
+      const names = [...form!.querySelectorAll('input[name]')].map((el) => el.getAttribute('name'))
+      expect(names.filter((n) => n?.startsWith('addr_'))).toEqual([])
+      expect(names).toContain('post_line1')
+      expect(names).toContain('party_id')
     })
   })
 

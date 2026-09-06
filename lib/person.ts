@@ -1,5 +1,14 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
+/** The five columns an address occupies in contact_points. */
+export type Address = {
+  line1: string | null
+  line2: string | null
+  suburb: string | null
+  state: string | null
+  postcode: string | null
+}
+
 export type PersonDetail = {
   party_id: string
   display_name: string
@@ -37,13 +46,17 @@ export type PersonDetail = {
   email: string | null
   mobile: string | null
   phone_other: string | null
-  address: {
-    line1: string | null
-    line2: string | null
-    suburb: string | null
-    state: string | null
-    postcode: string | null
-  }
+  address: Address
+  /**
+   * Where post goes, when it is not the residential address.
+   *
+   * Meaningful only while `postal_same_as_residential` is false: the database
+   * keeps NO postal row while the flag is set, so that the address follows the
+   * residential one instead of becoming a stale copy of it.
+   */
+  postal_address: Address
+  /** True when post goes to the residential address. Defaults true. */
+  postal_same_as_residential: boolean
   roles: { role: string; status: string; start_date: string }[]
   other_groups: { name: string; member_role: string }[]
   /** Identity-verification history, newest first. Read from the masked summary
@@ -125,6 +138,8 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       member_role: r.member_role, is_primary_group: r.is_primary_group,
       email: null, mobile: null, phone_other: null,
       address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
+      postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
+      postal_same_as_residential: true,
       roles: [], other_groups: [], verifications: [],
     }))
 
@@ -210,9 +225,17 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
   return people
     .map((m): PersonDetail => {
       const p = (personBy.get(m.party_id) ?? {}) as Record<string, unknown>
-      const addr = (contactsBy.get(m.party_id) ?? []).find(
-        (c) => c.kind === 'address_residential',
-      )
+      const rows = contactsBy.get(m.party_id) ?? []
+      const shape = (kind: string): Address => {
+        const c = rows.find((r) => r.kind === kind)
+        return {
+          line1: (c?.address_line_1 as string) ?? null,
+          line2: (c?.address_line_2 as string) ?? null,
+          suburb: (c?.suburb as string) ?? null,
+          state: (c?.state as string) ?? null,
+          postcode: (c?.postcode as string) ?? null,
+        }
+      }
       return {
         party_id: m.party_id,
         display_name: (m.party?.display_name as string) ?? 'Unnamed',
@@ -246,13 +269,12 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
         email: pick(m.party_id, 'email'),
         mobile: pick(m.party_id, 'phone_mobile'),
         phone_other: pick(m.party_id, 'phone_other'),
-        address: {
-          line1: (addr?.address_line_1 as string) ?? null,
-          line2: (addr?.address_line_2 as string) ?? null,
-          suburb: (addr?.suburb as string) ?? null,
-          state: (addr?.state as string) ?? null,
-          postcode: (addr?.postcode as string) ?? null,
-        },
+        address: shape('address_residential'),
+        postal_address: shape('address_postal'),
+        // Defaults true, matching the column, so a row written before this
+        // existed reads as "post goes to the home address" rather than as
+        // an unrecorded blank.
+        postal_same_as_residential: (p.postal_same_as_residential as boolean) ?? true,
         roles: (roles ?? [])
           .filter((r) => r.party_id === m.party_id)
           .map((r) => ({

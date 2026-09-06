@@ -13,7 +13,7 @@ import {
   checkVerification,
   attestVerification,
 } from '@/app/(shell)/groups/actions'
-import type { PersonDetail, VerificationEntry } from '@/lib/person'
+import type { Address, PersonDetail, VerificationEntry } from '@/lib/person'
 import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { Pill } from './ui'
@@ -542,7 +542,15 @@ function VerificationHistory({ entries }: { entries: VerificationEntry[] }) {
 const LOOKUP_DEBOUNCE_MS = 120
 const LOOKUP_MIN_CHARS = 4
 
-function AddressFields({ address }: { address: PersonDetail['address'] }) {
+function AddressFields({
+  address,
+  prefix = 'addr',
+}: {
+  address: Address
+  /** Field-name prefix: `addr` writes the residential address, `post` the
+   *  postal one. update_person_patch keys off exactly these. */
+  prefix?: 'addr' | 'post'
+}) {
   const [line1, setLine1] = useState(address.line1 ?? '')
   const [line2, setLine2] = useState(address.line2 ?? '')
   const [suburb, setSuburb] = useState(address.suburb ?? '')
@@ -691,12 +699,69 @@ function AddressFields({ address }: { address: PersonDetail['address'] }) {
           so update_person_patch takes them as a unit — a form submitting only
           some would blank the rest. */}
       <div className="grid grid-cols-6 gap-3">
-        <ControlledField label="Street" name="addr_line1" value={line1} onChange={setLine1} className="col-span-6" />
-        <ControlledField label="Line 2" name="addr_line2" value={line2} onChange={setLine2} className="col-span-6" />
-        <ControlledField label="Suburb" name="addr_suburb" value={suburb} onChange={setSuburb} className="col-span-3" />
-        <ControlledField label="State" name="addr_state" value={state} onChange={setState} className="col-span-1" />
-        <ControlledField label="Postcode" name="addr_postcode" value={postcode} onChange={setPostcode} className="col-span-2" />
+        <ControlledField label="Street" name={`${prefix}_line1`} value={line1} onChange={setLine1} className="col-span-6" />
+        <ControlledField label="Line 2" name={`${prefix}_line2`} value={line2} onChange={setLine2} className="col-span-6" />
+        <ControlledField label="Suburb" name={`${prefix}_suburb`} value={suburb} onChange={setSuburb} className="col-span-3" />
+        <ControlledField label="State" name={`${prefix}_state`} value={state} onChange={setState} className="col-span-1" />
+        <ControlledField label="Postcode" name={`${prefix}_postcode`} value={postcode} onChange={setPostcode} className="col-span-2" />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The postal address, and the tick that says post goes to the home one.
+ *
+ * Ticked, the five fields are not merely disabled but ABSENT: the database
+ * keeps no postal row while the flag is set, so rendering a filled-in form
+ * behind the tick would show an address that does not exist and is not what
+ * post would follow.
+ *
+ * THE CHECKBOX CARRIES NO NAME. An unchecked checkbox submits nothing at all,
+ * and an absent key means "leave it alone" to update_person_patch — so a bare
+ * checkbox could never turn the flag off. The usual fix is a hidden `false`
+ * beside a checkbox `true` sharing one name, but that only works while the
+ * reader takes the LAST value: FormData.get() returns the first, so the flag
+ * would read false however the box was set, and nothing would look wrong.
+ *
+ * So the checkbox is only a control, and a single hidden input carries the
+ * value. One entry, one meaning, no dependence on which duplicate a reader
+ * happens to pick.
+ */
+function PostalAddressFields({
+  address,
+  sameAsResidential,
+}: {
+  address: Address
+  sameAsResidential: boolean
+}) {
+  const [same, setSame] = useState(sameAsResidential)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        type="hidden"
+        name="postal_same_as_residential"
+        value={same ? 'true' : 'false'}
+      />
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={same}
+          onChange={(e) => setSame(e.target.checked)}
+          className="size-4 rounded border-neutral-300 text-brand outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+        />
+        <span className="text-sm text-neutral-700">Same as residential</span>
+      </label>
+
+      {same ? (
+        <p className="text-xs leading-relaxed text-neutral-500">
+          Post goes to the residential address above. It will follow that address
+          if it changes, rather than being copied now and going out of date.
+        </p>
+      ) : (
+        <AddressFields address={address} prefix="post" />
+      )}
     </div>
   )
 }
@@ -1356,6 +1421,30 @@ export function MemberPanel({
                             </dl>
                           }
                           edit={<AddressFields address={person.address} />}
+                        />
+                        <EditableSection
+                          title="Postal address"
+                          partyId={person.party_id}
+                          groupId={groupId}
+                          boxed
+                          view={
+                            person.postal_same_as_residential ? (
+                              <p className="text-sm text-neutral-500">Same as residential</p>
+                            ) : (
+                              <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                                <Row span="full" label="Street" value={[person.postal_address.line1, person.postal_address.line2].filter(Boolean).join(', ')} />
+                                <Row span="full" label="Suburb" value={person.postal_address.suburb} />
+                                <Row label="State" value={person.postal_address.state} />
+                                <Row label="Postcode" value={person.postal_address.postcode} />
+                              </dl>
+                            )
+                          }
+                          edit={
+                            <PostalAddressFields
+                              address={person.postal_address}
+                              sameAsResidential={person.postal_same_as_residential}
+                            />
+                          }
                         />
                       </div>
                     ),
