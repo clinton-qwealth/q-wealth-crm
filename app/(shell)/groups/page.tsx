@@ -334,11 +334,11 @@ export default async function GroupsPage({
                the arithmetic when they exist. The caveat is not printed
                (decided 6 Sep: header and number only) but rides on the tile as
                a tooltip, so it is one hover away rather than gone. */
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-6">
               {(() => {
                 const w = wealthSummary(accounts)
                 return [w.wealth, w.investments, w.assets].map((f) => (
-                  <StatTile key={f.label} label={f.label} value={f.value} title={f.note} />
+                  <StatTile key={f.label} label={f.label} value={f.value} title={f.note} tone="dark" />
                 ))
               })()}
             </div>

@@ -52,7 +52,7 @@ export function PageHeading({
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-neutral-900">
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
           {title}
         </h1>
         {meta ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{meta}</div> : null}
@@ -158,6 +158,7 @@ export function StatTile({
   value,
   hint,
   title,
+  tone = 'light',
   className = '',
 }: {
   label: string
@@ -169,18 +170,47 @@ export function StatTile({
    *  liabilities recorded yet" lives here after the printed version was
    *  dropped for being noise under a headline. */
   title?: string
+  /**
+   * `dark` is charcoal with inverted type, for a headline figure that has to
+   * pop against a page of white cards. The group workspace uses it for the
+   * wealth summary. Not the default: on the home page four tiles sit alone
+   * and have nothing to pop against.
+   *
+   * A charcoal TAB STRIP was tried and rejected on 6 Sep 2026 — a full-width
+   * dark bar under a white nav read as a foreign element. Three small dark
+   * tiles are a different thing: accents, not chrome, and the eye is meant to
+   * go to them first.
+   */
+  tone?: 'light' | 'dark'
   className?: string
 }) {
+  const dark = tone === 'dark'
   return (
     <div
       title={title}
-      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
+      className={`rounded-lg border p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${
+        dark ? 'border-neutral-800 bg-neutral-800' : 'border-neutral-200 bg-white'
+      } ${className}`}
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+      <p
+        className={`text-[11px] font-semibold uppercase tracking-wider ${
+          dark ? 'text-neutral-400' : 'text-neutral-500'
+        }`}
+      >
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-2xl font-semibold tabular-nums tracking-tight ${
+          dark ? 'text-white' : 'text-neutral-900'
+        }`}
+      >
         {value}
       </p>
-      {hint ? <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p> : null}
+      {hint ? (
+        <p className={`mt-1 text-xs leading-snug ${dark ? 'text-neutral-400' : 'text-neutral-400'}`}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   )
 }
