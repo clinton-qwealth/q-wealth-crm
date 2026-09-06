@@ -31,6 +31,7 @@ export function Tabs({
   flushTop = true,
   alignFirst = false,
   bleed = true,
+  ground = false,
 }: {
   items: TabItem[]
   label: string
@@ -64,6 +65,20 @@ export function Tabs({
    * panel until this existed.
    */
   bleed?: boolean
+  /**
+   * Put the panel's content on a light grey ground, and darken the strip a
+   * shade so it still caps it.
+   *
+   * This is what makes a list of white records read as records. `DataRow` sits
+   * on a full-strength border and a 1px shadow precisely because it was white
+   * on a white card — measured at 1.00:1 fill contrast, which is why the
+   * accounts list looked like one undifferentiated block. A ground behind them
+   * is the structural version of that fix rather than a workaround on each row.
+   *
+   * Opt-in, not the default: the member panel's tabs hold bordered edit forms
+   * rather than records, and its ground was deliberately left white.
+   */
+  ground?: boolean
 }) {
   const [active, setActive] = useState(items[0]?.id)
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
@@ -135,6 +150,24 @@ export function Tabs({
   // The rounded corners only belong on a strip that caps its container.
   const cap = flushTop ? 'rounded-t-[7px]' : ''
 
+  /* A grounded panel has to reach the container's edges the same way the strip
+     does, or the grey sits in a white picture frame. So it cancels the parent's
+     padding, restores it inside, and runs to the bottom edge — where it takes
+     the card's own corner radius. Without `bleed` there is no padding to
+     cancel, and the panel simply gets the colour. */
+  const panelGround = !ground
+    ? ''
+    : bleed
+      ? gutter === 5
+        ? '-mx-5 px-5 pb-5 -mb-5 rounded-b-[7px] bg-neutral-100'
+        : '-mx-4 px-4 pb-4 -mb-4 rounded-b-[7px] bg-neutral-100'
+      : 'bg-neutral-100'
+
+  /* The strip is one step darker than the ground it caps. Reversed — a lighter
+     strip over a darker body — the strip reads as part of the content rather
+     than as the chrome above it. */
+  const stripTone = ground ? 'bg-neutral-200/70' : 'bg-neutral-50'
+
   return (
     <div className={fill ? 'flex min-h-0 flex-1 flex-col' : undefined}>
       <div
@@ -142,7 +175,7 @@ export function Tabs({
         role="tablist"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className={`no-scrollbar relative ${pull} ${pad} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 bg-neutral-50 pt-1`}
+        className={`no-scrollbar relative ${pull} ${pad} ${lift} ${cap} flex shrink-0 items-center gap-1 overflow-x-auto border-b border-neutral-200 ${stripTone} pt-1`}
       >
         {items.map((tab, i) => {
           const selected = tab.id === active
@@ -190,11 +223,12 @@ export function Tabs({
           aria-labelledby={`tab-${tab.id}`}
           hidden={tab.id !== active}
           tabIndex={0}
-          className={
+          className={[
             fill
               ? 'min-h-0 flex-1 overflow-y-auto pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20'
-              : 'pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20'
-          }
+              : 'pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20',
+            panelGround,
+          ].join(' ')}
         >
           {tab.panel}
         </div>

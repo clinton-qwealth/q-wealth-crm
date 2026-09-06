@@ -493,6 +493,7 @@ export default async function GroupsPage({
       <div className="col-span-full lg:col-span-6">
         <Card>
           <Tabs
+            ground
             label="Group detail"
             items={[
               {
