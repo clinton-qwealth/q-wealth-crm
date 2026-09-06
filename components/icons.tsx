@@ -172,3 +172,34 @@ export function PencilIcon({ className = base }: IconProps) {
     </svg>
   )
 }
+
+/** A shield with a tick: superannuation — protected, long-horizon money. */
+export function ShieldTickIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 2.5 3.5 5v4.5c0 4 2.8 6.9 6.5 8 3.7-1.1 6.5-4 6.5-8V5L10 2.5Z" />
+      <path d="m7.5 10 1.8 1.8L12.8 8.3" />
+    </svg>
+  )
+}
+
+/** A rising line: an investment account. */
+export function TrendUpIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 15.5 8 10l3 3 6-7" />
+      <path d="M13 6h4v4" />
+    </svg>
+  )
+}
+
+/** An umbrella: an insurance policy. */
+export function UmbrellaIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2.5 10.5a7.5 7.5 0 0 1 15 0Z" />
+      <path d="M10 10.5v5a1.75 1.75 0 0 0 3.5 0" />
+      <path d="M10 3V2" />
+    </svg>
+  )
+}

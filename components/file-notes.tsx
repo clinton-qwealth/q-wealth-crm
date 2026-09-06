@@ -337,9 +337,8 @@ export function FileNotes({
             'File notes, meeting summaries and call records for this group appear here, newest first.',
         }}
       >
-        {notes.length ? (
-          <ul className="flex flex-col gap-2">
-            {notes.map((n) => (
+        {notes.length
+          ? notes.map((n) => (
               <DataRow
                 key={n.note_id}
                 /* An untitled note is not nameless — its kind is the next most
@@ -348,9 +347,8 @@ export function FileNotes({
                 secondary={`${formatNoteDate(n.occurred_at)} · ${byline(n)}`}
                 meta={<WorkflowCell note={n} onPick={() => setPicking(n)} />}
               />
-            ))}
-          </ul>
-        ) : null}
+            ))
+          : null}
       </DataSection>
 
       <WorkflowPicker

@@ -48,8 +48,16 @@ export function DataSection({
   /** Required, not optional: any section can be emptied back to zero, so every
    *  one needs a defined empty state rather than collapsing to nothing. */
   empty: { title: string; description: string }
-  /** The records. When absent — including when a caller passes a falsy list —
-   *  the empty state is shown instead. */
+  /**
+   * The records — DataRow elements, NOT a <ul>. The section renders the list
+   * itself, because the list is now one white sheet with hairline dividers and
+   * the total lives inside it as a footer band. A caller cannot get the sheet
+   * wrong if it never builds one.
+   *
+   * Absent, falsy, or an EMPTY ARRAY shows the empty state. The array case
+   * matters: `rows.map(...)` on no rows is `[]`, which is truthy, and the old
+   * `if (!children)` would have rendered an empty sheet with nothing in it.
+   */
   children?: ReactNode
   /**
    * Optional footer figure, e.g. the sum of the accounts listed.
@@ -65,7 +73,8 @@ export function DataSection({
    */
   total?: { label: string; value: string; note?: string }
 }) {
-  if (!children) {
+  const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children)
+  if (!hasRows) {
     return (
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
@@ -115,45 +124,69 @@ export function DataSection({
           </a>
         )}
       </div>
-      {children}
-      {total ? (
-        <div className="mt-2.5 flex items-baseline justify-between gap-3 border-t border-neutral-200 px-3 pt-2.5">
-          <span className="min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-              {total.label}
+      {/* The sheet.
+
+          One white surface holding every record, rows divided by hairlines.
+          Chosen 6 Sep 2026 over per-row boxes after three rounds of shading
+          the ground behind them failed to help: a list of bordered boxes inside
+          a bordered card reads as one texture however the greys are set,
+          because every box competes to be the object. One sheet IS the object;
+          the rows are its contents. The shadow is the sheet lifting off the
+          tabs' grey ground — the only elevation move in the list, and the
+          reason the rows need none of their own. */}
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]">
+        <ul className="divide-y divide-neutral-200/80">{children}</ul>
+        {total ? (
+          /* Inside the sheet, on a tinted band: the total belongs to the list it
+             sums, and a band closes the sheet the way a rule under a column of
+             figures does. Larger and bolder than any row — it is the number
+             most likely to be read aloud. */
+          <div className="flex items-baseline justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-3.5 py-2.5">
+            <span className="min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                {total.label}
+              </span>
+              {total.note ? (
+                <span className="block text-xs leading-snug text-neutral-400">{total.note}</span>
+              ) : null}
             </span>
-            {total.note ? (
-              <span className="block text-xs leading-snug text-neutral-400">{total.note}</span>
-            ) : null}
-          </span>
-          <span className="shrink-0 text-sm font-semibold tabular-nums text-neutral-900">
-            {total.value}
-          </span>
-        </div>
-      ) : null}
+            <span className="shrink-0 text-[17px] font-bold tabular-nums text-neutral-900">
+              {total.value}
+            </span>
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
 
 /**
- * A record row inside a DataSection.
+ * A record row inside a DataSection's sheet.
  *
- * These used to be white on `border-neutral-200/70`, described as "white on the
- * panel, like the member rows" — but the member rows sit on a grey ground and
- * these sit straight on a white Card. Measured, the fill was 1.00:1 against the
- * card and the border 1.26:1, so the records ran together into one block.
+ * Carries no border, background, shadow or radius of its own — the sheet has
+ * them. Until 6 Sep 2026 each row was its own white box on a full-strength
+ * border and a 1px shadow, added because rows were measuring 1.00:1 against the
+ * card behind them. That was treating a hierarchy problem as a contrast
+ * problem: three rounds of re-tinting the ground never moved it, because what
+ * made the list flat was that title, figure and label all sat at the same
+ * weight with nothing to anchor the eye.
  *
- * A full-strength border and a one-pixel shadow lift each row off the card.
- * And the money now carries the weight the name used to: for a list of
- * holdings the figure is what gets scanned, and it was the lightest, smallest
- * thing on the row.
+ * So the weight moved instead. The name is semibold, the figure is 15px
+ * semibold — the thing a holdings list is scanned for is now the heaviest thing
+ * on the row — and `leading` takes a tile that gives each record a spot of
+ * colour and a place to land. Still wraps: in the narrow file-notes column the
+ * meta drops below the text rather than truncating the byline.
  */
 export function DataRow({
+  leading,
   primary,
   secondary,
   meta,
   badge,
 }: {
+  /** A tile or glyph before the text, e.g. AccountTypeTile. Optional: a list
+   *  with nothing meaningful to draw is better off without a decorative one. */
+  leading?: ReactNode
   primary: string
   secondary?: string
   meta?: ReactNode
@@ -162,26 +195,19 @@ export function DataRow({
   badge?: ReactNode
 }) {
   return (
-    /* Wraps rather than truncating into uselessness.
-       In the centre column there is room for the name and its figure on one
-       line, and nothing wraps. In the narrow right-hand column a note's title
-       and byline were being cut to "Annual review meet…" / "3 Sep 2026 ·
-       Clinton Ha…" to make room for a workflow pill — losing exactly the
-       metadata the row exists to show. The text keeps a 10rem basis, so when
-       the meta cannot fit beside it the meta drops to its own line and stays
-       right-aligned instead. */
-    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-neutral-200 bg-white px-3 py-2.5 shadow-[0_1px_2px_0_rgb(0_0_0/0.05)]">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-3">
+      {leading}
       <span className="min-w-0 flex-1 basis-40">
         <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-neutral-900">{primary}</span>
+          <span className="truncate text-sm font-semibold text-neutral-900">{primary}</span>
           {badge}
         </span>
         {secondary ? (
-          <span className="block truncate text-xs text-neutral-400">{secondary}</span>
+          <span className="block truncate text-xs text-neutral-500">{secondary}</span>
         ) : null}
       </span>
       {meta ? (
-        <span className="ml-auto shrink-0 text-sm font-medium tabular-nums text-neutral-900">
+        <span className="ml-auto shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
           {meta}
         </span>
       ) : null}

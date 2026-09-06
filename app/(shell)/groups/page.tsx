@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, AccountValue, Card, coverSummary, PageHeading, Pill } from '@/components/ui'
+import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, PolicyTile } from '@/components/ui'
 import { PhoneIcon, PlusIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
@@ -494,7 +494,6 @@ export default async function GroupsPage({
         <Card>
           <Tabs
             ground
-            chrome="charcoal"
             label="Group detail"
             items={[
               {
@@ -535,11 +534,11 @@ export default async function GroupsPage({
                        them rather than summing. */
                     total={accounts.length ? accountsTotal(accounts) : undefined}
                   >
-                    {accounts.length ? (
-                      <ul className="flex flex-col gap-2">
-                        {accounts.map((a) => (
+                    {accounts.length
+                      ? accounts.map((a) => (
                           <DataRow
                             key={a.account_id}
+                            leading={<AccountTypeTile type={a.account_type} />}
                             primary={a.label}
                             /* One heading now covers both kinds of account, so the
                                row has to say which this is. */
@@ -569,9 +568,8 @@ export default async function GroupsPage({
                               />
                             }
                           />
-                        ))}
-                      </ul>
-                    ) : undefined}
+                        ))
+                      : undefined}
                   </DataSection>
                     <DataSection
                       title="Insurance Policies"
@@ -592,11 +590,11 @@ export default async function GroupsPage({
                           'Life, TPD, trauma and income protection cover held by this group\u2019s members.',
                       }}
                     >
-                      {policies.length ? (
-                        <ul className="flex flex-col gap-2">
-                          {policies.map((p) => (
+                      {policies.length
+                        ? policies.map((p) => (
                             <DataRow
                               key={p.policy_id}
+                              leading={<PolicyTile />}
                               primary={p.label}
                               secondary={[
                                 p.cover_types
@@ -618,9 +616,8 @@ export default async function GroupsPage({
                               }
                               meta={coverSummary(p.total_lump_sum_cover, p.total_monthly_benefit) ?? undefined}
                             />
-                          ))}
-                        </ul>
-                      ) : undefined}
+                          ))
+                        : undefined}
                     </DataSection>
                   </div>
                 ),

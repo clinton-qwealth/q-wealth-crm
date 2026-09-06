@@ -188,18 +188,16 @@ export function WorkflowSection({
           'Onboarding, annual reviews and advice production appear here once started.',
       }}
     >
-      {workflows.length ? (
-        <ul className="flex flex-col gap-2">
-          {workflows.map((w) => (
+      {workflows.length
+        ? workflows.map((w) => (
             <DataRow
               key={w.id}
               primary={w.name}
               secondary={WORKFLOW_TYPE_LABEL[w.workflow_type]}
               meta={<Pill tone={STATUS_TONE[w.status]}>{WORKFLOW_STATUS_LABEL[w.status]}</Pill>}
             />
-          ))}
-        </ul>
-      ) : null}
+          ))
+        : null}
     </DataSection>
   )
 }

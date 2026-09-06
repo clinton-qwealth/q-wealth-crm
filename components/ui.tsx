@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ShieldTickIcon, TrendUpIcon, UmbrellaIcon } from './icons'
 
 /**
  * Wireframe primitives.
@@ -272,6 +273,48 @@ export function AccountValue({
            would read as a state of its own; empty space reads as nothing. */
         <span className="block size-[18px] shrink-0" aria-hidden="true" />
       )}
+    </span>
+  )
+}
+
+/**
+ * The leading tile on a record row: a glyph on a tinted square.
+ *
+ * This is what stops a list of money reading as a list of text. Before it,
+ * every row was two lines of type and a figure, all at the same weight — the
+ * eye had nowhere to land, and no amount of background shading fixed that
+ * because the problem was hierarchy, not tone. A tile gives each record an
+ * anchor and a spot of colour without adding a single border.
+ *
+ * Tones: superannuation borrows the success green (protected, long-horizon
+ * money); investment takes the brand orange. Both are the 50/700 pair the pills
+ * already use, so the tiles stay in step with the rest of the palette.
+ */
+const TILE = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1'
+
+export function AccountTypeTile({ type }: { type: string }) {
+  const superannuation = type === 'superannuation'
+  return (
+    <span
+      className={`${TILE} ${
+        superannuation
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+          : 'bg-brand-50 text-brand-700 ring-brand-100'
+      }`}
+      aria-hidden="true"
+    >
+      {superannuation ? <ShieldTickIcon className="h-[18px] w-[18px]" /> : <TrendUpIcon className="h-[18px] w-[18px]" />}
+    </span>
+  )
+}
+
+/** Insurance has no per-policy type to colour by — a policy bundles covers —
+ *  so one neutral umbrella tile gives the rows the same anchor as accounts
+ *  without inventing a distinction the data does not make. */
+export function PolicyTile() {
+  return (
+    <span className={`${TILE} bg-neutral-100 text-neutral-600 ring-neutral-200/70`} aria-hidden="true">
+      <UmbrellaIcon className="h-[18px] w-[18px]" />
     </span>
   )
 }
