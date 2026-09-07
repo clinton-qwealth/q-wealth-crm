@@ -245,13 +245,17 @@ export function WorkflowSection({
         </p>
       ) : null}
 
-      {/* 19.125rem is the board's CARD width at 1440px — measured, not guessed
-          — so a card here is the same size as the same card there. There is no
-          inner well around the stack: the tab body is already the well (same
-          token), and a well inside a well of the same tone is invisible, so it
-          would only inset the cards past the heading's edge. Below lg the tab
-          is full width anyway and the placeholder drops beneath. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[19.125rem_1fr]">
+      {/* The cards take 55% of the tab and the placeholder 45% — a proportional
+          split, so it scales with the window. The column was first pinned to
+          the board's card width (306px at 1440) so the same card was met at the
+          same size on both screens; it was widened at the reader's request to
+          352px at 1440, and once the width no longer matches the board there
+          is no reason for it to be fixed. There is no inner well around the
+          stack: the tab body is already the well (same token), and a well
+          inside a well of the same tone is invisible, so it would only inset
+          the cards past the heading's edge. Below lg the tab is full width and
+          the placeholder drops beneath. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
         <section aria-label="Workflow cards">
           <ul className="flex flex-col gap-2">
             {live.map((c) => (
