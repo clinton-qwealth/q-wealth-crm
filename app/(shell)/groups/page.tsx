@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, PolicyTile, StatTile } from '@/components/ui'
+import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, Placeholder, PolicyTile, StatTile } from '@/components/ui'
 import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
@@ -263,16 +263,6 @@ function telHref(number: string) {
 const TYPE_LABEL: Record<string, string> = {
   household: 'Household',
   business_entity: 'Business entity',
-}
-
-function Placeholder({ children, className = 'h-56' }: { children: string; className?: string }) {
-  return (
-    <div
-      className={`flex ${className} items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50/60`}
-    >
-      <p className="px-4 text-center text-sm text-neutral-400">{children}</p>
-    </div>
-  )
 }
 
 export default async function GroupsPage({

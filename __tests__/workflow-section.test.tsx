@@ -44,6 +44,12 @@ describe('the group page’s workflow cards', () => {
     expect(screen.getByRole('article', { name: 'Onboarding 2024' })).toBeTruthy()
   })
 
+  test('the card’s name is a link to the workflow’s own page', () => {
+    show([review])
+    const link = screen.getByRole('link', { name: 'Annual review 2026' })
+    expect(link.getAttribute('href')).toBe('/workflows/w1')
+  })
+
   test('the second line says when the work started or finished, not the group’s name', () => {
     show([review, onboarding])
     const a = screen.getByRole('article', { name: 'Annual review 2026' })

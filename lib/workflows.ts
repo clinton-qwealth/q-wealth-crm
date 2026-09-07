@@ -32,3 +32,21 @@ export async function getGroupChoices(): Promise<{ id: string; name: string }[]>
   const { data } = await supabase.from('group_summary').select('group_id, name').order('name')
   return (data ?? []).map((g) => ({ id: g.group_id as string, name: g.name as string }))
 }
+
+/**
+ * One workflow, for its detail page — or null when there is no such row OR
+ * the caller may not see it. The view is security_invoker, so those two cases
+ * are the same answer on purpose: a workflow an adviser cannot see should not
+ * be distinguishable from one that does not exist.
+ */
+export async function getWorkflow(id: string): Promise<BoardCard | null> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_board')
+    .select(
+      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at',
+    )
+    .eq('id', id)
+    .maybeSingle()
+  return error ? null : ((data as BoardCard | null) ?? null)
+}

@@ -5,60 +5,23 @@ import {
   attachNoteToWorkflow,
   fileNoteUnderNewWorkflow,
 } from '@/app/(shell)/groups/actions'
-import type { NoteHeader, WorkflowOption, WorkflowStatus, WorkflowType } from '@/lib/notes'
+import type { NoteHeader, WorkflowOption, WorkflowType } from '@/lib/notes'
 import { DataRow, DataSection } from './data-section'
 import { AddNoteModal, NOTE_TYPE_LABEL } from './add-note-modal'
 import { NoteTypeTile, Pill } from './ui'
 import { PlusIcon } from './icons'
+import { WORKFLOW_STATUS_LABEL, WORKFLOW_TYPE_LABEL } from '@/lib/workflow-board'
+import { formatNoteDate } from '@/lib/note-date'
 
-export const WORKFLOW_TYPE_LABEL: Record<WorkflowType, string> = {
-  onboarding: 'Onboarding',
-  annual_review: 'Annual review',
-  advice_production: 'Advice production',
-  insurance_claim: 'Insurance claim',
-  ad_hoc: 'Ad hoc',
-}
-
-export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
-  not_started: 'Not started',
-  in_progress: 'In progress',
-  blocked: 'Blocked',
-  under_review: 'Under review',
-  complete: 'Complete',
-  cancelled: 'Cancelled',
-}
+/* Re-exported for the client components that always imported them from here.
+   The definitions moved to lib so a Server Component can read them too. */
+export { WORKFLOW_STATUS_LABEL, WORKFLOW_TYPE_LABEL } from '@/lib/workflow-board'
+export { formatNoteDate } from '@/lib/note-date'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
 const LABEL = 'text-xs font-medium text-neutral-600'
 
-/**
- * A note's date, rendered in the reader's timezone.
- *
- * DELIBERATELY NOT the formatDate() used for a date of birth, and the
- * difference is not cosmetic. A date of birth is a calendar date with no
- * timezone, so that helper splits the string and never touches Date — putting
- * it through `new Date()` renders the previous day west of Greenwich.
- *
- * `occurred_at` is a timestamptz: an instant. The calendar date it falls on
- * genuinely depends on where you are standing, and the adviser's own timezone
- * is the right answer. Splitting the string here would show the UTC date, which
- * in Sydney is the previous day for the first ten hours of every morning.
- *
- * Same-looking problem, opposite fix.
- */
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-export function formatNoteDate(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  /* getDate/getMonth/getFullYear read the LOCAL calendar parts of the instant,
-     which is the conversion this needs. The month name is then taken from a
-     fixed list rather than from toLocaleDateString: `month: 'short'` renders
-     "Jul" in a browser and "July" under Node's ICU in the test runner, and a
-     date format that changes with the runtime is one nobody can assert on. */
-  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
-}
 
 /** Who added it — and an honest answer when the answer is "nobody did". */
 function byline(note: NoteHeader) {

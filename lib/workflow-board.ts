@@ -131,3 +131,24 @@ export function reconcileFilters(cards: BoardCard[], f: BoardFilters): BoardFilt
   if (step1.priority !== null && !o2.priorities.includes(step1.priority)) step1.priority = null
   return step1
 }
+
+/* The words for the enums, here with the rest of the vocabulary so both a
+   Client Component and a Server Component can read them. They used to live in
+   the (client) file-notes module, which the workflow detail page — a Server
+   Component — could not use. */
+export const WORKFLOW_TYPE_LABEL: Record<WorkflowType, string> = {
+  onboarding: 'Onboarding',
+  annual_review: 'Annual review',
+  advice_production: 'Advice production',
+  insurance_claim: 'Insurance claim',
+  ad_hoc: 'Ad hoc',
+}
+
+export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  blocked: 'Blocked',
+  under_review: 'Under review',
+  complete: 'Complete',
+  cancelled: 'Cancelled',
+}

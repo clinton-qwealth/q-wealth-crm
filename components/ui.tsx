@@ -132,6 +132,24 @@ export const SHEET = `overflow-hidden ${SHEET_SURFACE}`
  */
 export const WELL = 'bg-neutral-50'
 
+/**
+ * A dashed, quiet block standing where a component will go, saying what.
+ *
+ * Used on the group page where no group is visible, and across the workflow
+ * detail page while it is being built out column by column. It says in words
+ * what belongs there, so a half-built screen reads as a plan rather than as
+ * something broken.
+ */
+export function Placeholder({ children, className = 'h-56' }: { children: string; className?: string }) {
+  return (
+    <div
+      className={`flex ${className} items-center justify-center rounded-md border border-dashed border-neutral-200 bg-neutral-50/60`}
+    >
+      <p className="px-4 text-center text-sm text-neutral-400">{children}</p>
+    </div>
+  )
+}
+
 export function Card({
   children,
   className = '',

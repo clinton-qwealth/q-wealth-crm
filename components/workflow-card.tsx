@@ -1,6 +1,7 @@
 'use client'
 
 import type { DragEvent } from 'react'
+import Link from 'next/link'
 import { BOARD_COLUMNS, columnFor, type BoardCard, type BoardColumn, type Priority } from '@/lib/workflow-board'
 import { PriorityPicker } from './priority-picker'
 import { InitialsTile, Pill, SHEET_SURFACE } from './ui'
@@ -54,7 +55,18 @@ export function WorkflowCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-neutral-900">{c.name}</p>
+          {/* The name opens the workflow. `draggable={false}` on the link:
+              anchors are natively draggable, and without it a drag that
+              starts on the name would drag the link rather than the card. */}
+          <p className="truncate text-sm font-medium text-neutral-900">
+            <Link
+              href={`/workflows/${c.id}`}
+              draggable={false}
+              className="rounded outline-none hover:text-brand hover:underline hover:decoration-brand/40 hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              {c.name}
+            </Link>
+          </p>
           <p className="mt-0.5 truncate text-xs text-neutral-500">{subtitle}</p>
         </div>
         {c.owner_name ? (
