@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { PRIORITIES, type Priority } from '@/lib/workflow-board'
+import { MenuPicker } from './menu-picker'
+import { ChevronDownIcon } from './icons'
 import {
   PriorityHighIcon,
   PriorityLowIcon,
@@ -39,96 +41,60 @@ export function PriorityGlyph({ priority, className = 'h-4 w-4' }: { priority: P
 /**
  * A glyph that is a button; pressing it opens a menu of the four levels.
  *
- * Proper menu semantics — `menu` / `menuitemradio` with `aria-checked` — so a
- * screen reader hears "Priority: Medium, button" and then a radio-style list,
- * rather than four anonymous buttons. Escape closes it, as does clicking
- * anywhere else. The current level is checked so the user knows what they are
- * changing from.
+ * The menu itself is MenuPicker — see there for the accessibility, which is the
+ * reason it is shared with the status control rather than copied.
  *
- * One popover per card, not one shared dialog, because a popover is a few
- * <button>s rendered only while open — nothing sits in the document when it is
- * closed, which is the problem a shared dialog exists to avoid.
+ * `withLabel` puts the level in words beside the glyph. Cards use the glyph
+ * alone, because at card size the colour and shape carry it and the row has no
+ * room. The workflow detail page uses both: it is a page about one workflow, so
+ * the reader should not have to know the glyphs to read it.
  */
 export function PriorityPicker({
   value,
   onChange,
   name,
+  withLabel = false,
 }: {
   value: Priority
   onChange: (next: Priority) => void
-  /** The card's name, for the accessible label. */
+  /** The workflow's name, for the accessible label. */
   name: string
+  withLabel?: boolean
 }) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const menuId = useId()
   const label = PRIORITIES.find((p) => p.id === value)!.label
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        aria-label={`Priority: ${label}. Change priority of ${name}`}
-        title={`Priority: ${label}`}
-        onClick={() => setOpen((o) => !o)}
-        // Stop a press from starting a drag of the card behind it.
-        onPointerDown={(e) => e.stopPropagation()}
-        className="flex h-6 w-6 items-center justify-center rounded-md outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
-      >
-        <PriorityGlyph priority={value} />
-      </button>
-
-      {open ? (
-        <ul
-          id={menuId}
-          role="menu"
-          aria-label={`Priority of ${name}`}
-          className="absolute left-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)]"
-        >
-          {PRIORITIES.map((p) => {
-            const current = p.id === value
-            return (
-              <li key={p.id} role="none">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={current}
-                  onClick={() => {
-                    setOpen(false)
-                    if (!current) onChange(p.id)
-                  }}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-neutral-100 focus-visible:bg-neutral-100 ${
-                    current ? 'font-medium text-neutral-900' : 'text-neutral-700'
-                  }`}
-                >
-                  <PriorityGlyph priority={p.id} />
-                  {p.label}
-                  {current ? <span className="ml-auto text-[10px] uppercase tracking-wider text-neutral-400">now</span> : null}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      ) : null}
-    </div>
+    <MenuPicker
+      value={value}
+      options={PRIORITIES.map((p) => ({
+        id: p.id,
+        label: p.label,
+        glyph: <PriorityGlyph priority={p.id} />,
+      }))}
+      onChange={onChange}
+      trigger={
+        withLabel ? (
+          /* The chevron is here for one reason: next to a status pill that
+             carries one, a bare glyph and a word read as a caption rather than
+             a control. Cards keep the bare glyph — there is no editable
+             neighbour there to be inconsistent with, and no room. */
+          <span className="flex items-center gap-1.5">
+            <PriorityGlyph priority={value} className="h-3.5 w-3.5" />
+            <span className="text-xs text-neutral-700">{label}</span>
+            <ChevronDownIcon className="-ml-0.5 h-3 w-3 text-neutral-400" />
+          </span>
+        ) : (
+          <PriorityGlyph priority={value} />
+        )
+      }
+      triggerAriaLabel={`Priority: ${label}. Change priority of ${name}`}
+      triggerTitle={`Priority: ${label}`}
+      menuAriaLabel={`Priority of ${name}`}
+      triggerClassName={
+        withLabel
+          ? 'h-6 rounded-md px-1.5 hover:bg-neutral-100'
+          : 'h-6 w-6 rounded-md hover:bg-neutral-100'
+      }
+      menuClassName="w-36"
+    />
   )
 }

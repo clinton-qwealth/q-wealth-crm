@@ -286,3 +286,12 @@ export function PriorityUrgentIcon({ className = 'h-4 w-4' }: { className?: stri
     </svg>
   )
 }
+
+/** A small chevron, to say that a control opens something. */
+export function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden className={className}>
+      <path d="M5.5 8l4.5 4.5L14.5 8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}

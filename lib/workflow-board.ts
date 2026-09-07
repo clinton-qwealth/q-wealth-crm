@@ -144,6 +144,24 @@ export const WORKFLOW_TYPE_LABEL: Record<WorkflowType, string> = {
   ad_hoc: 'Ad hoc',
 }
 
+/**
+ * Every status, in the order a person would read them: the four lanes in
+ * sequence, with `blocked` beside the stage it is a condition of and
+ * `cancelled` last because it is where work goes to stop.
+ *
+ * BOARD_COLUMNS is deliberately not this list. The board can only offer the
+ * four it has lanes for; the detail page has no lanes, so it is the one screen
+ * that can mark work blocked or cancelled.
+ */
+export const WORKFLOW_STATUSES = [
+  'not_started',
+  'in_progress',
+  'blocked',
+  'under_review',
+  'complete',
+  'cancelled',
+] as const satisfies readonly WorkflowStatus[]
+
 export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
   not_started: 'Not started',
   in_progress: 'In progress',

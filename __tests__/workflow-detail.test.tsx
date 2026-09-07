@@ -1,6 +1,7 @@
 import type { WorkflowDetail } from '@/lib/workflow-board'
 import { describe, expect, test, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 /**
  * The detail page has two jobs today: refuse what it should, and lay out the
@@ -13,6 +14,13 @@ const NOT_FOUND = new Error('notFound')
 const REDIRECT = new Error('redirect')
 
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: () => {} }) }))
+/* The left card's marks are editable, so the workspace now renders a Client
+   Component that imports the server actions. Mocked so the component's own
+   behaviour can be tested; the actions themselves run against the database. */
+vi.mock('@/app/(shell)/groups/actions', () => ({
+  setWorkflowStatus: vi.fn(async () => ({ ok: true as const })),
+  setWorkflowPriority: vi.fn(async () => ({ ok: true as const })),
+}))
 vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
   redirect: () => { throw REDIRECT },
@@ -33,6 +41,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const staff = await import('@/lib/staff')
+const actions = await import('@/app/(shell)/groups/actions')
 const { default: WorkflowPage } = await import('@/app/(shell)/workflows/[id]/page')
 const { WorkflowWorkspace } = await import('@/components/workflow-workspace')
 const { default: React } = await import('react')
@@ -107,6 +116,15 @@ describe('the workflow detail page', () => {
     expect(container.querySelectorAll('.border-dashed').length).toBe(2)
   })
 
+  test('the progress bar sits between the marks and the fields, not at the bottom', () => {
+    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const marks = container.querySelector('h1')!.nextElementSibling!
+    const bar = screen.getByRole('progressbar')
+    const fields = container.querySelector('dl.grid-cols-3')!
+    expect(marks.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(bar.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   test('three fields across one row: owner, date started, due date', () => {
     const { container } = render(<WorkflowWorkspace workflow={card} />)
     const row = container.querySelector('dl.grid-cols-3')!
@@ -171,6 +189,8 @@ describe('the workflow detail page', () => {
     expect(bar.getAttribute('aria-valuetext')).toBe('In progress, 33% complete')
     const fill = bar.firstElementChild as HTMLElement
     expect(fill.className).toContain('bg-emerald-600')
+    // Thicker than the 6px it started at, so the fill is legible at a glance.
+    expect(bar.className).toContain('h-2')
     expect(fill.style.width).toBe('33%')
     // The label and the figure sit at the two ends of the row above the bar.
     const row = bar.previousElementSibling!
@@ -206,6 +226,73 @@ describe('the workflow detail page', () => {
     const row = screen.getByRole('progressbar').previousElementSibling!
     expect(row.firstElementChild!.textContent).toBe('Complete')
     expect(row.lastElementChild!.textContent).toBe('100%')
+  })
+
+  test('the status pill is a button that opens all six statuses, lanes and not', async () => {
+    const user = userEvent.setup()
+    render(<WorkflowWorkspace workflow={card} />)
+    await user.click(screen.getByRole('button', { name: /^Status: Blocked\. Change status of/ }))
+    const menu = screen.getByRole('menu', { name: /Status of Annual review 2026/ })
+    expect([...menu.querySelectorAll('[role=menuitemradio]')].map((b) => b.textContent)).toEqual([
+      'Not started',
+      'In progress',
+      'Blockednow',
+      'Under review',
+      'Complete',
+      'Cancelled',
+    ])
+    // The current one is marked, so the reader knows what they are changing from.
+    expect(within(menu).getByRole('menuitemradio', { name: /Blocked/ }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  test('choosing a status updates the pill, calls the action, and moves the bar with it', async () => {
+    const user = userEvent.setup()
+    render(<WorkflowWorkspace workflow={card} />)
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('33')
+
+    await user.click(screen.getByRole('button', { name: /Change status of/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Complete' }))
+
+    expect(actions.setWorkflowStatus).toHaveBeenCalledWith('w1', 'complete')
+    // The bar is derived from the status, so it has to move in the same render.
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('100')
+    expect(screen.getByRole('button', { name: /^Status: Complete/ })).toBeTruthy()
+  })
+
+  test('a refused status change puts the pill and the bar back, with the reason', async () => {
+    vi.mocked(actions.setWorkflowStatus).mockResolvedValueOnce({ error: 'Not yours to change' })
+    const user = userEvent.setup()
+    render(<WorkflowWorkspace workflow={card} />)
+
+    await user.click(screen.getByRole('button', { name: /Change status of/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Cancelled' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Not yours to change')
+    expect(screen.getByRole('button', { name: /^Status: Blocked/ })).toBeTruthy()
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('33')
+  })
+
+  test('priority is editable too, and shows the level in words beside the glyph', async () => {
+    const user = userEvent.setup()
+    render(<WorkflowWorkspace workflow={card} />)
+    const trigger = screen.getByRole('button', { name: /^Priority: High\. Change priority of/ })
+    expect(trigger.textContent).toBe('High')
+
+    await user.click(trigger)
+    await user.click(screen.getByRole('menuitemradio', { name: 'Urgent' }))
+
+    expect(actions.setWorkflowPriority).toHaveBeenCalledWith('w1', 'urgent')
+    expect(screen.getByRole('button', { name: /^Priority: Urgent/ })).toBeTruthy()
+  })
+
+  test('a refused priority change reverts it', async () => {
+    vi.mocked(actions.setWorkflowPriority).mockResolvedValueOnce({ error: 'Refused' })
+    const user = userEvent.setup()
+    render(<WorkflowWorkspace workflow={card} />)
+    await user.click(screen.getByRole('button', { name: /Change priority of/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Refused')
+    expect(screen.getByRole('button', { name: /^Priority: High/ })).toBeTruthy()
   })
 
   test('the page renders the workflow it is asked for', async () => {

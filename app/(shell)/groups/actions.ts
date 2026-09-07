@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type { BoardColumn, Priority } from '@/lib/workflow-board'
+import type { WorkflowStatus } from '@/lib/notes'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
 
@@ -670,10 +671,16 @@ export async function fileNoteUnderNewWorkflow(
  * show workflows are revalidated — the board, and the group page whose tab
  * lists the same rows.
  */
-export async function moveWorkflow(
-  id: string,
-  status: BoardColumn,
-): Promise<NoteState> {
+/**
+ * Set a workflow's status to any of the six — not only the four board lanes.
+ *
+ * `set_workflow_status()` has always taken the whole enum and has always kept
+ * started_at and completed_at truthful for every value of it; nothing in the
+ * web app could reach `blocked` or `cancelled` because the board has no lane
+ * for either. The workflow detail page has no lanes, so it is the screen that
+ * can.
+ */
+export async function setWorkflowStatus(id: string, status: WorkflowStatus): Promise<NoteState> {
   if (!id) return { error: 'No workflow selected.' }
 
   const supabase = await createSupabaseServerClient()
@@ -681,8 +688,19 @@ export async function moveWorkflow(
   if (error) return { error: error.message }
 
   revalidatePath('/workflows')
+  /* The workflow's own page, by path: a change made there must not leave a
+     stale server render behind the optimistic one. */
+  revalidatePath(`/workflows/${id}`)
   revalidatePath('/groups')
   return { ok: true }
+}
+
+/**
+ * The board's entry point: a lane move. Narrower on purpose — the type makes it
+ * impossible for a drop to set a status the board has no lane for.
+ */
+export async function moveWorkflow(id: string, status: BoardColumn): Promise<NoteState> {
+  return setWorkflowStatus(id, status)
 }
 
 /** Set a workflow's priority. Visibility and the right to change it are RLS. */
@@ -692,6 +710,7 @@ export async function setWorkflowPriority(id: string, priority: Priority): Promi
   const { error } = await supabase.rpc('set_workflow_priority', { p_id: id, p_priority: priority })
   if (error) return { error: error.message }
   revalidatePath('/workflows')
+  revalidatePath(`/workflows/${id}`)
   revalidatePath('/groups')
   return { ok: true }
 }
