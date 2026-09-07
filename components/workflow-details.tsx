@@ -4,6 +4,7 @@ import { useActionState, useState, type ReactNode } from 'react'
 import { saveWorkflowDetails, type NoteState } from '@/app/(shell)/groups/actions'
 import { formatCalendarDate, formatNoteDate } from '@/lib/note-date'
 import { PencilIcon } from './icons'
+import { InitialsTile } from './ui'
 
 const INPUT =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -142,16 +143,36 @@ export function WorkflowDetails({
             </label>
           </div>
         ) : (
-          <>
-            <dl className="grid grid-cols-3 gap-x-4 gap-y-4">
-              <Field label="Owner" value={ownerName} />
-              <Field label="Date started" value={formatNoteDate(createdAt)} />
-              <Field label="Due date" value={dueAt ? formatCalendarDate(dueAt) : null} />
-            </dl>
-            <dl className="mt-4">
-              <Field label="Description" value={description} wrap />
-            </dl>
-          </>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+            {/* Owner on its own row, the two dates side by side beneath it, the
+                description last. Three across was tried and measured: at this
+                column's width a cell is 72–77px, and a 14px name only fits if it
+                is short — "Sarah Chen" did, "Clinton Hatcher" (about 105px) never
+                did. A date is always about 66px, so the pair share a row safely.
+                Names vary; dates do not.
+
+                "Unassigned", not an em-dash: it is the word the board's filter
+                and this box's own picker use for the same state, and unowned
+                work is a fact worth naming rather than a gap. The initials tile
+                is the site's mark for a person — the same one the board's cards
+                and the members list use — so the owner reads as who, not what. */}
+            <Field
+              label="Owner"
+              value={ownerName ?? 'Unassigned'}
+              muted={!ownerName}
+              span
+              leading={
+                ownerName ? (
+                  <span className="[&>span]:h-6 [&>span]:w-6 [&>span]:text-[10px]">
+                    <InitialsTile name={ownerName} />
+                  </span>
+                ) : undefined
+              }
+            />
+            <Field label="Date started" value={formatNoteDate(createdAt)} />
+            <Field label="Due date" value={dueAt ? formatCalendarDate(dueAt) : null} />
+            <Field label="Description" value={description} wrap span />
+          </dl>
         )}
       </div>
 
@@ -185,18 +206,32 @@ function Field({
   label,
   value,
   wrap = false,
+  muted = false,
+  span = false,
+  leading,
 }: {
   label: string
   value: string | null
   wrap?: boolean
+  /** A real word standing in for an absent value — quieter, like the em-dash. */
+  muted?: boolean
+  /** Take the whole row of the two-column grid. */
+  span?: boolean
+  /** A mark before the value, e.g. an initials tile for a person. */
+  leading?: ReactNode
 }): ReactNode {
   return (
-    <div className="min-w-0">
+    <div className={`min-w-0 ${span ? 'col-span-2' : ''}`}>
       <dt className="text-xs leading-snug text-neutral-500">{label}</dt>
       <dd
-        className={`mt-0.5 text-sm text-neutral-900 ${wrap ? 'leading-relaxed' : 'truncate leading-snug'}`}
+        className={`mt-0.5 flex items-center gap-2 text-sm ${
+          muted ? 'text-neutral-400' : 'text-neutral-900'
+        }`}
       >
-        {value ?? <span className="text-neutral-400">—</span>}
+        {leading}
+        <span className={`min-w-0 ${wrap ? 'leading-relaxed' : 'truncate leading-snug'}`}>
+          {value ?? <span className="text-neutral-400">—</span>}
+        </span>
       </dd>
     </div>
   )

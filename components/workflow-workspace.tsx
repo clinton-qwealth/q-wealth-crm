@@ -85,11 +85,17 @@ export function WorkflowWorkspace({
   )
 }
 
-/** One of the three columns, so a span is written once rather than per column. */
+/**
+ * One of the three columns, so a span is written once rather than per column.
+ *
+ * All three cards take the roomy 24px padding, not only the left one that
+ * asked for it: three cards in a row with two gutters read as a mistake, and
+ * the other two will be built into the same frame.
+ */
 function Column({ span, children }: { span: 3 | 6; children: ReactNode }) {
   return (
     <div className={`col-span-full flex flex-col gap-4 ${SPAN[span]}`}>
-      <Card>{children}</Card>
+      <Card padding="roomy">{children}</Card>
     </div>
   )
 }

@@ -135,22 +135,38 @@ describe('the workflow detail page', () => {
     const { container } = show()
     const marks = container.querySelector('h1')!.nextElementSibling!
     const bar = screen.getByRole('progressbar')
-    const fields = container.querySelector('dl.grid-cols-3')!
+    const fields = container.querySelector('form dl')!
     expect(marks.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(bar.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('three fields across one row: owner, date started, due date', () => {
+  test('owner on its own row, the two dates side by side beneath, description last', () => {
     const { container } = show()
-    const row = container.querySelector('dl.grid-cols-3')!
-    expect([...row.querySelectorAll('dt')].map((d) => d.textContent)).toEqual([
+    const grid = container.querySelector('form dl')!
+    const fields = [...grid.children] as HTMLElement[]
+    expect(fields.map((f) => f.querySelector('dt')!.textContent)).toEqual([
       'Owner',
       'Date started',
       'Due date',
+      'Description',
     ])
-    expect(row.textContent).toContain('Sarah Chen')
-    expect(row.textContent).toContain('6 Jul 2026')
-    expect(row.textContent).toContain('30 Sep 2026')
+    // Owner and description take the full row; the dates share one.
+    expect(fields[0].className).toContain('col-span-2')
+    expect(fields[1].className).not.toContain('col-span-2')
+    expect(fields[2].className).not.toContain('col-span-2')
+    expect(fields[3].className).toContain('col-span-2')
+    expect(grid.textContent).toContain('Sarah Chen')
+    expect(grid.textContent).toContain('6 Jul 2026')
+    expect(grid.textContent).toContain('30 Sep 2026')
+  })
+
+  test('the owner carries an initials tile, the site’s mark for a person; unassigned carries none', () => {
+    const { container, unmount } = show()
+    const owner = () => container.querySelector('form dl > div')!
+    expect(owner().querySelector('dd span[aria-hidden="true"]')!.textContent).toBe('SC')
+    unmount()
+    const { container: c2 } = show({ ...card, owner_name: null, owner_staff_id: null })
+    expect(c2.querySelector('form dl > div dd span[aria-hidden="true"]')).toBeNull()
   })
 
   test('the due date is a calendar date and does not slip a day west of Greenwich', () => {
@@ -167,19 +183,39 @@ describe('the workflow detail page', () => {
     }
   })
 
-  test('the description gets its own row beneath the three fields', () => {
+  test('the description is the last field and takes the full width', () => {
     const { container } = show()
-    const lists = [...container.querySelectorAll('dl')]
-    expect(lists.length).toBe(2)
-    expect(lists[1].querySelector('dt')!.textContent).toBe('Description')
-    expect(lists[1].textContent).toContain('Refresh the fact find')
+    const fields = [...container.querySelectorAll('form dl > div')] as HTMLElement[]
+    const last = fields.at(-1)!
+    expect(last.querySelector('dt')!.textContent).toBe('Description')
+    expect(last.className).toContain('col-span-2')
+    expect(last.textContent).toContain('Refresh the fact find')
   })
 
   test('a field with nothing in it reads as an em-dash, not a blank', () => {
-    const { container } = show({ ...card, owner_name: null, due_at: null, description: null })
+    const { container } = show({ ...card, owner_name: null, owner_staff_id: null, due_at: null, description: null })
     const dds = [...container.querySelectorAll('dd')].map((d) => d.textContent)
-    // Owner, due date and description are all absent; date started is not.
-    expect(dds.filter((t) => t === '—').length).toBe(3)
+    // Due date and description are absent and say so with a dash; date started
+    // is never absent; the owner has its own word — see the next test.
+    expect(dds.filter((t) => t === '—').length).toBe(2)
+  })
+
+  test('no owner reads "Unassigned" — the board’s word for it — not a dash', () => {
+    const { container } = show({ ...card, owner_name: null, owner_staff_id: null })
+    const owner = [...container.querySelectorAll('dt')].find((d) => d.textContent === 'Owner')!
+      .nextElementSibling as HTMLElement
+    expect(owner.textContent).toBe('Unassigned')
+    // Quieter than a real name, as an absent value should be.
+    expect(owner.className).toContain('text-neutral-400')
+  })
+
+  test('the three cards take the roomy padding, together', () => {
+    const { container } = show()
+    const cards = [...container.querySelectorAll('section.rounded-lg.border')].filter(
+      (el) => el.className.includes('shadow-'),
+    )
+    expect(cards.length).toBe(3)
+    for (const c of cards) expect(c.className).toContain('p-6')
   })
 
   test('the status pill follows the record — an under-review workflow is not badged as blocked', () => {

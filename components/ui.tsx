@@ -155,15 +155,27 @@ export function Card({
   className = '',
   title,
   action,
+  padding = 'default',
 }: {
   children: ReactNode
   className?: string
   title?: string
   action?: ReactNode
+  /**
+   * `default` is 16px, the site's card gutter. `roomy` is 24px, for a card
+   * that IS the record rather than a container of rows — the workflow detail
+   * page's, where a title, controls, a bar and a boxed section sit directly on
+   * the card and 16px reads as cramped. A prop rather than a className
+   * override, so the choice is legible and does not depend on which of two
+   * padding utilities wins in the stylesheet.
+   */
+  padding?: 'default' | 'roomy'
 }) {
   return (
     <section
-      className={`rounded-lg border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
+      className={`rounded-lg border border-neutral-200 bg-white ${
+        padding === 'roomy' ? 'p-6' : 'p-4'
+      } shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)] ${className}`}
     >
       {title || action ? (
         <div className="mb-3 flex items-center justify-between gap-3">
