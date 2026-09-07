@@ -11,6 +11,7 @@ export type WorkflowStatus =
   | 'not_started'
   | 'in_progress'
   | 'blocked'
+  | 'under_review'
   | 'complete'
   | 'cancelled'
 

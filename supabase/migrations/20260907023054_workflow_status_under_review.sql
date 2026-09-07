@@ -1,0 +1,14 @@
+-- A fourth stage for the workflow board (7 Sep 2026)
+--
+-- The board has four lanes: Not started, In progress, Under review, Completed.
+-- Three of those were already statuses; this adds the fourth.
+--
+-- This migration does ONLY this, on purpose. A value added to an enum cannot be
+-- used in the same transaction that adds it, so the index and function that
+-- refer to 'under_review' follow in the next migration.
+--
+-- 'blocked' and 'cancelled' are left as they are. Blocked is a condition of
+-- work in progress, not a stage of its own — the board shows it inside the In
+-- progress lane with a warning mark. Cancelled work is not on the board at all,
+-- and the board says how many it is not showing.
+alter type public.workflow_status add value 'under_review' after 'blocked';

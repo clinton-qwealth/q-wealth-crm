@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import type { BoardColumn } from '@/lib/workflow-board'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
 
@@ -657,6 +658,29 @@ export async function fileNoteUnderNewWorkflow(
     return { error: `The workflow was created, but the note could not be filed under it: ${attachError.message}` }
   }
 
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/**
+ * Move a workflow to a lane on the board.
+ *
+ * The lane IS the status, so this is a status change; set_workflow_status also
+ * keeps started_at and completed_at truthful for the new state. Both pages that
+ * show workflows are revalidated — the board, and the group page whose tab
+ * lists the same rows.
+ */
+export async function moveWorkflow(
+  id: string,
+  status: BoardColumn,
+): Promise<NoteState> {
+  if (!id) return { error: 'No workflow selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_status', { p_id: id, p_status: status })
+  if (error) return { error: error.message }
+
+  revalidatePath('/workflows')
   revalidatePath('/groups')
   return { ok: true }
 }

@@ -23,6 +23,7 @@ export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
   not_started: 'Not started',
   in_progress: 'In progress',
   blocked: 'Blocked',
+  under_review: 'Under review',
   complete: 'Complete',
   cancelled: 'Cancelled',
 }

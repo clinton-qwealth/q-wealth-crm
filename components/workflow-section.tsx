@@ -19,15 +19,24 @@ const STATUS_TONE: Record<WorkflowStatus, PillTone> = {
   not_started: 'neutral',
   in_progress: 'success',
   blocked: 'warning',
+  under_review: 'brand',
   complete: 'neutral',
   cancelled: 'neutral',
 }
 
-function StartWorkflowModal({
+export function StartWorkflowModal({
   groupId,
+  groups,
   triggerVariant = 'primary',
 }: {
-  groupId: string
+  /** The group the work is for, when the caller already knows it. */
+  groupId?: string
+  /**
+   * Offered instead when the caller does not — the cross-group board. The
+   * form then carries a select named `group_id`, so the server action reads
+   * the same field either way and does not know which caller it served.
+   */
+  groups?: { id: string; name: string }[]
   triggerVariant?: 'primary' | 'quiet'
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -93,7 +102,7 @@ function StartWorkflowModal({
         className="qw-modal m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
       >
         <form ref={formRef} action={formAction} className="flex flex-col">
-          <input type="hidden" name="group_id" value={groupId} />
+          {groupId ? <input type="hidden" name="group_id" value={groupId} /> : null}
           <div className="border-b border-neutral-100 px-5 py-4">
             <h2
               id="start-workflow-title"
@@ -102,11 +111,27 @@ function StartWorkflowModal({
               Start workflow
             </h2>
             <p className="mt-0.5 text-xs text-neutral-500">
-              A piece of work being done for this group. File notes can be filed under it.
+              A piece of work being done for {groups ? 'a client group' : 'this group'}. File notes
+              can be filed under it.
             </p>
           </div>
 
           <div className="flex flex-col gap-4 px-5 py-4">
+            {groups ? (
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Client group</span>
+                <select name="group_id" required defaultValue="" className={FIELD}>
+                  <option value="" disabled>
+                    Choose a group
+                  </option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Name</span>
               <input
