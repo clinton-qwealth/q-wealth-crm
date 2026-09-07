@@ -256,3 +256,33 @@ export function NoteIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/* Priority glyphs, Jira-shaped: direction says the level, the double says urgent. */
+export function PriorityLowIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} strokeWidth={2} aria-hidden="true">
+      <path d="m5 8 5 5 5-5" />
+    </svg>
+  )
+}
+export function PriorityMediumIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} strokeWidth={2} aria-hidden="true">
+      <path d="M5 7.5h10M5 12.5h10" />
+    </svg>
+  )
+}
+export function PriorityHighIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} strokeWidth={2} aria-hidden="true">
+      <path d="m5 12 5-5 5 5" />
+    </svg>
+  )
+}
+export function PriorityUrgentIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} strokeWidth={2} aria-hidden="true">
+      <path d="m5 10 5-5 5 5M5 15l5-5 5 5" />
+    </svg>
+  )
+}

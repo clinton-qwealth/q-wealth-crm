@@ -96,8 +96,17 @@ export function PageHeading({
  * object: one white surface with hairline rows, the only elevated thing in its
  * well.
  */
-export const SHEET =
-  'overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+export const SHEET_SURFACE =
+  'rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+
+/*
+ * SHEET clips its contents so hairline rows and footer bands meet the rounded
+ * corner cleanly. SHEET_SURFACE is the same surface WITHOUT the clip, for a
+ * sheet that hosts a popover — the board card's priority menu opens below the
+ * footer, and under SHEET it was cut off at the card's edge (seen in a
+ * screenshot, invisible to jsdom). Anything that opens a menu uses SURFACE.
+ */
+export const SHEET = `overflow-hidden ${SHEET_SURFACE}`
 
 /*
  * WELL is the ground a sheet sits on, inside a card. One token, used by the
@@ -293,7 +302,7 @@ export function Pill({
   const resolved = tone ?? (on ? 'success' : 'neutral')
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ring-1 ${PILL_TONES[resolved]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ring-1 ${PILL_TONES[resolved]}`}
     >
       {children}
     </span>

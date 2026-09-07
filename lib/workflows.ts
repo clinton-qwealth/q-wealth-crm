@@ -15,7 +15,7 @@ export async function getWorkflowBoard(): Promise<{ cards: BoardCard[]; cancelle
   const { data } = await supabase
     .from('workflow_board')
     .select(
-      'id, name, workflow_type, status, group_id, group_name, owner_name, started_at, completed_at, updated_at',
+      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at',
     )
     .order('updated_at', { ascending: false })
 

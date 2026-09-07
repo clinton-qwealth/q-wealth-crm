@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardColumn } from '@/lib/workflow-board'
+import type { BoardColumn, Priority } from '@/lib/workflow-board'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
 
@@ -680,6 +680,17 @@ export async function moveWorkflow(
   const { error } = await supabase.rpc('set_workflow_status', { p_id: id, p_status: status })
   if (error) return { error: error.message }
 
+  revalidatePath('/workflows')
+  revalidatePath('/groups')
+  return { ok: true }
+}
+
+/** Set a workflow's priority. Visibility and the right to change it are RLS. */
+export async function setWorkflowPriority(id: string, priority: Priority): Promise<NoteState> {
+  if (!id) return { error: 'No workflow selected.' }
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_priority', { p_id: id, p_priority: priority })
+  if (error) return { error: error.message }
   revalidatePath('/workflows')
   revalidatePath('/groups')
   return { ok: true }
