@@ -714,3 +714,33 @@ export async function setWorkflowPriority(id: string, priority: Priority): Promi
   revalidatePath('/groups')
   return { ok: true }
 }
+
+/**
+ * Save the workflow detail page's field box: owner, due date and description.
+ *
+ * The patch carries only the keys the form actually submitted, because that is
+ * what `set_workflow_details()` reads — key presence means "change this". A
+ * form that one day stops rendering a field therefore stops writing it, rather
+ * than clearing a column nobody touched.
+ */
+export async function saveWorkflowDetails(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const id = String(formData.get('workflow_id') ?? '')
+  if (!id) return { error: 'No workflow selected.' }
+
+  const patch: Record<string, string> = {}
+  for (const key of ['owner_staff_id', 'due_at', 'description'] as const) {
+    if (formData.has(key)) patch[key] = String(formData.get(key) ?? '')
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_details', { p_id: id, p_patch: patch })
+  if (error) return { error: error.message }
+
+  revalidatePath('/workflows')
+  revalidatePath(`/workflows/${id}`)
+  revalidatePath('/groups')
+  return { ok: true }
+}

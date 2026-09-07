@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import { getWorkflow } from '@/lib/workflows'
+import { getStaffChoices, getWorkflow } from '@/lib/workflows'
 import { WorkflowWorkspace } from '@/components/workflow-workspace'
 
 export const metadata = { title: 'Workflow · Q Wealth CRM' }
@@ -18,8 +18,10 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   if (!staff) redirect('/login')
 
   const { id } = await params
-  const workflow = await getWorkflow(id)
+  /* One wave: the row and the owner picker's staff list need nothing from each
+     other, so asking for them together costs one round trip rather than two. */
+  const [workflow, staffChoices] = await Promise.all([getWorkflow(id), getStaffChoices()])
   if (!workflow) notFound()
 
-  return <WorkflowWorkspace workflow={workflow} />
+  return <WorkflowWorkspace workflow={workflow} staff={staffChoices} />
 }

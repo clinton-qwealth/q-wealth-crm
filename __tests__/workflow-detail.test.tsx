@@ -20,6 +20,7 @@ vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: 
 vi.mock('@/app/(shell)/groups/actions', () => ({
   setWorkflowStatus: vi.fn(async () => ({ ok: true as const })),
   setWorkflowPriority: vi.fn(async () => ({ ok: true as const })),
+  saveWorkflowDetails: vi.fn(async () => ({ ok: true as const })),
 }))
 vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
@@ -28,11 +29,16 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/staff', () => ({ getCurrentStaff: vi.fn(async () => ({ id: 's1', full_name: 'A Adviser' })) }))
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => ({
-    from: () => {
+    from: (table: string) => {
       let id: string | undefined
-      const chain = {
+      const chain: Record<string, unknown> = {
         select: () => chain,
-        eq: (_col: string, v: string) => { id = v; return chain },
+        eq: (_col: string, v: string) => {
+          if (table !== 'staff_directory') id = v
+          return chain
+        },
+        // staff_directory is fetched as a list; workflow_board as one row.
+        order: async () => ({ data: [{ id: 's1', full_name: 'A Adviser', status: 'active' }], error: null }),
         maybeSingle: async () => ({ data: (id && rows[id]) ?? null, error: null }),
       }
       return chain
@@ -50,23 +56,32 @@ const card: WorkflowDetail = {
   id: 'w1', name: 'Annual review 2026', workflow_type: 'annual_review', status: 'blocked', priority: 'high',
   group_id: 'g1', group_name: 'Testsmith Household', owner_name: 'Sarah Chen',
   started_at: '2026-07-06T02:00:00Z', completed_at: null, updated_at: '2026-07-06T02:00:00Z',
-  created_at: '2026-07-06T02:00:00Z', due_at: '2026-09-30',
+  owner_staff_id: 's1', created_at: '2026-07-06T02:00:00Z', due_at: '2026-09-30',
   description: 'Refresh the fact find and test the portfolio against the strategy.',
 }
 
+const STAFF = [
+  { id: 's1', name: 'Sarah Chen' },
+  { id: 's2', name: 'Clinton Hatcher' },
+]
+
+/** Every render goes through here so the staff list is not repeated. */
+const show = (workflow: WorkflowDetail = card) =>
+  render(<WorkflowWorkspace workflow={workflow} staff={STAFF} />)
+
 describe('the workflow detail page', () => {
   test('the workflow’s name is the page’s one h1, and it sits in the left card', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     const h1s = container.querySelectorAll('h1')
     expect(h1s.length).toBe(1)
     expect(h1s[0].textContent).toBe('Annual review 2026')
     // Inside the first column's card, not in a header band above the columns.
-    const left = container.querySelector('.lg\\:col-span-4')!
+    const left = container.querySelector('.lg\\:col-span-3')!
     expect(left.contains(h1s[0])).toBe(true)
   })
 
   test('kind, status and priority sit in one row directly under the name', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     const h1 = container.querySelector('h1')!
     const marks = h1.nextElementSibling as HTMLElement
     // After the name in the DOM, so it reads as belonging under it...
@@ -88,7 +103,7 @@ describe('the workflow detail page', () => {
    * bug to the next reader.
    */
   test('the status is said twice on purpose: as a pill, and as the bar’s label', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     expect(screen.getAllByText('Blocked').length).toBe(2)
     const marks = container.querySelector('h1')!.nextElementSibling as HTMLElement
     const barRow = screen.getByRole('progressbar').previousElementSibling!
@@ -96,28 +111,28 @@ describe('the workflow detail page', () => {
     expect(barRow.firstElementChild!.textContent).toBe('Blocked')
   })
 
-  test('three columns, 4 / 5 / 3 of twelve — the left column wider than the group page’s', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+  test('three columns, 3 / 6 / 3 of twelve — the group page’s spans again', () => {
+    const { container } = show()
     const cols = [...container.querySelectorAll('[class*="lg:col-span-"]')]
       .filter((el) => el.querySelector('section')) // the columns, not the heading grid
       .map((el) => el.className.match(/lg:col-span-(\d+)/)![1])
-    expect(cols).toEqual(['4', '5', '3'])
+    expect(cols).toEqual(['3', '6', '3'])
   })
 
   test('the two unbuilt columns say what will go there; the left one no longer needs to', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     expect(screen.getByText(/Steps and activity for this workflow go here/)).toBeTruthy()
     expect(screen.getByText(/File notes filed under this workflow go here/)).toBeTruthy()
     // The left column's placeholder named the group, owner and dates. Those are
     // real fields now, so the placeholder is gone rather than sitting under them.
-    const left = container.querySelector('.lg\\:col-span-4')!
+    const left = container.querySelector('.lg\\:col-span-3')!
     expect(left.querySelector('.border-dashed')).toBeNull()
     // Exactly two placeholders remain on the page, both outside the left column.
     expect(container.querySelectorAll('.border-dashed').length).toBe(2)
   })
 
   test('the progress bar sits between the marks and the fields, not at the bottom', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     const marks = container.querySelector('h1')!.nextElementSibling!
     const bar = screen.getByRole('progressbar')
     const fields = container.querySelector('dl.grid-cols-3')!
@@ -126,7 +141,7 @@ describe('the workflow detail page', () => {
   })
 
   test('three fields across one row: owner, date started, due date', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     const row = container.querySelector('dl.grid-cols-3')!
     expect([...row.querySelectorAll('dt')].map((d) => d.textContent)).toEqual([
       'Owner',
@@ -142,7 +157,7 @@ describe('the workflow detail page', () => {
     const original = process.env.TZ
     process.env.TZ = 'America/New_York'
     try {
-      render(<WorkflowWorkspace workflow={card} />)
+      show()
       // `new Date('2026-09-30')` is UTC midnight, which renders as the 29th here.
       // Splitting the string is the only way this reads as written.
       expect(screen.getByText('30 Sep 2026')).toBeTruthy()
@@ -153,7 +168,7 @@ describe('the workflow detail page', () => {
   })
 
   test('the description gets its own row beneath the three fields', () => {
-    const { container } = render(<WorkflowWorkspace workflow={card} />)
+    const { container } = show()
     const lists = [...container.querySelectorAll('dl')]
     expect(lists.length).toBe(2)
     expect(lists[1].querySelector('dt')!.textContent).toBe('Description')
@@ -161,18 +176,14 @@ describe('the workflow detail page', () => {
   })
 
   test('a field with nothing in it reads as an em-dash, not a blank', () => {
-    const { container } = render(
-      <WorkflowWorkspace workflow={{ ...card, owner_name: null, due_at: null, description: null }} />,
-    )
+    const { container } = show({ ...card, owner_name: null, due_at: null, description: null })
     const dds = [...container.querySelectorAll('dd')].map((d) => d.textContent)
     // Owner, due date and description are all absent; date started is not.
     expect(dds.filter((t) => t === '—').length).toBe(3)
   })
 
   test('the status pill follows the record — an under-review workflow is not badged as blocked', () => {
-    const { container } = render(
-      <WorkflowWorkspace workflow={{ ...card, status: 'under_review', priority: 'low' }} />,
-    )
+    const { container } = show({ ...card, status: 'under_review', priority: 'low' })
     const marks = container.querySelector('h1')!.nextElementSibling as HTMLElement
     expect([...marks.children].map((c) => c.textContent)).toEqual([
       'Annual review',
@@ -183,7 +194,7 @@ describe('the workflow detail page', () => {
   })
 
   test('the progress bar is green, labelled by status, and reports a percentage', () => {
-    const { container } = render(<WorkflowWorkspace workflow={{ ...card, status: 'in_progress' }} />)
+    const { container } = show({ ...card, status: 'in_progress' })
     const bar = screen.getByRole('progressbar')
     expect(bar.getAttribute('aria-valuenow')).toBe('33')
     expect(bar.getAttribute('aria-valuetext')).toBe('In progress, 33% complete')
@@ -206,14 +217,14 @@ describe('the workflow detail page', () => {
       ['under_review', '67'],
       ['complete', '100'],
     ] as const) {
-      const { unmount } = render(<WorkflowWorkspace workflow={{ ...card, status }} />)
+      const { unmount } = show({ ...card, status })
       expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe(percent)
       unmount()
     }
   })
 
   test('cancelled work reports no percentage rather than claiming nothing was done', () => {
-    render(<WorkflowWorkspace workflow={{ ...card, status: 'cancelled' }} />)
+    show({ ...card, status: 'cancelled' })
     const bar = screen.getByRole('progressbar')
     expect(bar.getAttribute('aria-valuenow')).toBeNull()
     expect(bar.getAttribute('aria-valuetext')).toBe('Cancelled')
@@ -222,7 +233,7 @@ describe('the workflow detail page', () => {
   })
 
   test('the bar says Complete when the work is finished', () => {
-    render(<WorkflowWorkspace workflow={{ ...card, status: 'complete' }} />)
+    show({ ...card, status: 'complete' })
     const row = screen.getByRole('progressbar').previousElementSibling!
     expect(row.firstElementChild!.textContent).toBe('Complete')
     expect(row.lastElementChild!.textContent).toBe('100%')
@@ -230,7 +241,7 @@ describe('the workflow detail page', () => {
 
   test('the status pill is a button that opens all six statuses, lanes and not', async () => {
     const user = userEvent.setup()
-    render(<WorkflowWorkspace workflow={card} />)
+    show()
     await user.click(screen.getByRole('button', { name: /^Status: Blocked\. Change status of/ }))
     const menu = screen.getByRole('menu', { name: /Status of Annual review 2026/ })
     expect([...menu.querySelectorAll('[role=menuitemradio]')].map((b) => b.textContent)).toEqual([
@@ -247,7 +258,7 @@ describe('the workflow detail page', () => {
 
   test('choosing a status updates the pill, calls the action, and moves the bar with it', async () => {
     const user = userEvent.setup()
-    render(<WorkflowWorkspace workflow={card} />)
+    show()
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('33')
 
     await user.click(screen.getByRole('button', { name: /Change status of/ }))
@@ -262,7 +273,7 @@ describe('the workflow detail page', () => {
   test('a refused status change puts the pill and the bar back, with the reason', async () => {
     vi.mocked(actions.setWorkflowStatus).mockResolvedValueOnce({ error: 'Not yours to change' })
     const user = userEvent.setup()
-    render(<WorkflowWorkspace workflow={card} />)
+    show()
 
     await user.click(screen.getByRole('button', { name: /Change status of/ }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Cancelled' }))
@@ -274,7 +285,7 @@ describe('the workflow detail page', () => {
 
   test('priority is editable too, and shows the level in words beside the glyph', async () => {
     const user = userEvent.setup()
-    render(<WorkflowWorkspace workflow={card} />)
+    show()
     const trigger = screen.getByRole('button', { name: /^Priority: High\. Change priority of/ })
     expect(trigger.textContent).toBe('High')
 
@@ -288,11 +299,94 @@ describe('the workflow detail page', () => {
   test('a refused priority change reverts it', async () => {
     vi.mocked(actions.setWorkflowPriority).mockResolvedValueOnce({ error: 'Refused' })
     const user = userEvent.setup()
-    render(<WorkflowWorkspace workflow={card} />)
+    show()
     await user.click(screen.getByRole('button', { name: /Change priority of/ }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Low' }))
     expect((await screen.findByRole('alert')).textContent).toContain('Refused')
     expect(screen.getByRole('button', { name: /^Priority: High/ })).toBeTruthy()
+  })
+
+  test('the fields sit in a bordered box with a pencil, and a rule divides it from the bar', () => {
+    const { container } = show()
+    const box = screen.getByRole('button', { name: 'Edit details' }).closest('form')!
+    expect(box.className).toContain('border-neutral-200')
+    expect(box.className).toContain('rounded-lg')
+    // The rule sits between the bar and the box.
+    const hr = container.querySelector('hr')!
+    const bar = screen.getByRole('progressbar')
+    expect(bar.compareDocumentPosition(hr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(hr.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  /**
+   * The load-bearing one, carried over from the member panel: a section being
+   * read renders nothing a submit could send, so "reading a record cannot
+   * change it" is true of the DOM and not merely of intent.
+   */
+  test('reading the box renders nothing submittable', () => {
+    show()
+    const box = screen.getByRole('button', { name: 'Edit details' }).closest('form')!
+    expect(box.querySelectorAll('input, select, textarea').length).toBe(0)
+  })
+
+  test('the pencil makes owner, due date and description editable — but not the started date', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: 'Edit details' }))
+
+    const owner = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
+    expect(owner.value).toBe('s1')
+    expect([...owner.options].map((o) => o.textContent)).toEqual([
+      'Unassigned',
+      'Sarah Chen',
+      'Clinton Hatcher',
+    ])
+    expect(screen.getByLabelText('Due date').getAttribute('type')).toBe('date')
+    expect((screen.getByLabelText('Due date') as HTMLInputElement).value).toBe('2026-09-30')
+    expect(screen.getByLabelText('Description').tagName).toBe('TEXTAREA')
+
+    // Date started is created_at: a record of when the row was made, not a
+    // property of the work, so there is no input for it.
+    expect(screen.queryByLabelText('Date started')).toBeNull()
+    expect(screen.getByText('6 Jul 2026')).toBeTruthy()
+  })
+
+  test('saving sends the three editable fields and closes the section', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: 'Edit details' }))
+    await user.clear(screen.getByLabelText('Description'))
+    await user.type(screen.getByLabelText('Description'), 'Rewritten.')
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Owner' }), 's2')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const sent = vi.mocked(actions.saveWorkflowDetails).mock.calls.at(-1)![1]
+    expect(sent.get('workflow_id')).toBe('w1')
+    expect(sent.get('owner_staff_id')).toBe('s2')
+    expect(sent.get('due_at')).toBe('2026-09-30')
+    expect(sent.get('description')).toBe('Rewritten.')
+    // Back to reading, so the section does not sit open over refreshed values.
+    expect(await screen.findByRole('button', { name: 'Edit details' })).toBeTruthy()
+  })
+
+  test('a refused save keeps the section open with the reason', async () => {
+    vi.mocked(actions.saveWorkflowDetails).mockResolvedValueOnce({ error: 'Not yours to edit' })
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: 'Edit details' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Not yours to edit')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
+  })
+
+  test('an owner who has left the directory stays selectable rather than being cleared', async () => {
+    const user = userEvent.setup()
+    show({ ...card, owner_staff_id: 'gone', owner_name: 'Departed Adviser' })
+    await user.click(screen.getByRole('button', { name: 'Edit details' }))
+    const owner = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
+    expect(owner.value).toBe('gone')
+    expect([...owner.options].map((o) => o.textContent)).toContain('Departed Adviser')
   })
 
   test('the page renders the workflow it is asked for', async () => {

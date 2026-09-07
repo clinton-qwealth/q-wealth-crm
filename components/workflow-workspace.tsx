@@ -2,29 +2,33 @@ import type { ReactNode } from 'react'
 import type { WorkflowDetail } from '@/lib/workflow-board'
 import { Card, Placeholder } from './ui'
 import { WorkflowState } from './workflow-state'
-import { formatCalendarDate, formatNoteDate } from '@/lib/note-date'
+import { WorkflowDetails } from './workflow-details'
 
-const SPAN: Record<3 | 4 | 5, string> = {
+const SPAN: Record<3 | 6, string> = {
   3: 'lg:col-span-3',
-  4: 'lg:col-span-4',
-  5: 'lg:col-span-5',
+  6: 'lg:col-span-6',
 }
 
 /**
- * The workflow detail page's body: three columns, **4 / 5 / 3** of twelve at
+ * The workflow detail page's body: three columns, **3 / 6 / 3** of twelve at
  * `lg`, one column below.
  *
- * It began on the group page's 3 / 6 / 3 and moved off it deliberately. This
- * page has no header band of its own — the workflow's name and marks live in
- * the left card, which is the column that describes the record — so the left
- * column carries a title, editable marks, a progress bar, a field row and a
- * description, and needs the room. The width came out of the centre; the right
- * column still lines up with the group page's third column.
+ * The same spans as the group page. They were briefly 4 / 5 / 3 — the left
+ * column was widened by one step when the page's header moved into it — and
+ * moved back once the fields went into a boxed section, which reads as a
+ * contained object at any width where the group page's profile card does.
  *
  * Rendered by the page after the staff check and the fetch, and by a preview
  * with fixture data — which is why it takes a record and not an id.
  */
-export function WorkflowWorkspace({ workflow: w }: { workflow: WorkflowDetail }) {
+export function WorkflowWorkspace({
+  workflow: w,
+  staff,
+}: {
+  workflow: WorkflowDetail
+  /** Active staff, for the owner picker. Empty in a preview. */
+  staff: { id: string; name: string }[]
+}) {
   return (
     <>
       {/* Left — what the workflow is, headed by its name.
@@ -34,7 +38,7 @@ export function WorkflowWorkspace({ workflow: w }: { workflow: WorkflowDetail })
           workflow's name still reads as a page title — the standing rule that
           the largest type on a page is its title, at the same size on every
           screen — while sitting with the record it names. */}
-      <Column span={4}>
+      <Column span={3}>
         <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">Workflow</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">{w.name}</h1>
 
@@ -48,29 +52,25 @@ export function WorkflowWorkspace({ workflow: w }: { workflow: WorkflowDetail })
           priority={w.priority}
         />
 
-        {/* Three fields across one row, label stacked over value — the same
-            treatment as the group page's profile card, so the two read as the
-            same kind of thing.
+        {/* A rule, not just space. Above it the card is about where the work
+            stands — a state anyone can change in two clicks. Below it are the
+            recorded facts of the piece of work, behind a pencil. Two different
+            kinds of thing, so there is a line between them. */}
+        <hr className="my-6 border-t border-neutral-200" />
 
-            The two dates are formatted by OPPOSITE rules, side by side in one
-            row, which is exactly why both live in one module. created_at is a
-            timestamptz — an instant — so it converts to the reader's timezone.
-            due_at is a `date`: a day, not a moment, so it is split from the
-            string and never put through `new Date()`, which would render the
-            day before anywhere west of Greenwich. See lib/note-date.ts. */}
-        <dl className="mt-6 grid grid-cols-3 gap-x-4 gap-y-4">
-          <Field label="Owner" value={w.owner_name} />
-          <Field label="Date started" value={formatNoteDate(w.created_at)} />
-          <Field label="Due date" value={w.due_at ? formatCalendarDate(w.due_at) : null} />
-        </dl>
-
-        <dl className="mt-4">
-          <Field label="Description" value={w.description} wrap />
-        </dl>
+        <WorkflowDetails
+          id={w.id}
+          ownerStaffId={w.owner_staff_id}
+          ownerName={w.owner_name}
+          createdAt={w.created_at}
+          dueAt={w.due_at}
+          description={w.description}
+          staff={staff}
+        />
       </Column>
 
       {/* Centre — the work itself */}
-      <Column span={5}>
+      <Column span={6}>
         <Placeholder className="h-96">
           The working area. Steps and activity for this workflow go here, in tabs like the
           group page.
@@ -85,30 +85,8 @@ export function WorkflowWorkspace({ workflow: w }: { workflow: WorkflowDetail })
   )
 }
 
-/**
- * One label-over-value field.
- *
- * An absent value is an em-dash, not a blank — the same rule as the group
- * page's profile card. A blank space is ambiguous: it could mean nothing was
- * recorded, or that the field failed to render.
- */
-function Field({ label, value, wrap = false }: { label: string; value: string | null; wrap?: boolean }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-xs leading-snug text-neutral-500">{label}</dt>
-      <dd
-        className={`mt-0.5 text-sm leading-snug text-neutral-900 ${
-          wrap ? 'leading-relaxed' : 'truncate'
-        }`}
-      >
-        {value ?? <span className="text-neutral-400">—</span>}
-      </dd>
-    </div>
-  )
-}
-
 /** One of the three columns, so a span is written once rather than per column. */
-function Column({ span, children }: { span: 3 | 4 | 5; children: ReactNode }) {
+function Column({ span, children }: { span: 3 | 6; children: ReactNode }) {
   return (
     <div className={`col-span-full flex flex-col gap-4 ${SPAN[span]}`}>
       <Card>{children}</Card>

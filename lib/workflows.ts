@@ -46,9 +46,26 @@ export async function getWorkflow(id: string): Promise<WorkflowDetail | null> {
     .select(
       /* The card's columns plus the three only this page reads. The board's own
          query deliberately does not ask for these — see WorkflowDetail. */
-      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at, created_at, due_at, description',
+      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, owner_staff_id, started_at, completed_at, updated_at, created_at, due_at, description',
     )
     .eq('id', id)
     .maybeSingle()
   return error ? null : ((data as WorkflowDetail | null) ?? null)
+}
+
+/**
+ * Active staff, for the owner picker on the detail page.
+ *
+ * From `staff_directory` rather than `staff_users`: the directory is readable by
+ * every active staff member, where the base table is not — which is the whole
+ * reason the view exists. See the Data Model page.
+ */
+export async function getStaffChoices(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data } = await supabase
+    .from('staff_directory')
+    .select('id, full_name, status')
+    .eq('status', 'active')
+    .order('full_name')
+  return (data ?? []).map((s) => ({ id: s.id as string, name: s.full_name as string }))
 }

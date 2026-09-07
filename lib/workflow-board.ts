@@ -180,6 +180,8 @@ export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
  * for nothing, on the one query that returns the most rows.
  */
 export type WorkflowDetail = BoardCard & {
+  /** The owner's staff id, for the picker. `owner_name` is the resolved name. */
+  owner_staff_id: string | null
   /** An instant: when the record was made. Rendered in the reader's timezone. */
   created_at: string
   /** A calendar date, or none set. Rendered by splitting the string. */
