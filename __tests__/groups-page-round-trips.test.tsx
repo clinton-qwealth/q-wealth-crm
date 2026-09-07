@@ -48,7 +48,11 @@ function stubClient() {
         author_name: 'A Adviser', source: 'manual', workflow_id: 'w1', workflow_name: 'Annual review 2026',
         workflow_status: 'in_progress' },
     ],
-    workflows: [{ id: 'w1', name: 'Annual review 2026', workflow_type: 'annual_review', status: 'in_progress' }],
+    workflow_board: [
+      { id: 'w1', name: 'Annual review 2026', workflow_type: 'annual_review', status: 'in_progress', priority: 'medium',
+        group_id: 'g1', group_name: 'Testsmith Household', owner_name: 'A Adviser', started_at: '2026-07-01T00:00:00Z',
+        completed_at: null, updated_at: '2026-07-06T02:00:00Z' },
+    ],
   }
 
   const builder = (table: string) => {
@@ -101,7 +105,7 @@ describe('/groups round-trip depth', () => {
     // The notes pair must actually have been reached, or the depth below is
     // measuring a page that never fetched them.
     expect(calls).toContain('group_notes_summary')
-    expect(calls).toContain('workflows')
+    expect(calls).toContain('workflow_board')
     expect(depth).toBeLessThanOrEqual(5)
   })
 })

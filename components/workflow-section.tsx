@@ -2,27 +2,16 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { startWorkflow, type NoteState } from '@/app/(shell)/groups/actions'
-import type { WorkflowOption, WorkflowStatus, WorkflowType } from '@/lib/notes'
-import { DataRow, DataSection } from './data-section'
-import { Pill, type PillTone } from './ui'
+import type { WorkflowType } from '@/lib/notes'
+import type { BoardCard } from '@/lib/workflow-board'
 import { PlusIcon } from './icons'
-import { WORKFLOW_STATUS_LABEL, WORKFLOW_TYPE_LABEL } from './file-notes'
+import { formatNoteDate, WORKFLOW_TYPE_LABEL } from './file-notes'
+import { WorkflowCard } from './workflow-card'
+import { useWorkflowCards } from './use-workflow-cards'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
 const LABEL = 'text-xs font-medium text-neutral-600'
-
-/* Blocked is the one worth noticing, so it is the one that gets amber.
-   In progress is the ordinary state and stays quiet — badging every row the
-   same way would make none of them stand out. */
-const STATUS_TONE: Record<WorkflowStatus, PillTone> = {
-  not_started: 'neutral',
-  in_progress: 'success',
-  blocked: 'warning',
-  under_review: 'brand',
-  complete: 'neutral',
-  cancelled: 'neutral',
-}
 
 export function StartWorkflowModal({
   groupId,
@@ -182,47 +171,115 @@ export function StartWorkflowModal({
 }
 
 /**
- * The work being done for this group.
+ * The card's second line on the group page. The board puts the group's name
+ * there; on the group's own page that is the page title, so the line carries
+ * something the board does not show — when the work started or finished.
+ */
+export function cardSubtitle(c: BoardCard): string {
+  if (c.status === 'complete' && c.completed_at) return `Completed ${formatNoteDate(c.completed_at)}`
+  if (c.status === 'cancelled') return 'Cancelled'
+  if (c.started_at) return `Started ${formatNoteDate(c.started_at)}`
+  return 'Not started yet'
+}
+
+/**
+ * The work being done for this group, as the same cards the board shows.
  *
- * Minimal on purpose, and the empty state says as much: there are no steps, no
- * due dates and no assignment beyond an owner yet. What exists is enough for a
- * file note to say which piece of work it belongs to, which is what it was
- * built for.
+ * Laid out as one lane at the board's lane width — the cards are the board's
+ * cards, so they should be met at the board's size — with the rest of the tab
+ * left deliberately empty. That space is a placeholder: something will go
+ * there once it is clear what a group's workflows need beside them, and an
+ * honest blank is better than a guess dressed up as a feature.
+ *
+ * Moving and reprioritising work here exactly as on the board, through the
+ * same hook, so the two screens cannot disagree about what a change does.
  */
 export function WorkflowSection({
   groupId,
   workflows,
 }: {
   groupId: string
-  workflows: WorkflowOption[]
+  workflows: BoardCard[]
 }) {
+  const { cards, error, move, reprioritise } = useWorkflowCards(workflows)
+  const live = cards.filter((c) => c.status !== 'cancelled')
+  const cancelled = cards.length - live.length
+
+  if (!live.length) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
+          <PlusIcon className="h-4 w-4" />
+        </span>
+        <p className="mt-3 text-sm font-medium text-neutral-700">No workflows running</p>
+        <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+          Onboarding, annual reviews and advice production appear here once started.
+        </p>
+        <div className="mt-4">
+          <StartWorkflowModal groupId={groupId} />
+        </div>
+        {cancelled ? (
+          <p className="mt-4 text-xs text-neutral-400">
+            {cancelled} cancelled workflow{cancelled === 1 ? ' is' : 's are'} not shown.
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+
   return (
-    <DataSection
-      title="Workflows"
-      addLabel="Start workflow"
-      countLabel={
-        workflows.length
-          ? `${workflows.length} workflow${workflows.length === 1 ? '' : 's'}`
-          : undefined
-      }
-      action={<StartWorkflowModal groupId={groupId} triggerVariant="quiet" />}
-      emptyAction={<StartWorkflowModal groupId={groupId} />}
-      empty={{
-        title: 'No workflows running',
-        description:
-          'Onboarding, annual reviews and advice production appear here once started.',
-      }}
-    >
-      {workflows.length
-        ? workflows.map((w) => (
-            <DataRow
-              key={w.id}
-              primary={w.name}
-              secondary={WORKFLOW_TYPE_LABEL[w.workflow_type]}
-              meta={<Pill tone={STATUS_TONE[w.status]}>{WORKFLOW_STATUS_LABEL[w.status]}</Pill>}
-            />
-          ))
-        : null}
-    </DataSection>
+    <div>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <h3 className="truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          Workflows
+        </h3>
+        <p className="text-xs text-neutral-500">
+          {live.length} workflow{live.length === 1 ? '' : 's'}
+        </p>
+        <StartWorkflowModal groupId={groupId} triggerVariant="quiet" />
+      </div>
+
+      {error ? (
+        <p role="alert" className="mb-3 text-sm text-red-600">
+          {error}
+        </p>
+      ) : null}
+
+      {/* 19.125rem is the board's CARD width at 1440px — measured, not guessed
+          — so a card here is the same size as the same card there. There is no
+          inner well around the stack: the tab body is already the well (same
+          token), and a well inside a well of the same tone is invisible, so it
+          would only inset the cards past the heading's edge. Below lg the tab
+          is full width anyway and the placeholder drops beneath. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[19.125rem_1fr]">
+        <section aria-label="Workflow cards">
+          <ul className="flex flex-col gap-2">
+            {live.map((c) => (
+              <li key={c.id}>
+                <WorkflowCard
+                  card={c}
+                  subtitle={cardSubtitle(c)}
+                  onMove={(to) => move(c.id, to)}
+                  onPriority={(p) => reprioritise(c.id, p)}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+        {/* Reserved. Blank on purpose and hidden from assistive technology:
+            there is nothing here to announce yet. */}
+        <div
+          aria-hidden
+          data-slot="placeholder"
+          className="min-h-[8rem] rounded-lg border border-dashed border-neutral-300/80"
+        />
+      </div>
+
+      {cancelled ? (
+        <p className="mt-3 text-xs text-neutral-400">
+          {cancelled} cancelled workflow{cancelled === 1 ? ' is' : 's are'} not shown.
+        </p>
+      ) : null}
+    </div>
   )
 }

@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import type { BoardCard } from '@/lib/workflow-board'
 
 export type WorkflowType =
   | 'onboarding'
@@ -44,7 +45,12 @@ export type NoteHeader = {
 }
 
 /**
- * The group's file notes and the workflows they can be filed under.
+ * The group's file notes and its workflows.
+ *
+ * The workflows come from `workflow_board` — the same view the cross-group
+ * board reads, filtered to this group — so the Workflows tab can show the same
+ * card as the board, priority and owner included, and the notes picker gets
+ * the same rows to file under. One source, two uses.
  *
  * One wave, two queries. They need nothing from each other, and this whole
  * function is itself one member of the page's existing top-level wave — so
@@ -58,7 +64,8 @@ export type NoteHeader = {
  */
 export async function getGroupNotes(groupId: string): Promise<{
   notes: NoteHeader[]
-  workflows: WorkflowOption[]
+  /** A BoardCard is a WorkflowOption with more on it, so the notes picker takes these as they are. */
+  workflows: BoardCard[]
 }> {
   const supabase = await createSupabaseServerClient({ writable: false })
 
@@ -77,14 +84,17 @@ export async function getGroupNotes(groupId: string): Promise<{
          history; paging belongs with a full notes screen, not a side panel. */
       .limit(50),
     supabase
-      .from('workflows')
-      .select('id, name, workflow_type, status')
+      .from('workflow_board')
+      .select(
+        'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at',
+      )
       .eq('group_id', groupId)
-      .order('created_at', { ascending: false }),
+      /* Most recently touched first, the same order as the board. */
+      .order('updated_at', { ascending: false }),
   ])
 
   return {
     notes: (notesRes.data ?? []) as NoteHeader[],
-    workflows: (workflowsRes.data ?? []) as WorkflowOption[],
+    workflows: (workflowsRes.data ?? []) as BoardCard[],
   }
 }
