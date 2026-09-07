@@ -216,3 +216,39 @@ export function workflowProgress(status: WorkflowStatus): {
   const index = BOARD_COLUMNS.findIndex((c) => c.id === lane)
   return { percent: Math.round((index / (BOARD_COLUMNS.length - 1)) * 100), label }
 }
+
+/**
+ * A task under a workflow: one thing to be done as part of the work.
+ *
+ * `task_type` has one value today. A checkbox task is a boolean selection —
+ * done or not done — and its status IS that selection. Other kinds are
+ * expected once templates exist; the column is here so the meaning is in place
+ * before the second kind arrives.
+ */
+export type TaskType = 'checkbox'
+export type TaskStatus = 'open' | 'done' | 'cancelled'
+
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  open: 'Open',
+  done: 'Done',
+  cancelled: 'Cancelled',
+}
+
+export type WorkflowTask = {
+  id: string
+  workflow_id: string
+  task_type: TaskType
+  subject: string
+  /** What the task is. */
+  description: string | null
+  /** What the person doing it had to say. */
+  comment: string | null
+  /** A calendar date, or none. Rendered by splitting the string. */
+  due_at: string | null
+  status: TaskStatus
+  assigned_to_staff_id: string | null
+  assigned_to_name: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}

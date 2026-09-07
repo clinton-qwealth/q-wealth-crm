@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import type { WorkflowDetail } from '@/lib/workflow-board'
+import type { WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 import { Card, Placeholder } from './ui'
 import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
+import { WorkflowTasks } from './workflow-tasks'
 
 const SPAN: Record<3 | 6, string> = {
   3: 'lg:col-span-3',
@@ -24,10 +25,12 @@ const SPAN: Record<3 | 6, string> = {
 export function WorkflowWorkspace({
   workflow: w,
   staff,
+  tasks,
 }: {
   workflow: WorkflowDetail
-  /** Active staff, for the owner picker. Empty in a preview. */
+  /** Active staff, for the owner and assignee pickers. Empty in a preview. */
   staff: { id: string; name: string }[]
+  tasks: WorkflowTask[]
 }) {
   return (
     <>
@@ -69,12 +72,9 @@ export function WorkflowWorkspace({
         />
       </Column>
 
-      {/* Centre — the work itself */}
+      {/* Centre — the work itself: the tasks under this workflow */}
       <Column span={6}>
-        <Placeholder className="h-96">
-          The working area. Steps and activity for this workflow go here, in tabs like the
-          group page.
-        </Placeholder>
+        <WorkflowTasks workflowId={w.id} tasks={tasks} staff={staff} />
       </Column>
 
       {/* Right — the notes filed under it */}

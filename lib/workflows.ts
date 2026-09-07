@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardCard, WorkflowDetail } from '@/lib/workflow-board'
+import type { BoardCard, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
 /**
  * Every workflow the caller can see, across every group — the view is
@@ -68,4 +68,21 @@ export async function getStaffChoices(): Promise<{ id: string; name: string }[]>
     .eq('status', 'active')
     .order('full_name')
   return (data ?? []).map((s) => ({ id: s.id as string, name: s.full_name as string }))
+}
+
+/**
+ * A workflow's tasks, oldest first — the order they were added, which for
+ * template-generated tasks will be the order of the template. Through the
+ * security_invoker view, so a task is visible exactly when its workflow is.
+ */
+export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data } = await supabase
+    .from('workflow_tasks_summary')
+    .select(
+      'id, workflow_id, task_type, subject, description, comment, due_at, status, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at',
+    )
+    .eq('workflow_id', workflowId)
+    .order('created_at', { ascending: true })
+  return (data ?? []) as WorkflowTask[]
 }

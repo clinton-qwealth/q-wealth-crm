@@ -21,6 +21,8 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   setWorkflowStatus: vi.fn(async () => ({ ok: true as const })),
   setWorkflowPriority: vi.fn(async () => ({ ok: true as const })),
   saveWorkflowDetails: vi.fn(async () => ({ ok: true as const })),
+  createWorkflowTask: vi.fn(async () => ({ ok: true as const })),
+  setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
 }))
 vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
@@ -34,11 +36,14 @@ vi.mock('@/lib/supabase/server', () => ({
       const chain: Record<string, unknown> = {
         select: () => chain,
         eq: (_col: string, v: string) => {
-          if (table !== 'staff_directory') id = v
+          if (table === 'workflow_board') id = v
           return chain
         },
-        // staff_directory is fetched as a list; workflow_board as one row.
-        order: async () => ({ data: [{ id: 's1', full_name: 'A Adviser', status: 'active' }], error: null }),
+        // Lists: the staff directory and the task list. workflow_board is one row.
+        order: async () => ({
+          data: table === 'staff_directory' ? [{ id: 's1', full_name: 'A Adviser', status: 'active' }] : [],
+          error: null,
+        }),
         maybeSingle: async () => ({ data: (id && rows[id]) ?? null, error: null }),
       }
       return chain
@@ -67,7 +72,7 @@ const STAFF = [
 
 /** Every render goes through here so the staff list is not repeated. */
 const show = (workflow: WorkflowDetail = card) =>
-  render(<WorkflowWorkspace workflow={workflow} staff={STAFF} />)
+  render(<WorkflowWorkspace workflow={workflow} staff={STAFF} tasks={[]} />)
 
 describe('the workflow detail page', () => {
   test('the workflow’s name is the page’s one h1, and it sits in the left card', () => {
@@ -119,16 +124,15 @@ describe('the workflow detail page', () => {
     expect(cols).toEqual(['3', '6', '3'])
   })
 
-  test('the two unbuilt columns say what will go there; the left one no longer needs to', () => {
+  test('only the right column is still a placeholder; the centre is the task list', () => {
     const { container } = show()
-    expect(screen.getByText(/Steps and activity for this workflow go here/)).toBeTruthy()
     expect(screen.getByText(/File notes filed under this workflow go here/)).toBeTruthy()
-    // The left column's placeholder named the group, owner and dates. Those are
-    // real fields now, so the placeholder is gone rather than sitting under them.
+    // The centre's "steps and activity" placeholder is gone: tasks are real.
+    expect(screen.queryByText(/Steps and activity/)).toBeNull()
+    expect(screen.getByRole('button', { name: /Add task/ })).toBeTruthy()
+    // The left column has no placeholder at all any more.
     const left = container.querySelector('.lg\\:col-span-3')!
     expect(left.querySelector('.border-dashed')).toBeNull()
-    // Exactly two placeholders remain on the page, both outside the left column.
-    expect(container.querySelectorAll('.border-dashed').length).toBe(2)
   })
 
   test('the progress bar sits between the marks and the fields, not at the bottom', () => {
@@ -365,36 +369,42 @@ describe('the workflow detail page', () => {
     expect(box.querySelectorAll('input, select, textarea').length).toBe(0)
   })
 
+  /* Queries here are scoped to the details box. The centre column's Add task
+     dialog is closed but — as the member panel taught — a closed <dialog> still
+     has its contents in the document, and it too has a "Due date" and a
+     "Description". */
   test('the pencil makes owner, due date and description editable — but not the started date', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: 'Edit details' }))
+    const box = screen.getByRole('button', { name: 'Edit details' }).closest('form')! as HTMLElement
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
 
-    const owner = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
+    const owner = within(box).getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
     expect(owner.value).toBe('s1')
     expect([...owner.options].map((o) => o.textContent)).toEqual([
       'Unassigned',
       'Sarah Chen',
       'Clinton Hatcher',
     ])
-    expect(screen.getByLabelText('Due date').getAttribute('type')).toBe('date')
-    expect((screen.getByLabelText('Due date') as HTMLInputElement).value).toBe('2026-09-30')
-    expect(screen.getByLabelText('Description').tagName).toBe('TEXTAREA')
+    expect(within(box).getByLabelText('Due date').getAttribute('type')).toBe('date')
+    expect((within(box).getByLabelText('Due date') as HTMLInputElement).value).toBe('2026-09-30')
+    expect(within(box).getByLabelText('Description').tagName).toBe('TEXTAREA')
 
     // Date started is created_at: a record of when the row was made, not a
     // property of the work, so there is no input for it.
-    expect(screen.queryByLabelText('Date started')).toBeNull()
-    expect(screen.getByText('6 Jul 2026')).toBeTruthy()
+    expect(within(box).queryByLabelText('Date started')).toBeNull()
+    expect(within(box).getByText('6 Jul 2026')).toBeTruthy()
   })
 
   test('saving sends the three editable fields and closes the section', async () => {
     const user = userEvent.setup()
     show()
-    await user.click(screen.getByRole('button', { name: 'Edit details' }))
-    await user.clear(screen.getByLabelText('Description'))
-    await user.type(screen.getByLabelText('Description'), 'Rewritten.')
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Owner' }), 's2')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
+    const box = screen.getByRole('button', { name: 'Edit details' }).closest('form')! as HTMLElement
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    await user.clear(within(box).getByLabelText('Description'))
+    await user.type(within(box).getByLabelText('Description'), 'Rewritten.')
+    await user.selectOptions(within(box).getByRole('combobox', { name: 'Owner' }), 's2')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
 
     const sent = vi.mocked(actions.saveWorkflowDetails).mock.calls.at(-1)![1]
     expect(sent.get('workflow_id')).toBe('w1')

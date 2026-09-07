@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardColumn, Priority } from '@/lib/workflow-board'
+import type { BoardColumn, Priority, TaskStatus } from '@/lib/workflow-board'
 import type { WorkflowStatus } from '@/lib/notes'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
@@ -742,5 +742,57 @@ export async function saveWorkflowDetails(
   revalidatePath('/workflows')
   revalidatePath(`/workflows/${id}`)
   revalidatePath('/groups')
+  return { ok: true }
+}
+
+/**
+ * Add a task to a workflow, from the Add task dialog.
+ *
+ * Blank optional fields are sent as null rather than '', so the database sees
+ * "not given" and not "given as nothing" — the function trims and nullifies a
+ * description anyway, but a `date` column would refuse '' outright.
+ */
+export async function createWorkflowTask(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const workflowId = String(formData.get('workflow_id') ?? '')
+  const subject = String(formData.get('subject') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim()
+  const dueAt = String(formData.get('due_at') ?? '').trim()
+  const assignedTo = String(formData.get('assigned_to_staff_id') ?? '').trim()
+
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!subject) return { error: 'Give the task a subject.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_workflow_task', {
+    p_workflow_id: workflowId,
+    p_subject: subject,
+    p_description: description || null,
+    p_due_at: dueAt || null,
+    p_assigned_to_staff_id: assignedTo || null,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
+ * Tick or untick a task — or cancel it. The workflow id is only for the
+ * revalidation; visibility and the right to change the task are RLS, and a
+ * task is visible exactly when its workflow is.
+ */
+export async function setWorkflowTaskStatus(
+  id: string,
+  status: TaskStatus,
+  workflowId: string,
+): Promise<NoteState> {
+  if (!id) return { error: 'No task selected.' }
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_task_status', { p_id: id, p_status: status })
+  if (error) return { error: error.message }
+  revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }
 }
