@@ -31,3 +31,30 @@ export function formatNoteDate(iso: string) {
      date format that changes with the runtime is one nobody can assert on. */
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
+
+/**
+ * A calendar date, rendered as it was written: "30 Sep 2026".
+ *
+ * The OTHER half of the pair, and the whole reason both live in one module.
+ * A `date` column — a workflow's due_at, a person's date_of_birth — is a day,
+ * not a moment. Putting one through `new Date()` parses it as UTC midnight, so
+ * anywhere west of Greenwich it renders the day BEFORE. So this splits the
+ * string and never constructs a Date. formatNoteDate above must do the exact
+ * opposite for the exact opposite reason; keeping them adjacent means nobody
+ * can reach for one without seeing the other.
+ *
+ * Same output shape as formatNoteDate on purpose: on the workflow detail page a
+ * created instant and a due date sit side by side in one row, and two
+ * different-looking date formats there would read as two different kinds of
+ * thing. The member panel's date of birth stays DD-MM-YYYY — an identity
+ * document's format, read digit by digit rather than as prose.
+ */
+export function formatCalendarDate(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  const month = MONTHS[Number(m[2]) - 1]
+  // A month outside 1-12 is not a date this can render; hand back the raw value
+  // rather than "30 undefined 2026".
+  if (!month) return iso
+  return `${Number(m[3])} ${month} ${m[1]}`
+}

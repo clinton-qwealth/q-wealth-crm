@@ -1,5 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardCard } from '@/lib/workflow-board'
+import type { BoardCard, WorkflowDetail } from '@/lib/workflow-board'
 
 /**
  * Every workflow the caller can see, across every group — the view is
@@ -39,14 +39,16 @@ export async function getGroupChoices(): Promise<{ id: string; name: string }[]>
  * are the same answer on purpose: a workflow an adviser cannot see should not
  * be distinguishable from one that does not exist.
  */
-export async function getWorkflow(id: string): Promise<BoardCard | null> {
+export async function getWorkflow(id: string): Promise<WorkflowDetail | null> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('workflow_board')
     .select(
-      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at',
+      /* The card's columns plus the three only this page reads. The board's own
+         query deliberately does not ask for these — see WorkflowDetail. */
+      'id, name, workflow_type, status, priority, group_id, group_name, owner_name, started_at, completed_at, updated_at, created_at, due_at, description',
     )
     .eq('id', id)
     .maybeSingle()
-  return error ? null : ((data as BoardCard | null) ?? null)
+  return error ? null : ((data as WorkflowDetail | null) ?? null)
 }

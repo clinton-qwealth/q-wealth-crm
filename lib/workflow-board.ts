@@ -152,3 +152,47 @@ export const WORKFLOW_STATUS_LABEL: Record<WorkflowStatus, string> = {
   complete: 'Complete',
   cancelled: 'Cancelled',
 }
+
+/**
+ * A workflow as its own page needs it: the card, plus the three fields only the
+ * detail page reads.
+ *
+ * Deliberately NOT folded into BoardCard. The board fetches every workflow the
+ * caller can see and renders none of these — a description per card is payload
+ * for nothing, on the one query that returns the most rows.
+ */
+export type WorkflowDetail = BoardCard & {
+  /** An instant: when the record was made. Rendered in the reader's timezone. */
+  created_at: string
+  /** A calendar date, or none set. Rendered by splitting the string. */
+  due_at: string | null
+  description: string | null
+}
+
+/**
+ * How far a workflow has come, as a percentage — DERIVED from its status, never
+ * stored.
+ *
+ * The board's four lanes are the stages, so the status already answers this. A
+ * `progress` column would be a second answer to the same question, and the two
+ * would part company the first time somebody dragged a card without updating
+ * it. Evenly spaced across the four lanes: 0, 33, 67, 100.
+ *
+ * `blocked` reports the same 33% as in_progress, because blocked work sits in
+ * the In progress lane. It has come exactly as far as it has come; the amber
+ * Blocked pill is what says it has stopped, and moving the bar backwards would
+ * claim work was undone.
+ *
+ * `cancelled` reports NO percentage. Cancelled work stopped somewhere nobody
+ * recorded, and printing 0% would assert that nothing had been done.
+ */
+export function workflowProgress(status: WorkflowStatus): {
+  percent: number | null
+  label: string
+} {
+  const label = WORKFLOW_STATUS_LABEL[status]
+  if (status === 'cancelled') return { percent: null, label }
+  const lane = columnFor(status)
+  const index = BOARD_COLUMNS.findIndex((c) => c.id === lane)
+  return { percent: Math.round((index / (BOARD_COLUMNS.length - 1)) * 100), label }
+}
