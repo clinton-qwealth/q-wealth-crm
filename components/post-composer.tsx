@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   EditorContent,
+  NodeViewContent,
   NodeViewWrapper,
   ReactNodeViewRenderer,
   useEditor,
@@ -24,13 +25,21 @@ import Heading from '@tiptap/extension-heading'
 import Mention from '@tiptap/extension-mention'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import {
+  POST_CALLOUT_TONES,
+  POST_ENTITY_KINDS,
   POST_HEADING_LEVELS,
   POST_IMAGE_MAX_WIDTH,
+  POST_IMAGE_MIME_TYPES,
   POST_IMAGE_MIN_WIDTH,
+  POST_MEDIA_MIME_TYPES,
   POST_MEDIA_SIZE_LIMIT,
+  isCalloutTone,
+  isEntityKind,
   isPostMediaType,
   postMediaKind,
   postMediaUrl,
+  type CalloutTone,
+  type EntityChoice,
   type PostDoc,
 } from '@/lib/workflow-board'
 import { searchEmoji, type Emoji } from '@/lib/emoji'
@@ -72,8 +81,11 @@ export type PostUploader = {
  * the moment its upload finishes — no entry means "this is a finished picture",
  * which is exactly what a node view rendering a posted document should see.
  */
-/* No 'failed': a picture whose bytes did not arrive is taken back out of the
-   document, so there is no such thing as a failed one still on screen. */
+/* No 'failed': media whose bytes did not arrive is taken back out of the
+   document, so there is no such thing as a failed one still on screen.
+   `preview` is the local blob a picture is drawn from while it uploads, and is
+   EMPTY for an attachment — a chip with a filename on it has nothing to show
+   from the file itself. */
 type Upload = { status: 'sending' | 'ready'; preview: string }
 const uploads = new Map<string, Upload>()
 const uploadListeners = new Set<() => void>()
@@ -125,11 +137,18 @@ function forgetUpload(id: string) {
  */
 export function PostComposer({
   staff,
+  entities = [],
   onPost,
   onReady,
   uploader,
 }: {
   staff: Staff[]
+  /**
+   * What `#` may offer. Empty means the trigger finds nothing, which is the
+   * right behaviour for a composer with no workflow context — the database
+   * would refuse anything it could have offered anyway.
+   */
+  entities?: EntityChoice[]
   /** Return true if the post was accepted, so the editor clears. */
   onPost: (doc: PostDoc) => Promise<boolean>
   /** For tests, which cannot type into ProseMirror the way a person does. */
@@ -155,6 +174,10 @@ export function PostComposer({
      transformed ancestor makes `position: fixed` behave as `absolute` relative
      to itself — the first menu rendered 300px off the right of the screen. */
   const frameRef = useRef<HTMLDivElement>(null)
+  /* The `#` plugin is built once with the editor, so it cannot close over a
+     prop. Same reason the paste handler reads `addFilesRef`. */
+  const entitiesRef = useRef<EntityChoice[]>(entities)
+  entitiesRef.current = entities
 
   const editor = useEditor({
     // Rendered on the client after mount; nothing to serialise on the server.
@@ -181,7 +204,18 @@ export function PostComposer({
       EmojiSuggestion.configure({
         render: suggestionRender<Emoji>('emoji', setPopup, popupRef, (props, e) => props.command(e)),
       }),
+      PostEntityChip,
+      EntitySuggestion.configure({
+        /* Read through a ref, not closed over: the editor is built once, and
+           the candidate list arrives as a prop that can change. */
+        items: () => entitiesRef.current,
+        render: suggestionRender<EntityChoice>('entity', setPopup, popupRef, (props, e) =>
+          props.command(e),
+        ),
+      }),
       PostImage,
+      PostAttachment,
+      PostCallout,
     ],
     editorProps: {
       attributes: {
@@ -194,13 +228,13 @@ export function PostComposer({
          runs. Returning true only when files were actually taken, so pasting
          text still pastes text. */
       handlePaste: (_view, event) => {
-        const files = imageFilesFrom(event.clipboardData)
+        const files = postableFilesFrom(event.clipboardData)
         if (!files.length) return false
         void addFilesRef.current(files)
         return true
       },
       handleDrop: (_view, event) => {
-        const files = imageFilesFrom((event as DragEvent).dataTransfer)
+        const files = postableFilesFrom((event as DragEvent).dataTransfer)
         if (!files.length) return false
         event.preventDefault()
         void addFilesRef.current(files)
@@ -213,6 +247,7 @@ export function PostComposer({
     if (editor && onReady) onReady(editor)
   }, [editor, onReady])
 
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   /* ProseMirror's paste and drop handlers are captured when the editor is
      built, so they cannot close over a callback that changes with `uploader`.
@@ -228,42 +263,47 @@ export function PostComposer({
     async (files: File[]) => {
       if (!editor) return
       if (!uploader) {
-        setProblem('Pictures cannot be added here.')
+        setProblem('Files cannot be added here.')
         return
       }
       for (const file of files) {
         /* The same two rules the database and the bucket enforce, asked here
            so a 40 MB drop is a sentence rather than a round trip. */
-        if (!isPostMediaType(file.type) || postMediaKind(file.type) !== 'image') {
-          setProblem(`${file.name || 'That file'} is not a kind of picture a post can carry.`)
+        if (!isPostMediaType(file.type)) {
+          setProblem(`${file.name || 'That file'} is not a kind of file a post can carry.`)
           continue
         }
         if (file.size > POST_MEDIA_SIZE_LIMIT) {
           const mb = POST_MEDIA_SIZE_LIMIT / 1024 / 1024
-          setProblem(`${file.name || 'That picture'} is larger than the ${mb} MB limit.`)
+          setProblem(`${file.name || 'That file'} is larger than the ${mb} MB limit.`)
           continue
         }
         setProblem(null)
 
-        const preview = URL.createObjectURL(file)
-        const reserved = await uploader.reserve(file, await measure(preview))
+        /* A picture is drawn from the local file while it uploads, so it needs
+           a blob URL and its own pixel size. A document is a chip with a name
+           on it — neither would tell the writer anything. */
+        const isImage = postMediaKind(file.type) === 'image'
+        const preview = isImage ? URL.createObjectURL(file) : ''
+        const reserved = await uploader.reserve(file, isImage ? await measure(preview) : null)
         if ('error' in reserved) {
-          URL.revokeObjectURL(preview)
+          if (preview) URL.revokeObjectURL(preview)
           setProblem(reserved.error)
           continue
         }
 
-        /* The picture goes in NOW, showing the local file, while its bytes are
-           still on their way. Post is disabled until they land. */
+        /* It goes in NOW, while its bytes are still on their way. Post is
+           disabled until they land. */
         ownedRef.current.add(reserved.id)
         setUpload(reserved.id, { status: 'sending', preview })
         editor
           .chain()
           .focus()
-          .insertContent({
-            type: 'image',
-            attrs: { id: reserved.id, name: file.name, alt: null, width: null },
-          })
+          .insertContent(
+            isImage
+              ? { type: 'image', attrs: { id: reserved.id, name: file.name, alt: null, width: null } }
+              : { type: 'attachment', attrs: { id: reserved.id, name: file.name } },
+          )
           .run()
 
         setSending((n) => n + 1)
@@ -274,7 +314,7 @@ export function PostComposer({
           /* The node comes out. A document that names bytes which are not
              there is a broken post, and leaving it in would only move the
              failure to the moment someone pressed Post. */
-          removeImage(editor, reserved.id)
+          removeMedia(editor, reserved.id)
           ownedRef.current.delete(reserved.id)
           forgetUpload(reserved.id)
           setProblem(failure.error)
@@ -320,6 +360,7 @@ export function PostComposer({
         numbers: e?.isActive('orderedList') ?? false,
         quote: e?.isActive('blockquote') ?? false,
         codeBlock: e?.isActive('codeBlock') ?? false,
+        callout: e?.isActive('callout') ?? false,
         link: e?.isActive('link') ?? false,
         canUndo: e?.can().undo() ?? false,
         canRedo: e?.can().redo() ?? false,
@@ -372,7 +413,7 @@ export function PostComposer({
             aria-hidden
             className="pointer-events-none absolute left-3 top-2 text-sm text-neutral-400"
           >
-            Write an update. @ mentions a colleague, : adds an emoji.
+            Write an update. @ a colleague, # a client, : an emoji.
           </span>
         ) : null}
         <EditorContent editor={editor} />
@@ -425,13 +466,35 @@ export function PostComposer({
           <Tool label="Horizontal rule" on={false} onClick={() => run((c) => c.setHorizontalRule().run())}>
             <span aria-hidden>—</span>
           </Tool>
+          {/* Wraps the selection rather than inserting an empty box, so
+              turning a paragraph you have just written into a warning is one
+              click. `toggleWrap` also unwraps, which is what the pressed state
+              on this button promises. */}
+          <Tool
+            label="Callout"
+            on={state.callout}
+            onClick={() => run((c) => c.toggleWrap('callout', { tone: 'info' }).run())}
+          >
+            <CalloutGlyph />
+          </Tool>
           <Tool
             label="Image"
             on={false}
             disabled={!uploader}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => imageInputRef.current?.click()}
           >
             <ImageGlyph />
+          </Tool>
+          {/* A separate button from Image, with its own `accept`, because the
+              file chooser is far more useful when it is not offering every
+              document on the machine to somebody looking for a screenshot. */}
+          <Tool
+            label="Attach file"
+            on={false}
+            disabled={!uploader}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <PaperclipGlyph />
           </Tool>
           <Divider />
           <Tool label="Link" on={state.link || linkOpen} onClick={() => setLinkOpen((o) => !o)}>
@@ -457,13 +520,16 @@ export function PostComposer({
 
       {linkOpen && editor ? <LinkRow editor={editor} onDone={() => setLinkOpen(false)} /> : null}
 
-      {/* Outside the toolbar so it is not in the toolbar's tab ring, and
-          `accept` narrowed to what a post may carry so the file chooser does
-          not offer files that would only be refused. */}
+      {/* Outside the toolbar so they are not in the toolbar's tab ring, and
+          `accept` narrowed to what a post may carry so neither chooser offers
+          files that would only be refused. Two inputs rather than one whose
+          `accept` is rewritten on click: a chooser that opens showing the
+          wrong set of files, once, because state had not landed yet, is a
+          worse bug than a second hidden element. */}
       <input
-        ref={fileInputRef}
+        ref={imageInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept={POST_IMAGE_MIME_TYPES.join(',')}
         multiple
         hidden
         onChange={(e) => {
@@ -473,10 +539,22 @@ export function PostComposer({
           if (files.length) void addFiles(files)
         }}
       />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={POST_MEDIA_MIME_TYPES.join(',')}
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = ''
+          if (files.length) void addFiles(files)
+        }}
+      />
 
       {sending > 0 ? (
         <p role="status" className="border-t border-neutral-100 px-3 py-1.5 text-xs text-neutral-500">
-          {sending === 1 ? 'Adding a picture…' : `Adding ${sending} pictures…`}
+          {sending === 1 ? 'Adding a file…' : `Adding ${sending} files…`}
         </p>
       ) : null}
       {problem ? (
@@ -500,6 +578,7 @@ const IDLE = {
   numbers: false,
   quote: false,
   codeBlock: false,
+  callout: false,
   link: false,
   canUndo: false,
   canRedo: false,
@@ -648,14 +727,15 @@ function LinkRow({ editor, onDone }: { editor: Editor; onDone: () => void }) {
 type Popup =
   | { kind: 'mention'; items: Staff[]; index: number; rect: DOMRect | null; pick: (item: Staff) => void }
   | { kind: 'emoji'; items: Emoji[]; index: number; rect: DOMRect | null; pick: (item: Emoji) => void }
+  | { kind: 'entity'; items: EntityChoice[]; index: number; rect: DOMRect | null; pick: (item: EntityChoice) => void }
 
 /**
- * One render lifecycle for both suggestion lists. TipTap calls onStart and
+ * One render lifecycle for all three suggestion lists. TipTap calls onStart and
  * onUpdate as the query changes and onKeyDown for every key while the list is
  * open; the popup state is what React draws from, and the ref is what the
  * key handler reads, since it runs outside a render.
  */
-function suggestionRender<T extends Staff | Emoji>(
+function suggestionRender<T extends Staff | Emoji | EntityChoice>(
   kind: Popup['kind'],
   setPopup: (p: Popup | null) => void,
   popupRef: { current: Popup | null },
@@ -690,7 +770,7 @@ function suggestionRender<T extends Staff | Emoji>(
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
         const item = p.items[p.index]
-        if (item) (p.pick as (i: Staff | Emoji) => void)(item)
+        if (item) (p.pick as (i: Staff | Emoji | EntityChoice) => void)(item)
         return true
       }
       return false
@@ -717,6 +797,132 @@ const PostHeading = Heading.extend({
   renderHTML({ node, HTMLAttributes }) {
     const level = (POST_HEADING_LEVELS as readonly number[]).includes(node.attrs.level) ? node.attrs.level : 1
     return [`h${level + 3}`, mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  },
+})
+
+/* ---- the things a post can point at ----------------------------------- */
+
+/**
+ * A chip naming a client, a group or another workflow.
+ *
+ * INLINE, like a mention, because it is a word in a sentence rather than a
+ * block. It carries the kind, the id and the label as typed; the feed's view
+ * resolves the label to the thing's current name, so a renamed group shows
+ * through on a post that cannot itself be edited.
+ *
+ * Not TipTap's Mention extension a second time: that would want its own
+ * `mention` node name, and this is a different kind of thing pointing at a
+ * different table. A plain node plus a Suggestion plugin is the same amount of
+ * code without the pretence.
+ */
+const PostEntityChip = Node.create({
+  name: 'entity',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+
+  addAttributes() {
+    return {
+      kind: {
+        default: 'client',
+        parseHTML: (el) => {
+          const kind = el.getAttribute('data-entity-kind')
+          return isEntityKind(kind) ? kind : false
+        },
+        renderHTML: (attrs) => ({ 'data-entity-kind': attrs.kind }),
+      },
+      id: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-entity-id'),
+        renderHTML: (attrs) => ({ 'data-entity-id': attrs.id }),
+      },
+      label: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-label') ?? '',
+        renderHTML: (attrs) => ({ 'data-label': attrs.label }),
+      },
+    }
+  },
+
+  /* Our own marker, with a real id and a known kind on it, or nothing. */
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-entity-chip]',
+        getAttrs: (el) => {
+          const node = el as HTMLElement
+          const ok =
+            UUID.test(node.getAttribute('data-entity-id') ?? '') &&
+            isEntityKind(node.getAttribute('data-entity-kind'))
+          return ok ? null : false
+        },
+      },
+    ]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, {
+        'data-entity-chip': '',
+        class: 'rounded bg-neutral-100 px-1 font-medium text-neutral-700',
+      }),
+      `#${node.attrs.label || ''}`,
+    ]
+  },
+
+  renderText({ node }) {
+    return `#${node.attrs.label ?? ''}`
+  },
+})
+
+/**
+ * `#` opens the list of things this post may name.
+ *
+ * The candidates are handed in, not searched for, and the set is the same one
+ * `post_workflow_activity()` will accept — this workflow's group, its members,
+ * its sibling workflows. A search across the whole CRM would offer clients the
+ * database is going to refuse, and would make this menu the only thing
+ * standing between a chip and a name being published to the wrong people.
+ */
+const EntitySuggestion = Extension.create<{
+  items: () => EntityChoice[]
+  render: SuggestionOptions<EntityChoice, EntityChoice>['render']
+}>({
+  name: 'entitySuggestion',
+  addOptions() {
+    return { items: () => [], render: () => ({}) }
+  },
+  addProseMirrorPlugins() {
+    return [
+      Suggestion<EntityChoice, EntityChoice>({
+        editor: this.editor,
+        pluginKey: new PluginKey('entitySuggestion'),
+        char: '#',
+        /* Spaces allowed: "Testsmith Household" is two words, and a group's
+           name is the common case. The list closes on Escape or a pick. */
+        allowSpaces: true,
+        items: ({ query }) => {
+          const q = query.toLowerCase()
+          return this.options
+            .items()
+            .filter((e) => e.label.toLowerCase().includes(q))
+            .slice(0, 8)
+        },
+        command: ({ editor, range, props }) => {
+          editor
+            .chain()
+            .focus()
+            .insertContentAt(range, [
+              { type: 'entity', attrs: { kind: props.kind, id: props.id, label: props.label } },
+              { type: 'text', text: ' ' },
+            ])
+            .run()
+        },
+        render: this.options.render,
+      }),
+    ]
   },
 })
 
@@ -855,11 +1061,14 @@ function ImageNodeView({ node, updateAttributes, deleteNode, selected }: NodeVie
   return (
     <NodeViewWrapper as="div" className="my-2">
       <span ref={frameRef} className="relative inline-block max-w-full align-top">
-        {/* eslint-disable-next-line @next/next/no-img-element -- the source is
-            a blob in this tab or an access-checked route, and next/image would
-            try to optimise both through its loader. */}
+        {/* `||`, not `??`: a finished upload's entry is cleared and a file's
+            preview is the empty string, and neither should read as a source.
+
+            The source is a blob in this tab or an access-checked route, and
+            next/image would try to optimise both through its loader. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={upload?.preview ?? postMediaUrl(id)}
+          src={upload?.preview || postMediaUrl(id)}
           alt={alt || name}
           draggable={false}
           style={width ? { width } : undefined}
@@ -933,6 +1142,229 @@ function ImageNodeView({ node, updateAttributes, deleteNode, selected }: NodeVie
   )
 }
 
+/**
+ * A file attached to a post.
+ *
+ * The same table and the same upload path as a picture, and a completely
+ * different node — because a picture is drawn in the post and a file is a chip
+ * you click. It carries the upload's id and the filename it arrived under, and
+ * like the image node it holds no address of any kind: the chip's link is
+ * built by the renderer from the id, and `post_workflow_activity()` refuses an
+ * `href` on one outright.
+ *
+ * `parseHTML` matches only our own marker with a real id on it, for exactly
+ * the reason the image node does: without that, pasting a web page into the
+ * composer would manufacture attachment nodes pointing at nothing.
+ */
+const PostAttachment = Node.create({
+  name: 'attachment',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-post-media'),
+        renderHTML: (attrs) => ({ 'data-post-media': attrs.id }),
+      },
+      name: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-name') ?? '',
+        renderHTML: (attrs) => ({ 'data-name': attrs.name }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-post-attachment]',
+        getAttrs: (el) =>
+          UUID.test((el as HTMLElement).getAttribute('data-post-media') ?? '') ? null : false,
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-post-attachment': '' })]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(AttachmentNodeView)
+  },
+})
+
+/**
+ * How an attached file looks while it is being written about.
+ *
+ * Nothing is fetched: the chip is the filename, which the composer already
+ * knows from the file the writer chose. The served URL is the renderer's
+ * business, once the post exists.
+ */
+function AttachmentNodeView({ node, deleteNode, selected }: NodeViewProps) {
+  const id = String(node.attrs.id ?? '')
+  const name = String(node.attrs.name ?? '')
+
+  const upload = useSyncExternalStore(
+    subscribeUploads,
+    () => uploads.get(id),
+    () => undefined,
+  )
+  const sending = upload?.status === 'sending'
+
+  return (
+    <NodeViewWrapper as="div" className="my-2">
+      <span
+        className={`inline-flex max-w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs ${
+          selected ? 'border-brand-300 bg-brand-50 ring-2 ring-brand/25' : 'border-neutral-300 bg-neutral-50'
+        } ${sending ? 'opacity-60' : ''}`}
+      >
+        <PaperclipGlyph />
+        <span className="min-w-0 truncate font-medium text-neutral-800">{name || 'File'}</span>
+        {sending ? <span className="shrink-0 text-neutral-500">Adding…</span> : null}
+        {selected && !sending ? (
+          <button
+            type="button"
+            aria-label={`Remove ${name || 'file'}`}
+            title="Remove"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              deleteNode()
+            }}
+            className="shrink-0 rounded px-1 text-neutral-500 outline-none hover:bg-neutral-200 hover:text-neutral-900"
+          >
+            <span aria-hidden>✕</span>
+          </button>
+        ) : null}
+      </span>
+    </NodeViewWrapper>
+  )
+}
+
+function PaperclipGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M10.5 5.5L6 10a1.8 1.8 0 002.5 2.5l5-5a3.2 3.2 0 00-4.5-4.5l-5.4 5.4a4.6 4.6 0 006.5 6.5l3.4-3.4" />
+    </svg>
+  )
+}
+
+/**
+ * A tinted block for the thing that must not be skimmed past.
+ *
+ * `content: 'block+'` so it holds paragraphs and lists — a callout is often
+ * more than one sentence. `defining: true` matters more than it looks: without
+ * it, pasting into an empty callout replaces the callout rather than filling
+ * it, and backspacing at the start lifts the text out and destroys the block.
+ *
+ * The tone is a KEY, never a colour. The tint below is this component's
+ * decision, so it can change; a colour written into the document could not.
+ */
+const PostCallout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      tone: {
+        default: 'info',
+        parseHTML: (el) => {
+          const tone = el.getAttribute('data-tone')
+          return isCalloutTone(tone) ? tone : 'info'
+        },
+        renderHTML: (attrs) => ({ 'data-tone': attrs.tone }),
+      },
+    }
+  },
+
+  /* Only our own marker. An unqualified `div` would swallow the wrapper of
+     every pasted web page and turn it into a callout. */
+  parseHTML() {
+    return [{ tag: 'div[data-callout]' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-callout': '' }), 0]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(CalloutNodeView)
+  },
+})
+
+/**
+ * A callout being written.
+ *
+ * `NodeViewContent` is what makes the block editable: it marks where
+ * ProseMirror should render the children, and without it the callout would be
+ * a box you cannot type into. The tone buttons sit outside that content, so
+ * clicking one does not disturb the selection inside.
+ */
+function CalloutNodeView({ node, updateAttributes, selected }: NodeViewProps) {
+  const tone = isCalloutTone(node.attrs.tone) ? node.attrs.tone : 'info'
+  return (
+    <NodeViewWrapper
+      as="div"
+      className={`my-2 rounded-md border-l-4 py-1.5 pl-3 pr-2 ${CALLOUT_TINTS[tone]} ${
+        selected ? 'ring-2 ring-brand/25' : ''
+      }`}
+    >
+      <span contentEditable={false} className="mb-1 flex flex-wrap items-center gap-1">
+        {POST_CALLOUT_TONES.map((t) => (
+          <button
+            key={t.tone}
+            type="button"
+            aria-label={`Callout tone: ${t.label}`}
+            aria-pressed={t.tone === tone}
+            // Mousedown, not click: a click blurs the editor first and loses
+            // the selection inside the callout.
+            onMouseDown={(e) => {
+              e.preventDefault()
+              updateAttributes({ tone: t.tone })
+            }}
+            className={`rounded px-1.5 py-0.5 text-[11px] outline-none transition-colors ${
+              t.tone === tone
+                ? 'bg-white/80 font-medium text-neutral-900'
+                : 'text-neutral-500 hover:bg-white/60 hover:text-neutral-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </span>
+      <NodeViewContent className="qw-post" />
+    </NodeViewWrapper>
+  )
+}
+
+/**
+ * The one place a tone becomes a colour.
+ *
+ * Left border plus a wash rather than a saturated fill: a callout should draw
+ * the eye without competing with the app's own status pills, which use full
+ * colour and mean something official.
+ */
+const CALLOUT_TINTS: Record<CalloutTone, string> = {
+  info: 'border-l-brand-300 bg-brand-50/60',
+  warning: 'border-l-amber-400 bg-amber-50',
+  success: 'border-l-emerald-400 bg-emerald-50',
+}
+
+function CalloutGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <rect x="2.5" y="3" width="11" height="10" rx="1.5" />
+      <path d="M5 3v10" strokeWidth="2" />
+      <path d="M7.5 6.5h4M7.5 9.5h2.5" />
+    </svg>
+  )
+}
+
 function ImageGlyph() {
   return (
     <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
@@ -943,10 +1375,17 @@ function ImageGlyph() {
   )
 }
 
-/** The image files in a paste or a drop, and nothing else. */
-function imageFilesFrom(data: DataTransfer | null): File[] {
+/**
+ * The files in a paste or a drop that a post could actually carry.
+ *
+ * Filtered here rather than in `addFiles` so that pasting a Keynote file, or
+ * dragging in a folder, falls through to the browser's own handling instead of
+ * being taken and then refused with a message about something the writer was
+ * not trying to do.
+ */
+function postableFilesFrom(data: DataTransfer | null): File[] {
   if (!data?.files?.length) return []
-  return Array.from(data.files).filter((f) => f.type.startsWith('image/'))
+  return Array.from(data.files).filter((f) => isPostMediaType(f.type))
 }
 
 /**
@@ -983,12 +1422,12 @@ function measure(url: string): Promise<{ width: number; height: number } | null>
   })
 }
 
-/** Take a picture back out of the document, by the id it names. */
-function removeImage(editor: Editor, id: string) {
+/** Take a picture or an attachment back out of the document, by the id it names. */
+function removeMedia(editor: Editor, id: string) {
   let at = -1
   editor.state.doc.descendants((node, pos) => {
     if (at >= 0) return false
-    if (node.type.name === 'image' && node.attrs.id === id) {
+    if ((node.type.name === 'image' || node.type.name === 'attachment') && node.attrs.id === id) {
       at = pos
       return false
     }
@@ -1026,28 +1465,38 @@ const EmojiSuggestion = Extension.create<{ render: SuggestionOptions<Emoji, Emoj
   },
 })
 
+const MENU_LABELS: Record<Popup['kind'], { label: string; empty: string }> = {
+  mention: { label: 'Mention a colleague', empty: 'No one matches' },
+  emoji: { label: 'Insert an emoji', empty: 'No emoji matches' },
+  entity: { label: 'Name a client, group or workflow', empty: 'Nothing on this group matches' },
+}
+
 function SuggestionMenu({ popup, frame }: { popup: Popup; frame: DOMRect }) {
   const caret = popup.rect!
-  const label = popup.kind === 'mention' ? 'Mention a colleague' : 'Insert an emoji'
-  const empty = popup.kind === 'mention' ? 'No one matches' : 'No emoji matches'
+  const { label, empty } = MENU_LABELS[popup.kind]
   return (
     <ul
       role="listbox"
       aria-label={label}
       style={{ position: 'absolute', left: caret.left - frame.left, top: caret.bottom - frame.top + 4 }}
-      className="z-30 w-56 overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)]"
+      className="z-30 w-64 overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)]"
     >
       {popup.items.length ? (
         popup.items.map((item, i) => {
           const active = i === popup.index
-          const key = popup.kind === 'mention' ? (item as Staff).id : (item as Emoji).name
+          const key =
+            popup.kind === 'mention'
+              ? (item as Staff).id
+              : popup.kind === 'entity'
+                ? `${(item as EntityChoice).kind}:${(item as EntityChoice).id}`
+                : (item as Emoji).name
           return (
             <li key={key} role="option" aria-selected={active}>
               <button
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault()
-                  ;(popup.pick as (i: Staff | Emoji) => void)(item)
+                  ;(popup.pick as (i: Staff | Emoji | EntityChoice) => void)(item)
                 }}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-neutral-800 outline-none hover:bg-neutral-100 ${
                   active ? 'bg-neutral-100' : ''
@@ -1055,6 +1504,16 @@ function SuggestionMenu({ popup, frame }: { popup: Popup; frame: DOMRect }) {
               >
                 {popup.kind === 'mention' ? (
                   (item as Staff).name
+                ) : popup.kind === 'entity' ? (
+                  <>
+                    <span className="min-w-0 flex-1 truncate">{(item as EntityChoice).label}</span>
+                    {/* Which of the three it is: two things in one group can
+                        share a name, and "Testsmith Household" the group reads
+                        differently from a workflow called the same. */}
+                    <span className="shrink-0 rounded bg-neutral-100 px-1 text-[10px] uppercase tracking-wide text-neutral-500">
+                      {POST_ENTITY_KINDS.find((k) => k.kind === (item as EntityChoice).kind)?.label}
+                    </span>
+                  </>
                 ) : (
                   <>
                     <span className="text-base leading-none">{(item as Emoji).glyph}</span>

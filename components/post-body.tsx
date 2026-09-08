@@ -1,5 +1,18 @@
 import type { ReactNode } from 'react'
-import { postMediaUrl, type PostDoc, type PostMark, type PostMedia, type PostMention, type PostNode } from '@/lib/workflow-board'
+import {
+  POST_ENTITY_KINDS,
+  entityHref,
+  isCalloutTone,
+  isEntityKind,
+  postMediaUrl,
+  type CalloutTone,
+  type PostDoc,
+  type PostEntity,
+  type PostMark,
+  type PostMedia,
+  type PostMention,
+  type PostNode,
+} from '@/lib/workflow-board'
 
 /**
  * Draws a post's document.
@@ -29,14 +42,19 @@ export function PostBody({
   doc,
   mentioned = [],
   media = [],
+  entities = [],
 }: {
   doc: PostDoc
   mentioned?: PostMention[]
   media?: PostMedia[]
+  entities?: PostEntity[]
 }) {
   const ctx: Context = {
     names: new Map(mentioned.map((m) => [m.staff_id, m.full_name])),
     media: new Map(media.map((m) => [m.id, m])),
+    /* Keyed by kind AND id: the three kinds are separate tables, so the same
+       uuid appearing as both a group and a workflow is not impossible. */
+    entities: new Map(entities.map((e) => [`${e.kind}:${e.entity_id}`, e])),
   }
   return (
     <div className="qw-post text-sm leading-relaxed text-neutral-800">
@@ -50,9 +68,28 @@ export function PostBody({
  * files it carries, both resolved to what they are TODAY. One object rather
  * than a growing parameter list, because the document model grows.
  */
-type Context = { names: Map<string, string>; media: Map<string, PostMedia> }
+type Context = {
+  names: Map<string, string>
+  media: Map<string, PostMedia>
+  entities: Map<string, PostEntity>
+}
 
 const SAFE_HREF = /^https?:\/\//i
+
+/**
+ * The one place a callout's tone becomes a colour, on this side.
+ *
+ * Deliberately the same tints the composer uses, and deliberately a left
+ * border plus a wash rather than a saturated fill: a callout should draw the
+ * eye without competing with the app's own status pills, which use full colour
+ * and mean something official. The document carries only the key, so these can
+ * be changed at any time and every existing post follows.
+ */
+const CALLOUT_TINTS: Record<CalloutTone, string> = {
+  info: 'border-l-brand-300 bg-brand-50/60',
+  warning: 'border-l-amber-400 bg-amber-50',
+  success: 'border-l-emerald-400 bg-emerald-50',
+}
 
 /** Post level 1–3 → h4–h6, beneath the panel's h2 and its boxes' h3. */
 function headingTag(level: unknown): 'h4' | 'h5' | 'h6' {
@@ -96,6 +133,21 @@ function renderNode(node: PostNode, key: number, ctx: Context): ReactNode {
       return <hr key={key} />
     case 'image':
       return renderImage(node, key, ctx)
+    case 'attachment':
+      return renderAttachment(node, key, ctx)
+    case 'entity':
+      return renderEntity(node, key, ctx)
+    case 'callout': {
+      /* An unknown tone falls back to `info` rather than rendering untinted.
+         The database refuses one anyway; this keeps the block meaningful if a
+         tone is ever added to the editor before the whitelist catches up. */
+      const tone = isCalloutTone(node.attrs?.tone) ? node.attrs.tone : 'info'
+      return (
+        <div key={key} className={`my-2 rounded-md border-l-4 py-1.5 pl-3 pr-2 ${CALLOUT_TINTS[tone]}`}>
+          {children}
+        </div>
+      )
+    }
     case 'mention': {
       const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
       const label = names.get(id) ?? (typeof node.attrs?.label === 'string' ? node.attrs.label : 'someone')
@@ -166,6 +218,127 @@ function renderImage(node: PostNode, key: number, ctx: Context): ReactNode {
       />
     </span>
   )
+}
+
+/**
+ * A chip naming a client, a group or another workflow.
+ *
+ * THE ONE PLACE THE STORED LABEL IS NOT A FALLBACK. A staff mention may fall
+ * back to the label as typed, because `staff_directory` is readable by every
+ * active staff member and a departed colleague must still resolve. A client is
+ * group-scoped, so echoing the document's own label for a reader the view
+ * would not resolve it for would be a disclosure — the renderer would be
+ * publishing a name that RLS had just declined to give it. So an unresolved
+ * chip is a neutral word instead.
+ *
+ * In practice that is nearly unreachable: a chip may only name things in the
+ * workflow's own client group, and anyone reading the post can see that group.
+ * It is handled because "nearly unreachable" is not "unreachable".
+ */
+function renderEntity(node: PostNode, key: number, ctx: Context): ReactNode {
+  const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
+  const kind = isEntityKind(node.attrs?.kind) ? node.attrs.kind : null
+  if (!id || !kind) return null
+
+  const row = ctx.entities.get(`${kind}:${id}`)
+  const resolved = row?.label ?? null
+  const noun = POST_ENTITY_KINDS.find((k) => k.kind === kind)?.noun ?? 'something'
+  const href = resolved ? entityHref({ kind, entity_id: id, label: resolved }) : null
+
+  const chip = (
+    <span
+      data-entity={`${kind}:${id}`}
+      className={`rounded px-1 font-medium ${
+        resolved ? 'bg-neutral-100 text-neutral-700' : 'bg-neutral-100 italic text-neutral-500'
+      }`}
+    >
+      #{resolved ?? noun}
+    </span>
+  )
+
+  // A client has no page of its own yet; the chip names it without linking.
+  return href ? (
+    <a key={key} href={href} className="no-underline hover:underline">
+      {chip}
+    </a>
+  ) : (
+    <span key={key}>{chip}</span>
+  )
+}
+
+/**
+ * An attached file.
+ *
+ * A chip, not an inline preview: a PDF or a spreadsheet is something you take
+ * away rather than read in a comment thread. The link goes to the same route
+ * the images use, which for a file adds `?download=` so it saves under the
+ * name it was uploaded with rather than a uuid.
+ *
+ * The size and type come from the row, so a chip shows what the file actually
+ * is rather than what the document claimed. A row that is absent is a post the
+ * server has not accepted yet, drawn from the document alone.
+ */
+function renderAttachment(node: PostNode, key: number, ctx: Context): ReactNode {
+  const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
+  if (!id) return null
+  const row = ctx.media.get(id)
+  const name = row?.name || (typeof node.attrs?.name === 'string' ? node.attrs.name : 'File')
+
+  if (row?.redacted_at) {
+    return (
+      <p
+        key={key}
+        className="my-2 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2 text-xs text-neutral-500"
+      >
+        File removed{row.redacted_by_name ? ` by ${row.redacted_by_name}` : ''}
+      </p>
+    )
+  }
+
+  return (
+    <span key={key} className="my-2 block">
+      <a
+        href={postMediaUrl(id)}
+        // A new tab, and no referrer: the route redirects to a signed storage
+        // URL, and the page it lands on has no business knowing where it came
+        // from. `download` is deliberately absent — the attribute is ignored
+        // cross-origin, and the route sets the filename itself.
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex max-w-full items-center gap-2 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs text-neutral-800 no-underline transition-colors hover:border-neutral-400 hover:bg-neutral-50"
+      >
+        <PaperclipGlyph />
+        <span className="min-w-0 truncate font-medium">{name}</span>
+        {row ? <span className="shrink-0 text-neutral-500">{describeFile(row)}</span> : null}
+      </a>
+    </span>
+  )
+}
+
+function PaperclipGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M10.5 5.5L6 10a1.8 1.8 0 002.5 2.5l5-5a3.2 3.2 0 00-4.5-4.5l-5.4 5.4a4.6 4.6 0 006.5 6.5l3.4-3.4" />
+    </svg>
+  )
+}
+
+/** "PDF · 240 kB". The type as a person would say it, and a size they can judge. */
+function describeFile(row: PostMedia): string {
+  const kb = row.byte_size / 1024
+  const size = kb < 1 ? '1 kB' : kb < 1024 ? `${Math.round(kb)} kB` : `${(kb / 1024).toFixed(1)} MB`
+  return `${FILE_LABELS[row.mime_type] ?? 'File'} · ${size}`
+}
+
+/* Named rather than derived from the mime type: "vnd.openxmlformats-
+   officedocument.spreadsheetml.sheet" is not a thing to show anybody, and the
+   list of types a post may carry is closed and short. */
+const FILE_LABELS: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
+  'text/csv': 'CSV',
+  'text/plain': 'Text',
 }
 
 /** Marks nest from the inside out, so a bold link is a link around bold text. */

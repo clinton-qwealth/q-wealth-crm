@@ -13,6 +13,7 @@ import {
   postDocText,
   toggleReaction,
   type PostDoc,
+  type EntityChoice,
   type PostMedia,
   type PostReaction,
   type ReactionKey,
@@ -50,6 +51,7 @@ export function ActivityFeed({
   taskId,
   posts: initial,
   staff,
+  entities = [],
   viewer,
 }: {
   workflowId: string
@@ -57,6 +59,8 @@ export function ActivityFeed({
   taskId: string | null
   posts: WorkflowPost[]
   staff: Staff[]
+  /** What `#` may name: this workflow's group, its members, its sibling workflows. */
+  entities?: EntityChoice[]
   viewer: Viewer
 }) {
   const [posts, setPosts] = useServerState(initial)
@@ -113,6 +117,10 @@ export function ActivityFeed({
       /* Empty, and the renderer expects that: an image in a post the server
          has not accepted yet is drawn from the document alone. */
       media: [],
+      /* Same reason as media: a chip in a post the server has not accepted
+         yet is drawn from the document, which is why the renderer tolerates an
+         unresolved one. */
+      entities: [],
       reactions: [],
       pending: true,
     }
@@ -196,7 +204,7 @@ export function ActivityFeed({
 
   return (
     <div className="flex flex-col gap-4">
-      <PostComposer staff={staff} onPost={post} uploader={uploader} />
+      <PostComposer staff={staff} entities={entities} onPost={post} uploader={uploader} />
 
       {error ? (
         <p role="alert" className="text-sm text-red-600">
@@ -223,11 +231,11 @@ export function ActivityFeed({
                     </span>
                   </div>
                   <div className={`mt-1 ${pending ? 'opacity-60' : ''}`}>
-                    <PostBody doc={p.body} mentioned={p.mentioned} media={p.media} />
+                    <PostBody doc={p.body} mentioned={p.mentioned} media={p.media} entities={p.entities} />
                   </div>
                   {/* A post that has not been accepted yet has nothing to react to. */}
                   {pending ? null : (
-                    <RemovableImages
+                    <RemovableMedia
                       media={p.media}
                       canRemove={p.author_staff_id === viewer.id || viewer.canRemoveAnyImage}
                       onRemove={(mediaId) => removeImage(p.id, mediaId)}
@@ -256,7 +264,7 @@ export function ActivityFeed({
 }
 
 /**
- * The way a picture comes back off a post.
+ * The way a picture or an attached file comes back off a post.
  *
  * Offered only to the person who wrote the post and to an administrator,
  * which is the same pair `redact_post_media()` will accept — a control that
@@ -264,11 +272,11 @@ export function ActivityFeed({
  *
  * TWO STEPS ON PURPOSE. The post survives, but the bytes do not: this is the
  * one irreversible thing anywhere in the feed, and "Remove" landing under a
- * mis-aimed click would be a poor way to discover that. Nothing is shown at
- * all for a post whose pictures are all still there and unremovable, so an
- * ordinary post carries no extra furniture.
+ * mis-aimed click would be a poor way to discover that. Nothing is rendered at
+ * all when a post carries nothing removable, so an ordinary post of plain
+ * words gains no extra furniture.
  */
-function RemovableImages({
+function RemovableMedia({
   media,
   canRemove,
   onRemove,
@@ -278,7 +286,7 @@ function RemovableImages({
   onRemove: (mediaId: string) => void
 }) {
   const [confirming, setConfirming] = useState<string | null>(null)
-  const removable = media.filter((m) => m.kind === 'image' && !m.redacted_at)
+  const removable = media.filter((m) => !m.redacted_at)
   if (!canRemove || removable.length === 0) return null
 
   return (
@@ -312,7 +320,11 @@ function RemovableImages({
             onClick={() => setConfirming(m.id)}
             className="rounded text-xs text-neutral-400 underline decoration-dotted underline-offset-2 outline-none hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
           >
-            {removable.length === 1 ? 'Remove image' : `Remove ${m.name}`}
+            {removable.length === 1
+              ? m.kind === 'image'
+                ? 'Remove image'
+                : 'Remove file'
+              : `Remove ${m.name}`}
           </button>
         ),
       )}

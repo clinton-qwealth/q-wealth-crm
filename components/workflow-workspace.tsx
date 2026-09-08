@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
+import type { EntityChoice, WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
 import { Card, Placeholder } from './ui'
 import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
@@ -36,6 +36,7 @@ export function WorkflowWorkspace({
   staff,
   tasks,
   posts,
+  entities,
   viewer,
 }: {
   workflow: WorkflowDetail
@@ -44,6 +45,8 @@ export function WorkflowWorkspace({
   tasks: WorkflowTask[]
   /** Every post on the workflow, newest first. */
   posts: WorkflowPost[]
+  /** What `#` may name: this workflow's group, its members, its sibling workflows. */
+  entities?: EntityChoice[]
   /** The signed-in staff member — the author of anything posted from here. */
   viewer: { id: string; name: string; canRemoveAnyImage: boolean }
 }) {
@@ -95,6 +98,7 @@ export function WorkflowWorkspace({
           tasks={tasks}
           posts={posts}
           staff={staff}
+          entities={entities}
           viewer={viewer}
         />
       </Column>

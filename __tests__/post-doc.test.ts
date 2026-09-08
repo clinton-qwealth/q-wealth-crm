@@ -109,6 +109,29 @@ describe('postDocText', () => {
   test('an image alone is enough for a post — unlike a rule, it is not wordless', () => {
     expect(postDocText({ type: 'doc', content: [{ type: 'image', attrs: { id: 'm1', name: 'shot.png' } }] })).toBe('shot.png')
   })
+
+  /**
+   * An attachment reads as its filename and has no `alt`: a filename IS the
+   * description of a file, whereas a picture needs one written because its
+   * content is not in its name.
+   */
+  test('an attachment reads as its filename, and alone is enough for a post', () => {
+    expect(
+      postDocText({ type: 'doc', content: [{ type: 'attachment', attrs: { id: 'm1', name: 'statement.pdf' } }] }),
+    ).toBe('statement.pdf')
+    expect(
+      postDocText({ type: 'doc', content: [{ type: 'attachment', attrs: { id: 'm1', name: '  ' } }] }),
+    ).toBe('File')
+  })
+
+  test('an attachment after a paragraph starts a new line rather than running on', () => {
+    expect(
+      postDocText({ type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Signed copy attached' }] },
+        { type: 'attachment', attrs: { id: 'm1', name: 'authority.pdf' } },
+      ] }),
+    ).toBe('Signed copy attached\nauthority.pdf')
+  })
 })
 
 describe('isPostDoc', () => {
@@ -134,15 +157,16 @@ describe('postMentionIds', () => {
 })
 
 describe('postMediaIds', () => {
-  test('every upload the document names, once, however deep', () => {
+  test('every upload the document names — pictures and files alike — once, however deep', () => {
     expect(
       postMediaIds({ type: 'doc', content: [
         { type: 'paragraph', content: [{ type: 'text', text: 'Look' }] },
         { type: 'image', attrs: { id: 'm1', name: 'a.png' } },
         { type: 'image', attrs: { id: 'm1', name: 'a.png' } },
+        { type: 'attachment', attrs: { id: 'm3', name: 'c.pdf' } },
         { type: 'blockquote', content: [{ type: 'image', attrs: { id: 'm2', name: 'b.png' } }] },
       ] }),
-    ).toEqual(['m1', 'm2'])
+    ).toEqual(['m1', 'm3', 'm2'])
   })
 
   test('a document with no pictures names none', () => {

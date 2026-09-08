@@ -46,6 +46,7 @@ const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   mentioned: [],
   reactions: [],
   media: [],
+  entities: [],
   ...o,
 })
 

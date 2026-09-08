@@ -1,6 +1,12 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import { getStaffChoices, getWorkflow, getWorkflowPosts, getWorkflowTasks } from '@/lib/workflows'
+import {
+  getStaffChoices,
+  getWorkflow,
+  getWorkflowEntityChoices,
+  getWorkflowPosts,
+  getWorkflowTasks,
+} from '@/lib/workflows'
 import { WorkflowWorkspace } from '@/components/workflow-workspace'
 
 export const metadata = { title: 'Workflow · Q Wealth CRM' }
@@ -21,11 +27,12 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   /* One wave: the row, the staff list, the tasks and the posts need nothing
      from each other, so asking for them together costs one round trip rather
      than four. */
-  const [workflow, staffChoices, tasks, posts] = await Promise.all([
+  const [workflow, staffChoices, tasks, posts, entityChoices] = await Promise.all([
     getWorkflow(id),
     getStaffChoices(),
     getWorkflowTasks(id),
     getWorkflowPosts(id),
+    getWorkflowEntityChoices(id),
   ])
   if (!workflow) notFound()
 
@@ -35,6 +42,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       staff={staffChoices}
       tasks={tasks}
       posts={posts}
+      entities={entityChoices}
       /* `manage_staff` is what current_staff_has('admin') reads, so this is
          the same question the database asks when it decides who may take an
          image off somebody else's post. Sent down so the feed offers the

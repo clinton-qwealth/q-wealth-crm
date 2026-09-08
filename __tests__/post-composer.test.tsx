@@ -26,11 +26,14 @@ async function mount(onPost = vi.fn<OnPost>(async () => true), uploader?: PostUp
 const postButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Post' })
 
 /**
- * Choosing a file, as the toolbar's hidden input receives it. The input has no
- * label on purpose — it is not a control anyone should find by name — so it is
- * reached through the DOM rather than by role.
+ * Choosing a file, as the toolbar's first hidden input receives it.
+ *
+ * Neither input carries a label, on purpose — they are not controls anyone
+ * should find by name — so they are reached through the DOM rather than by
+ * role. Both share one handler, so driving the first is enough to exercise
+ * the path; which chooser opened it only decides what the OS dialog offers.
  */
-async function addPicture(
+async function addFile(
   _editor: Editor,
   file = new File(['bytes'], 'shot.png', { type: 'image/png' }),
 ) {
@@ -44,7 +47,7 @@ async function addPicture(
 describe('the post composer', () => {
   test('starts empty, with a placeholder and Post disabled', async () => {
     await mount()
-    expect(screen.getByText(/@ mentions a colleague, : adds an emoji/)).toBeTruthy()
+    expect(screen.getByText(/@ a colleague, # a client, : an emoji/)).toBeTruthy()
     expect(postButton().disabled).toBe(true)
   })
 
@@ -119,6 +122,65 @@ describe('the post composer', () => {
     for (const banned of ['table', 'iframe', 'taskList']) expect(nodes).not.toContain(banned)
   })
 
+  /**
+   * A callout wraps what you have already written rather than inserting an
+   * empty box, and the same button unwraps it — which is what its pressed
+   * state promises. The tone is a KEY from a closed set; a colour never
+   * reaches the document.
+   */
+  test('the Callout button wraps the selection, toggles off again, and carries a tone key', async () => {
+    const user = userEvent.setup()
+    const { editor } = await mount()
+    editor.commands.setContent('<p>Check the TFN before lodging</p>')
+    editor.commands.setTextSelection({ from: 1, to: 6 })
+
+    await user.click(screen.getByRole('button', { name: 'Callout' }))
+    const wrapped = editor.getJSON().content![0]
+    expect(wrapped).toMatchObject({ type: 'callout', attrs: { tone: 'info' } })
+    // The words are still there, inside it.
+    expect(editor.getText()).toContain('Check the TFN before lodging')
+    expect(JSON.stringify(wrapped)).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Callout' }).getAttribute('aria-pressed')).toBe('true'),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Callout' }))
+    expect(editor.getJSON().content![0].type).toBe('paragraph')
+  })
+
+  test('a callout’s tone can be changed from inside it, to one of three', async () => {
+    const { editor } = await mount()
+    editor.commands.setContent({
+      type: 'doc',
+      content: [
+        { type: 'callout', attrs: { tone: 'info' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Careful' }] }] },
+      ],
+    })
+    editor.commands.setTextSelection(2)
+
+    /* `findByRole`, not `getByRole`: a node view is rendered by ProseMirror
+       through a React portal, which lands after setContent returns. */
+    for (const label of ['Note', 'Careful', 'Settled']) {
+      expect(await screen.findByRole('button', { name: `Callout tone: ${label}` })).toBeTruthy()
+    }
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Callout tone: Careful' }))
+    expect(editor.getJSON().content![0].attrs!.tone).toBe('warning')
+  })
+
+  /** An unqualified `div` in parseHTML would turn every pasted page wrapper into a callout. */
+  test('a pasted div is not a callout; only our own marker is', async () => {
+    const { editor } = await mount()
+    editor.commands.setContent('<div class="wrapper"><p>ordinary pasted markup</p></div>')
+    expect(JSON.stringify(editor.getJSON())).not.toContain('callout')
+
+    editor.commands.setContent('<div data-callout data-tone="warning"><p>mind this</p></div>')
+    expect(editor.getJSON().content![0]).toMatchObject({ type: 'callout', attrs: { tone: 'warning' } })
+
+    // A tone the database would refuse never enters the document.
+    editor.commands.setContent('<div data-callout data-tone="chartreuse"><p>x</p></div>')
+    expect(editor.getJSON().content![0].attrs!.tone).toBe('info')
+  })
+
   test('a heading is level 1, 2 or 3 — the editor cannot make a level 4', async () => {
     const { editor } = await mount()
     editor.commands.setContent('<p>word</p>')
@@ -170,7 +232,8 @@ describe('the post composer', () => {
     expect(labels).toEqual([
       'Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code',
       'Heading 1', 'Heading 2', 'Heading 3',
-      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule', 'Image',
+      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule', 'Callout',
+      'Image', 'Attach file',
       'Link', 'Undo', 'Redo',
     ])
     expect(screen.getByRole('button', { name: 'Undo' }).getAttribute('aria-disabled')).toBe('true')
@@ -228,6 +291,98 @@ describe('the post composer', () => {
     fireEvent.mouseDown(within(first).getByRole('button'))
     expect(editor.getText()).toBe('👍 ')
     expect(editor.getJSON().content![0].content!.every((n) => n.type === 'text')).toBe(true)
+  })
+
+  /**
+   * The third suggestion list, on the same machinery as `@` and `:`.
+   *
+   * The candidates are handed in rather than searched for, and that is the
+   * point: the set is exactly what post_workflow_activity() will accept, so
+   * the menu cannot offer a client the database is going to refuse — nor
+   * become the only thing standing between a chip and a name reaching people
+   * with no right to it.
+   */
+  test('# opens the list of things a post may name; choosing one inserts a chip with kind and id', async () => {
+    const entities = [
+      { kind: 'group' as const, id: '11111111-1111-4111-8111-111111111111', label: 'Testsmith Household' },
+      { kind: 'client' as const, id: '22222222-2222-4222-8222-222222222222', label: 'Jane Testsmith' },
+    ]
+    let editor: Editor | null = null
+    render(
+      <PostComposer
+        staff={STAFF}
+        entities={entities}
+        onPost={vi.fn<OnPost>(async () => true)}
+        onReady={(e) => (editor = e)}
+      />,
+    )
+    await waitFor(() => expect(editor).not.toBeNull())
+    editor!.commands.insertContent('#Test')
+
+    const list = await screen.findByRole('listbox', { name: 'Name a client, group or workflow' })
+    const options = within(list).getAllByRole('option').map((o) => o.textContent)
+    /* Both match: the filter is a substring of the whole label, so "Test"
+       finds the household AND "Jane Testsmith". That is wanted — people
+       search by surname — and it is why each row shows its kind. */
+    expect(options.length).toBe(2)
+    expect(options[0]).toContain('Testsmith Household')
+    expect(options[0]).toContain('Group')
+    expect(options[1]).toContain('Jane Testsmith')
+    expect(options[1]).toContain('Client')
+
+    fireEvent.mouseDown(within(list).getAllByRole('button')[0])
+    const chip = editor!.getJSON().content![0].content!.find((n) => n.type === 'entity')! as {
+      attrs?: Record<string, unknown>
+    }
+    expect(chip.attrs).toMatchObject({
+      kind: 'group',
+      id: '11111111-1111-4111-8111-111111111111',
+      label: 'Testsmith Household',
+    })
+  })
+
+  test('# with nothing to offer opens a list that says so', async () => {
+    const { editor } = await mount()
+    editor.commands.insertContent('#any')
+    const list = await screen.findByRole('listbox', { name: 'Name a client, group or workflow' })
+    expect(list.textContent).toContain('Nothing on this group matches')
+  })
+
+  /** A chip is a word in a sentence, so it must not break the line it sits in. */
+  test('a chip is inline, and reads as #Label in the plain text', async () => {
+    const { editor } = await mount()
+    editor.commands.setContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Spoke to ' },
+            { type: 'entity', attrs: { kind: 'client', id: '22222222-2222-4222-8222-222222222222', label: 'Jane' } },
+            { type: 'text', text: ' today' },
+          ],
+        },
+      ],
+    })
+    expect(editor.getJSON().content![0].type).toBe('paragraph')
+    expect(editor.getText()).toBe('Spoke to #Jane today')
+  })
+
+  test('a pasted span is not a chip unless it carries a real id and a known kind', async () => {
+    const { editor } = await mount()
+    editor.commands.setContent(
+      '<p><span data-entity-chip data-entity-kind="client" data-entity-id="22222222-2222-4222-8222-222222222222" data-label="Jane">#Jane</span></p>',
+    )
+    expect(JSON.stringify(editor.getJSON())).toContain('"type":"entity"')
+
+    editor.commands.setContent('<p><span data-entity-chip data-entity-kind="client" data-entity-id="nope">#x</span></p>')
+    expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"entity"')
+
+    // A kind outside the closed set is not one of ours either.
+    editor.commands.setContent(
+      '<p><span data-entity-chip data-entity-kind="invoice" data-entity-id="22222222-2222-4222-8222-222222222222">#x</span></p>',
+    )
+    expect(JSON.stringify(editor.getJSON())).not.toContain('"type":"entity"')
   })
 
   test('a colon with fewer than two letters after it opens nothing', async () => {
@@ -304,9 +459,75 @@ describe('the post composer', () => {
       expect(JSON.stringify(editor.getJSON())).not.toContain('image')
     })
 
-    test('the Image button is dead without an uploader', async () => {
+    test('the Image and Attach file buttons are dead without an uploader', async () => {
       await mount()
       expect(screen.getByRole('button', { name: 'Image' }).getAttribute('aria-disabled')).toBe('true')
+      expect(screen.getByRole('button', { name: 'Attach file' }).getAttribute('aria-disabled')).toBe('true')
+    })
+
+    /**
+     * The two choosers offer different things on purpose: somebody looking for
+     * a screenshot should not be shown every spreadsheet on the machine.
+     */
+    test('the Image chooser offers only pictures; Attach file offers everything a post may carry', async () => {
+      await mount(vi.fn<OnPost>(async () => true), {
+        reserve: vi.fn(async () => ({ id: 'x', path: 'y' })),
+        send: vi.fn(async () => null),
+      })
+      const accepts = Array.from(document.querySelectorAll('input[type="file"]')).map((i) =>
+        (i as HTMLInputElement).accept,
+      )
+      const images = accepts.find((a) => !a.includes('application/pdf'))!
+      const everything = accepts.find((a) => a.includes('application/pdf'))!
+      expect(images).toContain('image/png')
+      expect(images).not.toContain('application/pdf')
+      expect(everything).toContain('image/png')
+      expect(everything).toContain('application/pdf')
+      // Never, in either: both can carry script.
+      for (const a of accepts) {
+        expect(a).not.toContain('svg')
+        expect(a).not.toContain('text/html')
+      }
+    })
+
+    /**
+     * A document is a chip, not a picture: no blob is made for it, so nothing
+     * is drawn from the local file and no dimensions are measured.
+     */
+    test('a PDF becomes an attachment node, with no preview and no dimensions', async () => {
+      const uploader = {
+        reserve: vi.fn(async () => ({ id: '7c9e6679-7425-40de-944b-e07fc1f90ae7', path: 'w1/pdf' })),
+        send: vi.fn(async () => null),
+      }
+      const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
+
+      await addFile(editor, new File(['%PDF'], 'statement.pdf', { type: 'application/pdf' }))
+
+      await waitFor(() => expect(JSON.stringify(editor.getJSON())).toContain('7c9e6679'))
+      const node = editor.getJSON().content!.find((n) => n.type === 'attachment')!
+      // Only the two attributes, and neither of them an address.
+      expect(Object.keys(node.attrs!).sort()).toEqual(['id', 'name'])
+      expect(node.attrs!.name).toBe('statement.pdf')
+      // Null dimensions: a PDF has no pixel size worth reserving.
+      expect(uploader.reserve).toHaveBeenCalledWith(expect.anything(), null)
+      expect(URL.createObjectURL).not.toHaveBeenCalled()
+    })
+
+    test('an attachment node carrying an address is not parsed back', async () => {
+      const { editor } = await mount()
+      editor.commands.setContent(
+        '<span data-post-attachment data-post-media="7c9e6679-7425-40de-944b-e07fc1f90ae7" data-name="ok.pdf"></span>',
+      )
+      expect(editor.getJSON().content![0]).toMatchObject({
+        type: 'attachment',
+        attrs: { id: '7c9e6679-7425-40de-944b-e07fc1f90ae7', name: 'ok.pdf' },
+      })
+
+      // A bare anchor from a web page is not an attachment.
+      editor.commands.setContent('<a href="https://evil.example/x.pdf">x.pdf</a>')
+      expect(JSON.stringify(editor.getJSON())).not.toContain('attachment')
+      editor.commands.setContent('<span data-post-attachment data-post-media="nope"></span>')
+      expect(JSON.stringify(editor.getJSON())).not.toContain('attachment')
     })
 
     /**
@@ -324,7 +545,7 @@ describe('the post composer', () => {
       }
       const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
 
-      void addPicture(editor)
+      void addFile(editor)
 
       // The picture is in the document while the bytes are still going.
       await waitFor(() => expect(JSON.stringify(editor.getJSON())).toContain('3f1a2b4c'))
@@ -332,7 +553,7 @@ describe('the post composer', () => {
       // The picture's own pixel size goes with the reservation, so the feed can
       // reserve its shape and not jump as it loads.
       expect(uploader.reserve).toHaveBeenCalledWith(expect.anything(), { width: 800, height: 600 })
-      await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Adding a picture'))
+      await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Adding a file'))
       expect(postButton().disabled).toBe(true)
       expect(uploader.send).toHaveBeenCalledWith('w1/3f1a2b4c-5d6e-4f70-8901-23456789abcd', expect.anything())
 
@@ -358,7 +579,7 @@ describe('the post composer', () => {
       const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
       editor.commands.setContent('<p>Keep me</p>')
 
-      await addPicture(editor)
+      await addFile(editor)
 
       await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('The network gave up.'))
       expect(JSON.stringify(editor.getJSON())).not.toContain('3f1a2b4c')
@@ -372,7 +593,7 @@ describe('the post composer', () => {
       }
       const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
 
-      await addPicture(editor)
+      await addFile(editor)
 
       await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('10 MB limit'))
       expect(uploader.send).not.toHaveBeenCalled()
@@ -387,7 +608,7 @@ describe('the post composer', () => {
       }
       const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
 
-      await addPicture(editor, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }))
+      await addFile(editor, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }))
 
       await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('logo.svg'))
       expect(uploader.reserve).not.toHaveBeenCalled()

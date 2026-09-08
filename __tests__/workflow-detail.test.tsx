@@ -54,6 +54,11 @@ vi.mock('@/lib/supabase/server', () => ({
            of them — due date, then created_at as the tie-break. The chain is
            thenable instead, so `await`ing it ends the query. */
         order: () => chain,
+        /* `is` for the null check on a group member's end_date, and `in` for
+           looking clients up by the party ids that come back — both used by
+           getWorkflowEntityChoices, which the page loads for the `#` menu. */
+        is: () => chain,
+        in: () => chain,
         then: (resolve: (v: unknown) => unknown) =>
           Promise.resolve({
             data: table === 'staff_directory' ? [{ id: 's1', full_name: 'A Adviser', status: 'active' }] : [],

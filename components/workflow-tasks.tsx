@@ -14,6 +14,7 @@ import {
   TASK_TYPE_LABEL,
   type Priority,
   type TaskStatus,
+  type EntityChoice,
   type WorkflowPost,
   type WorkflowTask,
 } from '@/lib/workflow-board'
@@ -74,6 +75,7 @@ export function WorkflowTasks({
   tasks: initial,
   posts,
   staff,
+  entities,
   viewer,
 }: {
   workflowId: string
@@ -83,6 +85,8 @@ export function WorkflowTasks({
   /** Every post on the workflow; the panel shows a task's own. */
   posts: WorkflowPost[]
   staff: Staff[]
+  /** What `#` may name in a post. Passed through to the feed in the task panel. */
+  entities?: EntityChoice[]
   viewer: Viewer
 }) {
   /* Seeded from the server and RE-seeded when the server sends new rows. A
@@ -325,6 +329,7 @@ export function WorkflowTasks({
             groupName={groupName}
             posts={posts}
             staff={staff}
+            entities={entities}
             viewer={viewer}
             onClose={() => panelRef.current?.close()}
           />
@@ -409,6 +414,7 @@ function TaskPanel({
   groupName,
   posts,
   staff,
+  entities,
   viewer,
   onClose,
 }: {
@@ -417,6 +423,7 @@ function TaskPanel({
   groupName: string
   posts: WorkflowPost[]
   staff: Staff[]
+  entities?: EntityChoice[]
   viewer: Viewer
   onClose: () => void
 }) {
@@ -634,6 +641,7 @@ function TaskPanel({
                     taskId={task.id}
                     posts={posts}
                     staff={staff}
+                    entities={entities}
                     viewer={viewer}
                   />
                 </div>

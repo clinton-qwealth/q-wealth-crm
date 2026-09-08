@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type {
-  WorkflowPost, BoardCard, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
+  WorkflowPost, BoardCard, EntityChoice, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
 /**
  * Every workflow the caller can see, across every group — the view is
@@ -98,6 +98,60 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
 }
 
 /**
+ * What a post on this workflow may name with `#`.
+ *
+ * THE SAME SET THE DATABASE WILL ACCEPT, and that is the point of loading it
+ * here rather than offering a search across the whole CRM: the workflow's own
+ * client group, that group's current members, and the group's other
+ * workflows. `post_workflow_activity()` enforces exactly this, so the menu
+ * cannot offer something that would then be refused — and, more importantly,
+ * cannot become the only thing standing between a chip and a disclosure. See
+ * the rule at the top of the entities migration.
+ *
+ * Two round trips rather than one join: members are parties, and the label
+ * worth showing is the one `clients` gives — which also filters out a party in
+ * the group that is not an active client. A join through PostgREST would have
+ * to pick one or the other.
+ */
+export async function getWorkflowEntityChoices(
+  workflowId: string,
+): Promise<EntityChoice[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data: workflow } = await supabase
+    .from('workflow_board')
+    .select('group_id, group_name')
+    .eq('id', workflowId)
+    .maybeSingle()
+  if (!workflow?.group_id) return []
+
+  const groupId = workflow.group_id as string
+  const [{ data: members }, { data: siblings }] = await Promise.all([
+    supabase.from('client_group_members').select('party_id').eq('group_id', groupId).is('end_date', null),
+    supabase.from('workflow_board').select('id, name').eq('group_id', groupId).order('updated_at', { ascending: false }),
+  ])
+
+  const partyIds = (members ?? []).map((m) => m.party_id as string).filter(Boolean)
+  const { data: clients } = partyIds.length
+    ? await supabase.from('clients').select('party_id, display_name').in('party_id', partyIds)
+    : { data: [] }
+
+  return [
+    { kind: 'group' as const, id: groupId, label: (workflow.group_name as string) ?? 'This group' },
+    ...(clients ?? []).map((c) => ({
+      kind: 'client' as const,
+      id: c.party_id as string,
+      label: (c.display_name as string) ?? 'Unnamed',
+    })),
+    /* The post's own workflow is left out: a post naming the thing it is
+       already on says nothing. */
+    ...(siblings ?? [])
+      .filter((w) => (w.id as string) !== workflowId)
+      .map((w) => ({ kind: 'workflow' as const, id: w.id as string, label: (w.name as string) ?? 'Untitled' })),
+  ]
+}
+
+/**
  * Every post on the workflow — with a task or without — **newest first**.
  *
  * Fetched for the whole workflow rather than per task, on purpose: the task
@@ -110,7 +164,7 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('workflow_posts_summary')
-    .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned, reactions, media')
+    .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned, reactions, media, entities')
     .eq('workflow_id', workflowId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
