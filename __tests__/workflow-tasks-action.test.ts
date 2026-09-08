@@ -135,7 +135,24 @@ const DOC = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'tex
 describe('postWorkflowActivity', () => {
   test('calls the post function with the workflow, the task and the document as given', async () => {
     await postWorkflowActivity('w1', 't1', DOC)
-    expect(calls[0]).toEqual({ name: 'post_workflow_activity', args: { p_workflow_id: 'w1', p_task_id: 't1', p_body: DOC } })
+    expect(calls[0]).toEqual({
+      name: 'post_workflow_activity',
+      args: { p_workflow_id: 'w1', p_task_id: 't1', p_body: DOC, p_parent_post_id: null },
+    })
+  })
+
+  /**
+   * A reply sends only the parent's id. The thread's root is derived by the
+   * database from that parent and never travels from here — a client that
+   * could name its own root could put a reply in somebody else's conversation.
+   */
+  test('a reply sends the parent’s id, and nothing about the thread', async () => {
+    await postWorkflowActivity('w1', 't1', DOC, 'parent-1')
+    expect(calls[0]).toEqual({
+      name: 'post_workflow_activity',
+      args: { p_workflow_id: 'w1', p_task_id: 't1', p_body: DOC, p_parent_post_id: 'parent-1' },
+    })
+    expect(JSON.stringify(calls[0])).not.toContain('root')
   })
 
   test('a post on the workflow itself sends a null task', async () => {

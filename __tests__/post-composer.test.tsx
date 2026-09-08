@@ -148,6 +148,54 @@ describe('the post composer', () => {
     expect(editor.getJSON().content![0].type).toBe('paragraph')
   })
 
+  /**
+   * Reported from use on 8 September: inserting a callout into an empty
+   * composer left the placeholder sitting on top of it.
+   *
+   * The cause is that `editor.isEmpty` asks about TEXT, so a block that wraps
+   * text but has none yet — a callout, a quote, a code block — still reports
+   * empty. The placeholder now asks a structural question instead, and Post
+   * keeps asking the text one. Both halves are asserted here, because the fix
+   * is only correct if they stay different: a wordless callout must hide the
+   * placeholder AND keep Post disabled, since the database refuses a post with
+   * no words in it.
+   */
+  test('inserting a wordless block hides the placeholder but leaves Post disabled', async () => {
+    const user = userEvent.setup()
+    const { editor } = await mount()
+    const placeholder = () => screen.queryByText(/@ a colleague, # a client/)
+
+    expect(placeholder()).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Callout' }))
+
+    // The reported bug: this used to still be on screen, over the callout.
+    await waitFor(() => expect(placeholder()).toBeNull())
+    // And the other half: nothing worth posting yet.
+    expect(editor.isEmpty).toBe(true)
+    expect(postButton().disabled).toBe(true)
+
+    editor.commands.insertContent('Check the TFN')
+    await waitFor(() => expect(postButton().disabled).toBe(false))
+    expect(placeholder()).toBeNull()
+  })
+
+  test('a quote and a code block behave the same way, and clearing brings the placeholder back', async () => {
+    const { editor } = await mount()
+    const placeholder = () => screen.queryByText(/@ a colleague, # a client/)
+
+    for (const doc of [
+      { type: 'doc', content: [{ type: 'blockquote', content: [{ type: 'paragraph' }] }] },
+      { type: 'doc', content: [{ type: 'codeBlock' }] },
+    ]) {
+      editor.commands.setContent(doc as never)
+      await waitFor(() => expect(placeholder()).toBeNull())
+      expect(editor.isEmpty).toBe(true)
+    }
+
+    editor.commands.clearContent(true)
+    await waitFor(() => expect(placeholder()).toBeTruthy())
+  })
+
   test('a callout’s tone can be changed from inside it, to one of three', async () => {
     const { editor } = await mount()
     editor.commands.setContent({

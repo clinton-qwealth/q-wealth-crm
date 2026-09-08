@@ -884,6 +884,14 @@ export async function postWorkflowActivity(
   workflowId: string,
   taskId: string | null,
   body: unknown,
+  /**
+   * The post being answered, when this is a reply.
+   *
+   * Only the id travels. The reply's thread root is DERIVED by the database
+   * from the parent and never sent from here — a client that could name its
+   * own root could put a reply in somebody else's conversation.
+   */
+  parentPostId: string | null = null,
 ): Promise<NoteState> {
   if (!workflowId) return { error: 'No workflow selected.' }
   if (!isPostDoc(body)) return { error: 'A post must be a document.' }
@@ -894,6 +902,7 @@ export async function postWorkflowActivity(
     p_workflow_id: workflowId,
     p_task_id: taskId,
     p_body: body,
+    p_parent_post_id: parentPostId,
   })
   if (error) return { error: error.message }
 

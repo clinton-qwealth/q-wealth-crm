@@ -11,6 +11,7 @@ import {
   POST_MEDIA_BUCKET,
   REACTIONS,
   postDocText,
+  threadPosts,
   toggleReaction,
   type PostDoc,
   type EntityChoice,
@@ -65,8 +66,11 @@ export function ActivityFeed({
 }) {
   const [posts, setPosts] = useServerState(initial)
   const [error, setError] = useState<string | null>(null)
+  /** The post whose reply box is open, or null. One at a time, by design. */
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
 
   const shown = taskId === null ? posts : posts.filter((p) => p.task_id === taskId)
+  const threads = threadPosts(shown)
 
   /**
    * How a picture gets out of the browser, in the two steps the database
@@ -103,7 +107,16 @@ export function ActivityFeed({
     [workflowId],
   )
 
-  async function post(doc: PostDoc): Promise<boolean> {
+  /**
+   * Post, optionally in reply to `parentPostId`.
+   *
+   * The provisional entry needs a `root_post_id` so `threadPosts` puts it in
+   * the right place immediately — and for a reply to a reply that is the
+   * PARENT'S root, not the parent. The database derives the same value; this
+   * only has to agree with it for the moment before the real row arrives.
+   */
+  async function post(doc: PostDoc, parentPostId: string | null = null): Promise<boolean> {
+    const parent = parentPostId ? posts.find((p) => p.id === parentPostId) : null
     const provisional: WorkflowPost & { pending: true } = {
       id: `pending-${Date.now()}`,
       workflow_id: workflowId,
@@ -122,6 +135,9 @@ export function ActivityFeed({
          unresolved one. */
       entities: [],
       reactions: [],
+      parent_post_id: parentPostId,
+      root_post_id: parent ? (parent.root_post_id ?? parent.id) : null,
+      parent_author_name: parent?.author_name ?? null,
       pending: true,
     }
     setError(null)
@@ -134,7 +150,7 @@ export function ActivityFeed({
        document it could not read. */
     let result: Awaited<ReturnType<typeof postWorkflowActivity>>
     try {
-      result = await postWorkflowActivity(workflowId, taskId, doc)
+      result = await postWorkflowActivity(workflowId, taskId, doc, parentPostId)
     } catch {
       result = { error: 'The post could not be saved. Nothing was lost — try again.' }
     }
@@ -143,6 +159,10 @@ export function ActivityFeed({
       setError(result.error)
       return false
     }
+    /* The reply box closes only once the reply is accepted — a refusal keeps
+       it open with the writer's words still in it, the same contract the
+       composer has always had. */
+    if (parentPostId) setReplyingTo(null)
     return true
   }
 
@@ -212,46 +232,64 @@ export function ActivityFeed({
         </p>
       ) : null}
 
-      {shown.length ? (
+      {threads.length ? (
         <ol aria-label="Posts" className="flex flex-col divide-y divide-neutral-200/80">
-          {shown.map((p) => {
-            const pending = 'pending' in p && p.pending === true
-            return (
-              <li key={p.id} className="flex gap-3 py-3.5 first:pt-1">
-                <span className="mt-0.5 shrink-0 [&>span]:h-7 [&>span]:w-7 [&>span]:text-[10px]">
-                  <InitialsTile name={p.author_name ?? '?'} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="text-sm font-semibold text-neutral-900">
-                      {p.author_name ?? 'Unknown author'}
-                    </span>
-                    <span className="text-xs text-neutral-500">
-                      {pending ? 'Posting…' : formatNoteDateTime(p.created_at)}
-                    </span>
-                  </div>
-                  <div className={`mt-1 ${pending ? 'opacity-60' : ''}`}>
-                    <PostBody doc={p.body} mentioned={p.mentioned} media={p.media} entities={p.entities} />
-                  </div>
-                  {/* A post that has not been accepted yet has nothing to react to. */}
-                  {pending ? null : (
-                    <RemovableMedia
-                      media={p.media}
-                      canRemove={p.author_staff_id === viewer.id || viewer.canRemoveAnyImage}
-                      onRemove={(mediaId) => removeImage(p.id, mediaId)}
-                    />
-                  )}
-                  {pending ? null : (
-                    <Reactions
-                      reactions={p.reactions}
-                      viewerId={viewer.id}
-                      onToggle={(key) => react(p.id, key)}
-                    />
-                  )}
+          {threads.map(({ root, replies }) => (
+            <li key={root.id} className="py-3.5 first:pt-1">
+              <Post
+                post={root}
+                viewer={viewer}
+                replyOpen={replyingTo === root.id}
+                onReply={() => setReplyingTo(replyingTo === root.id ? null : root.id)}
+                onToggleReaction={(key) => react(root.id, key)}
+                onRemoveMedia={(mediaId) => removeImage(root.id, mediaId)}
+              />
+
+              {/* ONE INDENT, whatever the depth. Every descendant of this post
+                  sits here, oldest first — the rule is in `threadPosts`, and
+                  the reason a reply names who it answers is that a single
+                  indent cannot show three levels of ancestry on its own. */}
+              {replies.length || replyingTo ? (
+                <ol className="mt-3 flex flex-col gap-3 border-l border-neutral-200 pl-3 sm:pl-4">
+                  {replies.map((r) => (
+                    <li key={r.id}>
+                      <Post
+                        post={r}
+                        viewer={viewer}
+                        isReply
+                        showAnswering={r.parent_post_id !== root.id}
+                        replyOpen={replyingTo === r.id}
+                        onReply={() => setReplyingTo(replyingTo === r.id ? null : r.id)}
+                        onToggleReaction={(key) => react(r.id, key)}
+                        onRemoveMedia={(mediaId) => removeImage(r.id, mediaId)}
+                      />
+                      {replyingTo === r.id ? (
+                        <div className="mt-2">
+                          <PostComposer
+                            staff={staff}
+                            entities={entities}
+                            uploader={uploader}
+                            onPost={(doc) => post(doc, r.id)}
+                          />
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+
+              {replyingTo === root.id ? (
+                <div className="mt-3 border-l border-neutral-200 pl-3 sm:pl-4">
+                  <PostComposer
+                    staff={staff}
+                    entities={entities}
+                    uploader={uploader}
+                    onPost={(doc) => post(doc, root.id)}
+                  />
                 </div>
-              </li>
-            )
-          })}
+              ) : null}
+            </li>
+          ))}
         </ol>
       ) : (
         <p className="text-xs leading-relaxed text-neutral-400">
@@ -259,6 +297,86 @@ export function ActivityFeed({
           appear on the workflow’s timeline.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * One post — a thread's root or a reply to one, drawn from the same component
+ * so the two cannot drift apart.
+ *
+ * A reply is smaller in one respect only: its initials tile. Everything else
+ * is identical, because a reply is a post — it carries the same document, the
+ * same pictures, the same chips and its own reactions.
+ */
+function Post({
+  post: p,
+  viewer,
+  isReply = false,
+  showAnswering = false,
+  replyOpen,
+  onReply,
+  onToggleReaction,
+  onRemoveMedia,
+}: {
+  post: WorkflowPost & { pending?: true }
+  viewer: Viewer
+  isReply?: boolean
+  /** True when the parent is not the thread's root — the one thing an indent cannot say. */
+  showAnswering?: boolean
+  replyOpen: boolean
+  onReply: () => void
+  onToggleReaction: (key: ReactionKey) => void
+  onRemoveMedia: (mediaId: string) => void
+}) {
+  const pending = p.pending === true
+  return (
+    <div className="flex gap-3">
+      <span
+        className={`mt-0.5 shrink-0 ${
+          isReply
+            ? '[&>span]:h-6 [&>span]:w-6 [&>span]:text-[9px]'
+            : '[&>span]:h-7 [&>span]:w-7 [&>span]:text-[10px]'
+        }`}
+      >
+        <InitialsTile name={p.author_name ?? '?'} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-sm font-semibold text-neutral-900">
+            {p.author_name ?? 'Unknown author'}
+          </span>
+          <span className="text-xs text-neutral-500">
+            {pending ? 'Posting…' : formatNoteDateTime(p.created_at)}
+          </span>
+          {/* Only when the parent is not the root. Every reply sits at the same
+              indent, so without this a reply three levels down would read as a
+              reply to the top-level post. */}
+          {showAnswering && p.parent_author_name ? (
+            <span className="text-xs text-neutral-400">replying to {p.parent_author_name}</span>
+          ) : null}
+        </div>
+        <div className={`mt-1 ${pending ? 'opacity-60' : ''}`}>
+          <PostBody doc={p.body} mentioned={p.mentioned} media={p.media} entities={p.entities} />
+        </div>
+        {/* A post that has not been accepted yet has nothing to react or reply to. */}
+        {pending ? null : (
+          <RemovableMedia
+            media={p.media}
+            canRemove={p.author_staff_id === viewer.id || viewer.canRemoveAnyImage}
+            onRemove={onRemoveMedia}
+          />
+        )}
+        {pending ? null : (
+          <Reactions
+            reactions={p.reactions}
+            viewerId={viewer.id}
+            onToggle={onToggleReaction}
+            replyOpen={replyOpen}
+            onReply={onReply}
+          />
+        )}
+      </div>
     </div>
   )
 }
@@ -342,13 +460,37 @@ function Reactions({
   reactions,
   viewerId,
   onToggle,
+  replyOpen,
+  onReply,
 }: {
   reactions: PostReaction[]
   viewerId: string
   onToggle: (key: ReactionKey) => void
+  replyOpen: boolean
+  onReply: () => void
 }) {
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1" aria-label="Reactions">
+      {/* Reply comes FIRST, before any reaction. Answering a post is the more
+          substantial act, and it should not move around as reactions are added
+          and taken away — a control whose position depends on how many people
+          reacted is a control people mis-click. `aria-expanded` because it
+          discloses the composer beneath rather than navigating anywhere. */}
+      <button
+        type="button"
+        aria-label="Reply"
+        aria-expanded={replyOpen}
+        title="Reply"
+        onClick={onReply}
+        className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
+          replyOpen
+            ? 'border-brand-300 bg-brand-50 text-brand-700'
+            : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+        }`}
+      >
+        <ReplyGlyph />
+        <span>Reply</span>
+      </button>
       {reactions.map((r) => {
         const def = REACTIONS.find((d) => d.key === r.reaction)
         if (!def || r.by.length === 0) return null
@@ -438,6 +580,16 @@ function AddReaction({ onPick }: { onPick: (key: ReactionKey) => void }) {
         </div>
       ) : null}
     </span>
+  )
+}
+
+/** An arrow turning back on itself — the reply mark every mail client uses. */
+function ReplyGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 4.5L3 8l3.5 3.5" />
+      <path d="M3 8h6.25A3.75 3.75 0 0113 11.75v.75" />
+    </svg>
   )
 }
 

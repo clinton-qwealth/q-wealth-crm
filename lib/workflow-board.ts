@@ -462,6 +462,66 @@ export type WorkflowPost = {
   media: PostMedia[]
   /** The clients, groups and workflows the post names, each resolved to its current name. */
   entities: PostEntity[]
+  /** The post this one answers. Null starts a thread. Any depth is permitted. */
+  parent_post_id: string | null
+  /** The thread this belongs to. Null means this post IS the thread's root. */
+  root_post_id: string | null
+  /** Who is being answered, for the one case a single indent cannot show — see `threadOf`. */
+  parent_author_name: string | null
+}
+
+/* ---- threads ----------------------------------------------------------- */
+
+/**
+ * A top-level post and everything that answers it, however deeply.
+ *
+ * **Arbitrary depth in the data, one indent on the screen.** A reply may
+ * answer a reply, and `parent_post_id` records exactly that — it is a real
+ * fact about a conversation and cannot be recovered once flattened. But every
+ * descendant is drawn at a single indent, because the reading column runs out
+ * of room at the third level and a deep thread makes the workflow timeline
+ * unreadable once posts from several tasks interleave.
+ *
+ * The cost of flattening is that a reply three levels down would look like a
+ * reply to the root, so `parent_author_name` is shown whenever the parent is
+ * NOT the root — which is the only case a single indent cannot express on its
+ * own.
+ */
+export type PostThread = { root: WorkflowPost; replies: WorkflowPost[] }
+
+/**
+ * Group a flat list of posts into threads.
+ *
+ * Roots keep the order they arrive in — newest first, which the query decides —
+ * and replies are sorted **oldest first** within their thread: a timeline is
+ * scanned from the top, a conversation is read downward.
+ *
+ * A reply whose root is not in the list is promoted to a root of its own
+ * rather than dropped. That happens when the feed is filtered to one task and
+ * something has gone wrong upstream — and a reply that cannot find its parent
+ * is still something a person wrote, so it is shown rather than silently lost.
+ */
+export function threadPosts(posts: WorkflowPost[]): PostThread[] {
+  const roots = posts.filter((p) => p.root_post_id === null)
+  const byRoot = new Map<string, WorkflowPost[]>(roots.map((r) => [r.id, []]))
+  const orphans: WorkflowPost[] = []
+
+  for (const p of posts) {
+    if (p.root_post_id === null) continue
+    const thread = byRoot.get(p.root_post_id)
+    if (thread) thread.push(p)
+    else orphans.push(p)
+  }
+
+  const oldestFirst = (a: WorkflowPost, b: WorkflowPost) =>
+    a.created_at === b.created_at ? a.id.localeCompare(b.id) : a.created_at.localeCompare(b.created_at)
+
+  const threads: PostThread[] = roots.map((root) => ({
+    root,
+    replies: (byRoot.get(root.id) ?? []).sort(oldestFirst),
+  }))
+  for (const o of orphans) threads.push({ root: o, replies: [] })
+  return threads
 }
 
 /**

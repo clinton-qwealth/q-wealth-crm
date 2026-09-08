@@ -350,6 +350,7 @@ export function PostComposer({
       const e = ctx.editor
       return {
         empty: e?.isEmpty ?? true,
+        pristine: isPristine(e),
         bold: e?.isActive('bold') ?? false,
         italic: e?.isActive('italic') ?? false,
         underline: e?.isActive('underline') ?? false,
@@ -408,7 +409,7 @@ export function PostComposer({
       <div ref={frameRef} className="relative">
         {/* The editor is a client-only thing; until it mounts, the box is a
             box. Once it has, an empty document shows the placeholder. */}
-        {editor && state.empty ? (
+        {editor && state.pristine ? (
           <span
             aria-hidden
             className="pointer-events-none absolute left-3 top-2 text-sm text-neutral-400"
@@ -566,8 +567,45 @@ export function PostComposer({
   )
 }
 
+/**
+ * Is the box untouched?
+ *
+ * NOT `editor.isEmpty`, and the difference is the whole reason this exists.
+ * `isEmpty` asks whether there is any TEXT, so a **callout, a quote or a code
+ * block that has been inserted but not yet typed into still reports empty** —
+ * and the placeholder, which was driven by it, sat on top of the freshly
+ * inserted block. Reported from use on 8 September, against a callout.
+ *
+ * The two questions are genuinely different, so they get separate flags:
+ *
+ *   placeholder → has the writer put ANYTHING in the box?   (structure)
+ *   Post        → is there anything worth posting?          (text or media)
+ *
+ * A callout with no words is correctly un-postable — the database refuses a
+ * wordless post — while just as correctly hiding the placeholder. And an
+ * image-only post is correctly postable, because an atom node is not text-empty
+ * and `body_text` falls back to the filename.
+ *
+ * StarterKit keeps a trailing paragraph after any block, so the untouched
+ * document is exactly one empty paragraph and anything at all beyond that is
+ * not.
+ */
+function isPristine(editor: Editor | null | undefined): boolean {
+  if (!editor) return true
+  const { doc } = editor.state
+  if (doc.childCount === 0) return true
+  const only = doc.firstChild
+  return (
+    doc.childCount === 1 &&
+    only !== null &&
+    only.type.name === 'paragraph' &&
+    only.content.size === 0
+  )
+}
+
 const IDLE = {
   empty: true,
+  pristine: true,
   bold: false,
   italic: false,
   underline: false,

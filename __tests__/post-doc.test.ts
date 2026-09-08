@@ -7,7 +7,9 @@ import {
   postMediaIds,
   postMediaKind,
   postMentionIds,
+  threadPosts,
   type PostDoc,
+  type WorkflowPost,
 } from '@/lib/workflow-board'
 import { formatNoteDateTime } from '@/lib/note-date'
 
@@ -195,6 +197,71 @@ describe('what a post may carry', () => {
 
   test('the limit matches the bucket’s file_size_limit', () => {
     expect(POST_MEDIA_SIZE_LIMIT).toBe(10 * 1024 * 1024)
+  })
+})
+
+/**
+ * Threading: arbitrary depth in the data, one indent on the screen.
+ *
+ * `parent_post_id` records who answered whom at any depth; `root_post_id` says
+ * which thread a post belongs to, and is what the screen groups by. These
+ * tests pin the two rules that matter — roots keep the query's order, replies
+ * read oldest-first — and the one that keeps writing safe: a reply whose root
+ * is missing is shown rather than dropped.
+ */
+describe('threadPosts', () => {
+  const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
+    id: 'x', workflow_id: 'w1', task_id: 't1', author_staff_id: 's1', author_name: 'A',
+    body: { type: 'doc' }, body_text: '', created_at: '2026-09-08T00:00:00Z',
+    mentioned: [], reactions: [], media: [], entities: [],
+    parent_post_id: null, root_post_id: null, parent_author_name: null, ...o,
+  })
+
+  test('roots keep the order given; replies sort oldest first inside their thread', () => {
+    const threads = threadPosts([
+      post({ id: 'newer', created_at: '2026-09-08T10:00:00Z' }),
+      post({ id: 'older', created_at: '2026-09-07T10:00:00Z' }),
+      post({ id: 'r2', parent_post_id: 'newer', root_post_id: 'newer', created_at: '2026-09-08T12:00:00Z' }),
+      post({ id: 'r1', parent_post_id: 'newer', root_post_id: 'newer', created_at: '2026-09-08T11:00:00Z' }),
+    ])
+    // The query decides root order — newest first — and threading preserves it.
+    expect(threads.map((t) => t.root.id)).toEqual(['newer', 'older'])
+    // A conversation is read downward, so replies are oldest first.
+    expect(threads[0].replies.map((r) => r.id)).toEqual(['r1', 'r2'])
+    expect(threads[1].replies).toEqual([])
+  })
+
+  test('a reply to a reply lands in the same thread, at the same level', () => {
+    const threads = threadPosts([
+      post({ id: 'root' }),
+      post({ id: 'a', parent_post_id: 'root', root_post_id: 'root', created_at: '2026-09-08T01:00:00Z' }),
+      // Answers `a`, not the root — deeper in the data, same indent on screen.
+      post({ id: 'b', parent_post_id: 'a', root_post_id: 'root', created_at: '2026-09-08T02:00:00Z' }),
+    ])
+    expect(threads).toHaveLength(1)
+    expect(threads[0].replies.map((r) => r.id)).toEqual(['a', 'b'])
+    expect(threads[0].replies[1].parent_post_id).toBe('a')
+  })
+
+  test('two replies in the same instant do not shuffle — the id breaks the tie', () => {
+    const same = '2026-09-08T05:00:00Z'
+    const threads = threadPosts([
+      post({ id: 'root' }),
+      post({ id: 'bbb', parent_post_id: 'root', root_post_id: 'root', created_at: same }),
+      post({ id: 'aaa', parent_post_id: 'root', root_post_id: 'root', created_at: same }),
+    ])
+    expect(threads[0].replies.map((r) => r.id)).toEqual(['aaa', 'bbb'])
+  })
+
+  test('a reply whose root is absent is promoted, never dropped', () => {
+    const threads = threadPosts([
+      post({ id: 'orphan', parent_post_id: 'gone', root_post_id: 'gone' }),
+    ])
+    expect(threads.map((t) => t.root.id)).toEqual(['orphan'])
+  })
+
+  test('no posts, no threads', () => {
+    expect(threadPosts([])).toEqual([])
   })
 })
 

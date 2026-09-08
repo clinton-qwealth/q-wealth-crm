@@ -1,6 +1,6 @@
 import type { PostDoc, WorkflowPost } from '@/lib/workflow-board'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
@@ -47,6 +47,9 @@ const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   reactions: [],
   media: [],
   entities: [],
+  parent_post_id: null,
+  root_post_id: null,
+  parent_author_name: null,
   ...o,
 })
 
@@ -115,7 +118,7 @@ describe('the activity feed', () => {
     expect(first.textContent).toContain('Clinton Hatcher')
     expect(first.textContent).toContain('Posting…')
     expect(items().length).toBe(2)
-    expect(actions.postWorkflowActivity).toHaveBeenCalledWith('w1', 't1', FIXED_DOC)
+    expect(actions.postWorkflowActivity).toHaveBeenCalledWith('w1', 't1', FIXED_DOC, null)
     // Nothing to react to until the server has it.
     expect(within(first).queryByRole('button', { name: 'Add reaction' })).toBeNull()
 
@@ -258,5 +261,98 @@ describe('reactions on a post', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('group', { name: 'Add a reaction' })).toBeNull()
     expect(actions.togglePostReaction).not.toHaveBeenCalledWith('w1', 'pr', expect.anything())
+  })
+})
+
+/**
+ * Replies. Asked for on 8 September: a reply glyph beside the reactions.
+ *
+ * The shape is arbitrary depth in the data, one indent on the screen — so
+ * these tests pin the two things that could quietly go wrong: that the button
+ * sits BEFORE the reactions (a control that moves as reactions are added is a
+ * control people mis-click), and that a reply to a reply still renders at the
+ * same single indent while saying who it answers.
+ */
+describe('replying to a post', () => {
+  /** A document saying `text`, so what renders is what the test names. */
+  const says = (text: string): PostDoc => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+  })
+  const reply = (o: Partial<WorkflowPost>) =>
+    post({
+      task_id: 't1',
+      parent_post_id: 'p2',
+      root_post_id: 'p2',
+      author_name: 'Sarah Chen',
+      ...o,
+    })
+
+  test('every post offers Reply, and it comes before any reaction', () => {
+    show([post({ id: 'p2', reactions: [{ reaction: 'heart', by: [{ staff_id: 's1', full_name: 'Sarah Chen' }] }] })])
+    const row = screen.getByLabelText('Reactions')
+    const labels = within(row).getAllByRole('button').map((b) => b.getAttribute('aria-label'))
+    // Reply first, then the reaction chips, then the add-reaction control.
+    expect(labels[0]).toBe('Reply')
+    expect(labels).toContain('Love: 1')
+    expect(labels[labels.length - 1]).toBe('Add reaction')
+  })
+
+  test('Reply opens a composer and posts with the parent’s id; the box closes on acceptance', async () => {
+    const user = userEvent.setup()
+    show([post({ id: 'p2', body: says('Root') })])
+
+    expect(screen.getAllByRole('button', { name: 'Post' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    expect(screen.getByRole('button', { name: 'Reply' }).getAttribute('aria-expanded')).toBe('true')
+    // A second composer — the reply box — is now on screen.
+    const composers = screen.getAllByRole('button', { name: 'Post' })
+    expect(composers).toHaveLength(2)
+
+    await user.click(composers[1])
+    expect(actions.postWorkflowActivity).toHaveBeenCalledWith('w1', 't1', FIXED_DOC, 'p2')
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Post' })).toHaveLength(1))
+  })
+
+  test('a refused reply keeps its box open', async () => {
+    const user = userEvent.setup()
+    vi.mocked(actions.postWorkflowActivity).mockResolvedValueOnce({ error: 'Nope.' })
+    show([post({ id: 'p2' })])
+
+    await user.click(screen.getByRole('button', { name: 'Reply' }))
+    await user.click(screen.getAllByRole('button', { name: 'Post' })[1])
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Nope.'))
+    // Still two composers: the reply box did not close, so the words survive.
+    expect(screen.getAllByRole('button', { name: 'Post' })).toHaveLength(2)
+  })
+
+  test('replies nest under their root, oldest first, and are not separate timeline entries', () => {
+    show([
+      post({ id: 'p2', body: says('Root') }),
+      reply({ id: 'r2', body: says('Second'), created_at: '2026-09-08T12:00:00Z' }),
+      reply({ id: 'r1', body: says('First'), created_at: '2026-09-08T11:00:00Z' }),
+    ])
+    // One top-level entry for the thread, not three.
+    const top = within(screen.getByRole('list', { name: 'Posts' })).getAllByRole('listitem')
+    expect(top[0].textContent).toContain('Root')
+    const order = top[0].textContent!
+    expect(order.indexOf('First')).toBeLessThan(order.indexOf('Second'))
+  })
+
+  /**
+   * The cost of drawing every depth at one indent: without this, a reply three
+   * levels down reads as a reply to the top-level post.
+   */
+  test('a reply to a reply says who it answers; a reply to the root does not', () => {
+    show([
+      post({ id: 'p2', author_name: 'Root Author' }),
+      reply({ id: 'r1', parent_post_id: 'p2', author_name: 'Sarah Chen', body: says('To root') }),
+      reply({ id: 'r2', parent_post_id: 'r1', parent_author_name: 'Sarah Chen', body: says('To Sarah') }),
+    ])
+    const thread = within(screen.getByRole('list', { name: 'Posts' })).getAllByRole('listitem')[0]
+    expect(thread.textContent).toContain('replying to Sarah Chen')
+    // Exactly one such marker — the reply that answers the root carries none.
+    expect(thread.textContent!.match(/replying to/g)).toHaveLength(1)
   })
 })
