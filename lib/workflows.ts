@@ -88,7 +88,7 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
   const { data } = await supabase
     .from('workflow_tasks_summary')
     .select(
-      'id, workflow_id, task_type, subject, description, comment, due_at, status, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at',
+      'id, workflow_id, task_type, subject, description, comment, due_at, status, priority, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at',
     )
     .eq('workflow_id', workflowId)
     .order('due_at', { ascending: true, nullsFirst: false })

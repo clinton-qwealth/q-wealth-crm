@@ -38,12 +38,14 @@ describe('createWorkflowTask', () => {
       // A `date` column refuses '' outright, so a blank date must be null.
       p_due_at: null,
       p_assigned_to_staff_id: null,
+      // Null lets the database's own default (medium) stand.
+      p_priority: null,
     })
   })
 
   test('passes a description, due date and assignee through when given', async () => {
-    await createWorkflowTask(null, form({ workflow_id: 'w1', subject: 'x', description: 'Why', due_at: '2026-10-15', assigned_to_staff_id: 's2' }))
-    expect(calls[0].args).toMatchObject({ p_description: 'Why', p_due_at: '2026-10-15', p_assigned_to_staff_id: 's2' })
+    await createWorkflowTask(null, form({ workflow_id: 'w1', subject: 'x', description: 'Why', due_at: '2026-10-15', assigned_to_staff_id: 's2', priority: 'high' }))
+    expect(calls[0].args).toMatchObject({ p_description: 'Why', p_due_at: '2026-10-15', p_assigned_to_staff_id: 's2', p_priority: 'high' })
   })
 
   test('a blank subject is refused before any call is made', async () => {

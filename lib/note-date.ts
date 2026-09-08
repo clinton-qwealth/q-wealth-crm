@@ -58,3 +58,41 @@ export function formatCalendarDate(iso: string) {
   if (!month) return iso
   return `${Number(m[3])} ${month} ${m[1]}`
 }
+
+/**
+ * Today, in the reader's own calendar, as `YYYY-MM-DD`.
+ *
+ * Deliberately built from the LOCAL parts of the instant, because that is what
+ * "today" means to the person reading the screen. Anything derived from
+ * `toISOString()` would be today in UTC, which in Sydney is yesterday for the
+ * first ten hours of every morning.
+ */
+export function todayISO(now: Date = new Date()) {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Is a due date in the past?
+ *
+ * **The date trap, in reverse.** The other two helpers here take a stored value
+ * and decide how to render it. This one compares a stored calendar date against
+ * *now*, which means it needs a "today" — and the naive version,
+ * `new Date(dueAt) < new Date()`, is wrong twice over: it parses the due date
+ * as UTC midnight, and it compares a date against an instant. A task due today
+ * would read as overdue for anyone east of Greenwich for most of the morning.
+ *
+ * So both sides are calendar dates, as strings, compared lexicographically —
+ * which is exact for `YYYY-MM-DD` and needs no `Date` at all.
+ *
+ * **Due today is not overdue.** The comparison is strictly less than: a task
+ * has the whole of its due date to be done in.
+ */
+export function isOverdue(dueAt: string | null | undefined, today: string = todayISO()) {
+  if (!dueAt) return false
+  const m = /^\d{4}-\d{2}-\d{2}/.exec(dueAt)
+  if (!m) return false
+  return m[0] < today
+}

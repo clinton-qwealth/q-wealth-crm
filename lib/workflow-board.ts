@@ -228,6 +228,10 @@ export function workflowProgress(status: WorkflowStatus): {
 export type TaskType = 'checkbox'
 export type TaskStatus = 'open' | 'done' | 'cancelled'
 
+export const TASK_TYPE_LABEL: Record<TaskType, string> = {
+  checkbox: 'Checkbox',
+}
+
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   open: 'Open',
   done: 'Done',
@@ -246,6 +250,8 @@ export type WorkflowTask = {
   /** A calendar date, or none. Rendered by splitting the string. */
   due_at: string | null
   status: TaskStatus
+  /** The same four levels as a workflow's — see the Data Model page. */
+  priority: Priority
   assigned_to_staff_id: string | null
   assigned_to_name: string | null
   completed_at: string | null

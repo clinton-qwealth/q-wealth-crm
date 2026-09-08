@@ -6,10 +6,15 @@ import {
   setWorkflowTaskStatus,
   type NoteState,
 } from '@/app/(shell)/groups/actions'
-import type { WorkflowTask } from '@/lib/workflow-board'
-import { formatCalendarDate } from '@/lib/note-date'
-import { InitialsTile, Pill, SHEET } from './ui'
+import {
+  PRIORITIES,
+  TASK_TYPE_LABEL,
+  type WorkflowTask,
+} from '@/lib/workflow-board'
+import { formatCalendarDate, formatNoteDate, isOverdue } from '@/lib/note-date'
+import { Pill, SHEET } from './ui'
 import { useServerState } from './use-server-state'
+import { PriorityGlyph } from './priority-picker'
 import { PlusIcon } from './icons'
 
 const INPUT =
@@ -46,6 +51,31 @@ export function WorkflowTasks({
   const [tasks, setTasks] = useServerState(initial)
   const [error, setError] = useState<string | null>(null)
   const [, start] = useTransition()
+
+  /* ONE panel for the whole list, not one per row. A closed <dialog> keeps its
+     contents in the document, so a dialog per task would put every task's
+     detail on the page at once — the mistake the member panel made and the
+     file-notes picker was built to avoid. The selected id is state; the panel
+     reads the task out of the same array the rows do, so it cannot show a
+     stale copy after a revalidation. */
+  const panelRef = useRef<HTMLDialogElement>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = tasks.find((t) => t.id === selectedId) ?? null
+
+  function openTask(id: string) {
+    setSelectedId(id)
+    panelRef.current?.showModal()
+  }
+
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    // Escape and the backdrop both close a native dialog without going through
+    // our handler, so the id is cleared from the element's own close event.
+    const onClose = () => setSelectedId(null)
+    el.addEventListener('close', onClose)
+    return () => el.removeEventListener('close', onClose)
+  }, [])
 
   function toggle(task: WorkflowTask) {
     const next = task.status === 'done' ? 'open' : 'done'
@@ -91,11 +121,16 @@ export function WorkflowTasks({
               {tasks.map((t) => {
                 const isDone = t.status === 'done'
                 const cancelled = t.status === 'cancelled'
+                // Only work still to be done can be overdue. A finished task
+                // was late or it was not; either way it is not a thing to
+                // chase, so it is not marked.
+                const late = t.status === 'open' && isOverdue(t.due_at)
                 return (
                   <li key={t.id} className="flex items-start gap-3 px-3.5 py-3">
-                    {/* The checkbox IS the task's status. Labelled by what it
-                        does to which task, so a screen reader hears more than
-                        "checkbox, not checked". */}
+                    {/* The checkbox IS the task's status, and it is a SIBLING of
+                        the button below rather than inside it: a control inside
+                        a control is invalid, and a tick must not also open the
+                        panel. */}
                     <input
                       type="checkbox"
                       checked={isDone}
@@ -104,55 +139,77 @@ export function WorkflowTasks({
                       aria-label={`${isDone ? 'Reopen' : 'Mark done'}: ${t.subject}`}
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-neutral-300 accent-emerald-600 outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-40"
                     />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
+
+                    {/* Everything else opens the panel. A button rather than a
+                        click handler on the row, so it is reachable by keyboard
+                        and announced as something that does something. Its
+                        accessible name is the subject alone — the row's full
+                        text would make a paragraph of it. */}
+                    <button
+                      type="button"
+                      onClick={() => openTask(t.id)}
+                      aria-label={`Open task: ${t.subject}`}
+                      className="-my-1 flex min-w-0 flex-1 items-start gap-3 rounded-md px-1 py-1 text-left outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          {/* Display only. The row is a button, so a picker here
+                              would be a control inside a control — a task's
+                              priority is changed in the panel. */}
+                          <PriorityGlyph priority={t.priority} className="h-3.5 w-3.5" />
+                          <span
+                            className={`truncate text-sm font-semibold ${
+                              isDone || cancelled ? 'text-neutral-400 line-through' : 'text-neutral-900'
+                            }`}
+                          >
+                            {t.subject}
+                          </span>
+                          {cancelled ? <Pill tone="neutral">Cancelled</Pill> : null}
+                        </span>
+
+                        {t.description ? (
+                          <span className="mt-0.5 block text-xs leading-snug text-neutral-500">
+                            {t.description}
+                          </span>
+                        ) : null}
+
+                        {/* The footer, set off from the description above it so
+                            the two do not read as one paragraph. */}
+                        <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                          {t.assigned_to_name ? (
+                            <span>Assigned to {t.assigned_to_name}</span>
+                          ) : (
+                            /* Named, not left blank: an unassigned task is the
+                               one most likely to be missed, and "Unassigned" is
+                               the word the board's filter and the workflow's own
+                               owner picker use for the same state. */
+                            <span className="text-neutral-400">Unassigned</span>
+                          )}
+                          <Pill tone="neutral">{TASK_TYPE_LABEL[t.task_type]}</Pill>
+                        </span>
+
+                        {t.comment ? (
+                          <span className="mt-1 block text-xs italic leading-snug text-neutral-400">
+                            “{t.comment}”
+                          </span>
+                        ) : null}
+                      </span>
+
+                      {t.due_at ? (
+                        /* The label carries the meaning and the colour
+                           reinforces it — never the colour alone, which would
+                           leave the fact invisible to a reader who cannot
+                           distinguish red from grey. */
                         <span
-                          className={`truncate text-sm font-semibold ${
-                            isDone || cancelled ? 'text-neutral-400 line-through' : 'text-neutral-900'
+                          className={`shrink-0 text-xs ${
+                            late ? 'font-semibold text-red-600' : 'text-neutral-500'
                           }`}
                         >
-                          {t.subject}
-                        </span>
-                        {cancelled ? <Pill tone="neutral">Cancelled</Pill> : null}
-                      </span>
-                      {t.description ? (
-                        <span className="mt-0.5 block text-xs leading-snug text-neutral-500">
-                          {t.description}
+                          {late ? 'Overdue' : 'Due date'}{' '}
+                          <span className="tabular-nums">{formatCalendarDate(t.due_at)}</span>
                         </span>
                       ) : null}
-                      {/* Who owns it, in words rather than initials alone. The
-                          tile is the site's mark for a person and gives the
-                          line an anchor; the name is what makes it readable
-                          without hovering. On its own line because names vary
-                          in width and a right-hand column would reflow with
-                          them — the lesson the detail page's field row taught. */}
-                      <span className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
-                        {t.assigned_to_name ? (
-                          <>
-                            <span className="[&>span]:h-5 [&>span]:w-5 [&>span]:text-[9px]">
-                              <InitialsTile name={t.assigned_to_name} />
-                            </span>
-                            Assigned to {t.assigned_to_name}
-                          </>
-                        ) : (
-                          /* Named, not left blank: an unassigned task is the
-                             one most likely to be missed, and "Unassigned" is
-                             the word the board's filter and the workflow's own
-                             owner picker use for the same state. */
-                          <span className="text-neutral-400">Unassigned</span>
-                        )}
-                      </span>
-                      {t.comment ? (
-                        <span className="mt-1 block text-xs italic leading-snug text-neutral-400">
-                          “{t.comment}”
-                        </span>
-                      ) : null}
-                    </span>
-                    {t.due_at ? (
-                      <span className="shrink-0 text-xs tabular-nums text-neutral-500">
-                        {formatCalendarDate(t.due_at)}
-                      </span>
-                    ) : null}
+                    </button>
                   </li>
                 )
               })}
@@ -174,6 +231,123 @@ export function WorkflowTasks({
           </p>
         </div>
       )}
+
+      {/* The panel. The same drawer as the member record panel — a native
+          dialog, so the background really is inert and focus really is held —
+          and the same width, because it holds the same kind of thing: one
+          record, read at length. */}
+      <dialog
+        ref={panelRef}
+        aria-labelledby="task-panel-title"
+        onClick={(e) => {
+          // A backdrop click lands on the dialog itself; a click inside the
+          // panel lands on the panel.
+          if (e.target === panelRef.current) panelRef.current?.close()
+        }}
+        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
+      >
+        {selected ? (
+          <TaskPanel task={selected} onClose={() => panelRef.current?.close()} />
+        ) : null}
+      </dialog>
+    </div>
+  )
+}
+
+/**
+ * One task, at length.
+ *
+ * Read-only for now: what belongs in here is being decided, and inventing
+ * sections ahead of that would be guessing. What it shows is the record —
+ * every column the list has room only to summarise.
+ */
+function TaskPanel({ task, onClose }: { task: WorkflowTask; onClose: () => void }) {
+  const priority = PRIORITIES.find((p) => p.id === task.priority)!
+  const late = task.status === 'open' && isOverdue(task.due_at)
+
+  return (
+    <div className="flex h-full flex-col">
+      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">Task</p>
+          <h2
+            id="task-panel-title"
+            className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900"
+          >
+            {task.subject}
+          </h2>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Pill tone="neutral">{TASK_TYPE_LABEL[task.task_type]}</Pill>
+            {task.status === 'done' ? <Pill tone="success">Done</Pill> : null}
+            {task.status === 'cancelled' ? <Pill tone="neutral">Cancelled</Pill> : null}
+            {task.status === 'open' ? <Pill tone="neutral">Open</Pill> : null}
+            <span className="inline-flex items-center gap-1 text-xs text-neutral-600">
+              <PriorityGlyph priority={task.priority} className="h-3.5 w-3.5" />
+              {priority.label}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close panel"
+          className="-mr-1 shrink-0 rounded-md p-1.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+          </svg>
+        </button>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <PanelField label="Assigned to" value={task.assigned_to_name} absent="Unassigned" />
+          <PanelField
+            label={late ? 'Overdue' : 'Due date'}
+            value={task.due_at ? formatCalendarDate(task.due_at) : null}
+            tone={late ? 'late' : undefined}
+          />
+          <PanelField label="Added" value={formatNoteDate(task.created_at)} />
+          <PanelField
+            label="Completed"
+            value={task.completed_at ? formatNoteDate(task.completed_at) : null}
+          />
+          <PanelField label="Description" value={task.description} span wrap />
+          <PanelField label="Comment" value={task.comment} span wrap />
+        </dl>
+      </div>
+    </div>
+  )
+}
+
+function PanelField({
+  label,
+  value,
+  absent,
+  span = false,
+  wrap = false,
+  tone,
+}: {
+  label: string
+  value: string | null
+  /** A word to show in place of an em-dash when the absence has a name. */
+  absent?: string
+  span?: boolean
+  wrap?: boolean
+  tone?: 'late'
+}) {
+  return (
+    <div className={`min-w-0 ${span ? 'col-span-2' : ''}`}>
+      <dt className={`text-xs leading-snug ${tone === 'late' ? 'font-semibold text-red-600' : 'text-neutral-500'}`}>
+        {label}
+      </dt>
+      <dd
+        className={`mt-0.5 text-sm ${wrap ? 'leading-relaxed' : 'leading-snug'} ${
+          tone === 'late' ? 'font-semibold text-red-600' : 'text-neutral-900'
+        }`}
+      >
+        {value ?? <span className="text-neutral-400">{absent ?? '—'}</span>}
+      </dd>
     </div>
   )
 }
@@ -182,9 +356,9 @@ export function WorkflowTasks({
  * The Add task dialog. The same native <dialog> as every other add modal:
  * focus held, Escape handled, background inert.
  *
- * Subject, description, due date and assignee. No comment field: a comment is
- * what the person doing the task says when they do it, not something the
- * person creating it writes. Setting one belongs with marking the task done.
+ * Subject, description, due date, priority and assignee. No comment field: a
+ * comment is what the person doing the task says when they do it, not something
+ * the person creating it writes. Setting one belongs with marking the task done.
  */
 export function AddTaskModal({ workflowId, staff }: { workflowId: string; staff: Staff[] }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -258,6 +432,18 @@ export function AddTaskModal({ workflowId, staff }: { workflowId: string; staff:
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Due date</span>
               <input type="date" name="due_at" className={INPUT} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={LABEL}>Priority</span>
+              {/* Medium by default, for the reason on the Data Model page: an
+                  unprioritised task is unremarkable, not low. */}
+              <select name="priority" defaultValue="medium" className={INPUT}>
+                {PRIORITIES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Assign to</span>

@@ -765,6 +765,7 @@ export async function createWorkflowTask(
   const description = String(formData.get('description') ?? '').trim()
   const dueAt = String(formData.get('due_at') ?? '').trim()
   const assignedTo = String(formData.get('assigned_to_staff_id') ?? '').trim()
+  const priority = String(formData.get('priority') ?? '').trim()
 
   if (!workflowId) return { error: 'No workflow selected.' }
   if (!subject) return { error: 'Give the task a subject.' }
@@ -776,6 +777,9 @@ export async function createWorkflowTask(
     p_description: description || null,
     p_due_at: dueAt || null,
     p_assigned_to_staff_id: assignedTo || null,
+    /* The database defaults this to medium; sending null rather than '' lets it,
+       for a caller that leaves the field alone. */
+    p_priority: priority || null,
   })
   if (error) return { error: error.message }
 
