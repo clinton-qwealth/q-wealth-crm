@@ -603,25 +603,40 @@ function TaskPanel({
             id: 'activity',
             label: 'Activity',
             panel: (
-              /* Inset further than the other tabs (px-5), on purpose. The
-                 composer and the posts are a column of prose that people read
-                 and write in, not a data table, and at the panel's wider sizes
-                 a full-bleed line is tiring to follow. The tab labels above
-                 keep the panel's own gutter; the reading column sits inside
-                 it. One value to change if it wants to be wider or narrower. */
+              /* A READING COLUMN, not a full-width pane.
+
+                 The composer and the posts are prose that people write and
+                 read, and this panel is 34rem to 46rem wide — so a full-bleed
+                 line runs to about 670px at the top end, well past the point
+                 where the eye loses its place returning to the left margin.
+
+                 TWO LEVERS, and they do different jobs, which is why both are
+                 here. `max-w-lg` caps the column at 32rem and `mx-auto`
+                 centres it, so on a wide panel the slack becomes even margins.
+                 `px-8` never comes off: it is the FLOOR for a narrow panel,
+                 where the cap is wider than the space available and does
+                 nothing. Padding alone would take the same 4rem bite at every
+                 size, cramping 34rem to fix 46rem.
+
+                 They are on SEPARATE elements deliberately. Tailwind's box
+                 model is border-box, so `max-w-lg px-8` together would cap the
+                 whole thing at 32rem and leave 28rem of content — the padding
+                 eating into the measure rather than sitting outside it. */
               <div className="px-8 pb-6">
-                {/* The feed replaced the comment field on 8 September. A post
-                    is what a comment was trying to be — who said what, when —
-                    with the two things a single column could never hold: more
-                    than one of them, and a relationship to the workflow's
-                    timeline as well as to this task. */}
-                <ActivityFeed
-                  workflowId={workflowId}
-                  taskId={task.id}
-                  posts={posts}
-                  staff={staff}
-                  viewer={viewer}
-                />
+                <div className="mx-auto w-full max-w-lg">
+                  {/* The feed replaced the comment field on 8 September. A post
+                      is what a comment was trying to be — who said what, when —
+                      with the two things a single column could never hold: more
+                      than one of them, and a relationship to the workflow's
+                      timeline as well as to this task. */}
+                  <ActivityFeed
+                    workflowId={workflowId}
+                    taskId={task.id}
+                    posts={posts}
+                    staff={staff}
+                    viewer={viewer}
+                  />
+                </div>
               </div>
             ),
           },
