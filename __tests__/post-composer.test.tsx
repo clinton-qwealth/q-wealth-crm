@@ -229,30 +229,44 @@ describe('the post composer', () => {
     expect(editor.getJSON().content![0].attrs!.tone).toBe('info')
   })
 
-  test('a heading is level 1, 2 or 3 — the editor cannot make a level 4', async () => {
+  /**
+   * Narrowed from three levels to one on 8 September. A post is a paragraph or
+   * two about a piece of work; three sizes of emphasis were being chosen
+   * arbitrarily rather than structurally.
+   */
+  test('a post has one heading size — the editor cannot make a level 2, 3 or 4', async () => {
     const { editor } = await mount()
     editor.commands.setContent('<p>word</p>')
-    expect(editor.can().setHeading({ level: 3 })).toBe(true)
-    expect(editor.can().setHeading({ level: 4 as never })).toBe(false)
+    expect(editor.can().setHeading({ level: 1 })).toBe(true)
+    for (const level of [2, 3, 4]) {
+      expect(editor.can().setHeading({ level: level as never })).toBe(false)
+    }
   })
 
   /**
    * The composer sits under the panel's h2 and its boxes' h3. A heading being
-   * typed must not paint an h1 into that outline, so the editor draws the three
-   * levels as h4–h6 — the same tags the feed draws them with — and parses both
-   * back, so copying within the editor keeps a heading a heading.
+   * typed must not paint an h1 into that outline, so the editor draws its one
+   * level as an h4 — the same tag the feed draws it with — and parses both an
+   * h1 and an h4 back, so copying within the editor keeps a heading a heading.
    */
-  test('a heading in the editor is painted as h4–h6, never h1–h3, and both parse back', async () => {
+  test('a heading in the editor is painted as h4, never h1, and both parse back', async () => {
     const { editor } = await mount()
     editor.commands.setContent('<p>word</p>')
     editor.commands.setTextSelection({ from: 1, to: 5 })
     editor.commands.setHeading({ level: 1 })
     expect(editor.view.dom.querySelector('h4')?.textContent).toBe('word')
     expect(editor.view.dom.querySelector('h1, h2, h3')).toBeNull()
-    editor.commands.setContent('<h5>five</h5><h2>two</h2>')
+
+    // Both tags the level is written as come back as the level.
+    editor.commands.setContent('<h4>four</h4><h1>one</h1>')
     // The trailing empty paragraph is StarterKit's TrailingNode, not a heading.
     const headings = editor.getJSON().content!.filter((n) => n.type === 'heading')
-    expect(headings.map((n) => n.attrs?.level)).toEqual([2, 2])
+    expect(headings.map((n) => n.attrs?.level)).toEqual([1, 1])
+
+    // A level the post no longer has is not a heading at all — a pasted h2
+    // becomes ordinary text rather than silently becoming level 1.
+    editor.commands.setContent('<h2>two</h2>')
+    expect(editor.getJSON().content!.filter((n) => n.type === 'heading')).toEqual([])
   })
 
   test('the formatting toolbar toggles marks and blocks on the selection', async () => {
@@ -266,9 +280,9 @@ describe('the post composer', () => {
     expect(JSON.stringify(editor.getJSON())).toContain('"type":"bold"')
     await user.click(screen.getByRole('button', { name: 'Underline' }))
     expect(JSON.stringify(editor.getJSON())).toContain('"type":"underline"')
-    await user.click(screen.getByRole('button', { name: 'Heading 2' }))
-    expect(editor.getJSON().content![0]).toMatchObject({ type: 'heading', attrs: { level: 2 } })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Heading 2' }).getAttribute('aria-pressed')).toBe('true'))
+    await user.click(screen.getByRole('button', { name: 'Heading' }))
+    expect(editor.getJSON().content![0]).toMatchObject({ type: 'heading', attrs: { level: 1 } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Heading' }).getAttribute('aria-pressed')).toBe('true'))
     await user.click(screen.getByRole('button', { name: 'Quote' }))
     expect(editor.getJSON().content![0].type).toBe('blockquote')
   })
@@ -279,7 +293,7 @@ describe('the post composer', () => {
     const labels = within(toolbar).getAllByRole('button').map((b) => b.getAttribute('aria-label'))
     expect(labels).toEqual([
       'Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code',
-      'Heading 1', 'Heading 2', 'Heading 3',
+      'Heading',
       'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule', 'Callout',
       'Image', 'Attach file',
       'Link', 'Undo', 'Redo',

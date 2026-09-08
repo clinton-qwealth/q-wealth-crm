@@ -295,8 +295,26 @@ export const POST_NODE_TYPES = [
   'heading', 'blockquote', 'codeBlock', 'horizontalRule', 'image', 'attachment', 'callout',
 ] as const
 export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'underline'] as const
-/** A heading in a post is one of three sizes; the renderer draws them under the panel's own headings. */
-export const POST_HEADING_LEVELS = [1, 2, 3] as const
+/**
+ * A post has ONE heading size.
+ *
+ * It began as three, on the reasoning that three sizes of emphasis was already
+ * a big reduction from the six the editor ships with. In use even three was
+ * too many: a post is a paragraph or two about a piece of work, and nobody
+ * writing one needs a heading hierarchy — the sizes were being picked
+ * arbitrarily rather than structurally. Narrowed to one on 8 September.
+ *
+ * **The renderer still understands 2 and 3**, deliberately. Nothing stored
+ * uses them — checked, zero headings of any level existed — but a renderer
+ * that forgot how to draw a level it once accepted would be a renderer that
+ * breaks history the moment one turns up.
+ *
+ * This constant is the only place the set is written. It configures the
+ * editor's extension, decides how many buttons the toolbar has, and drives
+ * what the composer parses back; the database's own check is narrowed in the
+ * same change, because the database is the gate and the editor is not.
+ */
+export const POST_HEADING_LEVELS = [1] as const
 
 /**
  * A callout's tone, as a KEY rather than a colour.
