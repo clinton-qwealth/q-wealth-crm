@@ -64,15 +64,53 @@ describe('the workflow’s tasks', () => {
     expect(chip.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('a task row carries subject, description, comment, due date and the assignee’s initials', () => {
+  test('a task row carries subject, description, comment and due date', () => {
     show([open, done])
     const row = screen.getByRole('checkbox', { name: /Collect signed authority/ }).closest('li')!
     expect(row.textContent).toContain('Collect signed authority')
     expect(row.textContent).toContain('Client to sign and return')
     expect(row.textContent).toContain('1 Oct 2026')
-    expect(row.querySelector('[title="Sarah Chen"]')!.textContent).toBe('SC')
     const doneRow = screen.getByRole('checkbox', { name: /Send FSG/ }).closest('li')!
     expect(doneRow.textContent).toContain('“Sent by email on the 6th.”')
+  })
+
+  test('the assignee is named in words, with the initials tile beside it', () => {
+    show([open])
+    const row = screen.getByRole('checkbox', { name: /Collect signed authority/ }).closest('li')!
+    expect(row.textContent).toContain('Assigned to Sarah Chen')
+    // The site's mark for a person leads the line.
+    expect(row.querySelector('span[aria-hidden="true"]')!.textContent).toBe('SC')
+  })
+
+  test('an unassigned task says so rather than leaving the line blank', () => {
+    show([task({ id: 't9', subject: 'Nobody owns this' })])
+    const row = screen.getByRole('checkbox', { name: /Nobody owns this/ }).closest('li')!
+    expect(row.textContent).toContain('Unassigned')
+    expect(row.textContent).not.toContain('Assigned to')
+    // No initials tile, because there is nobody to abbreviate.
+    expect(row.querySelector('span[aria-hidden="true"]')).toBeNull()
+  })
+
+  /**
+   * The bug this was written for: a task added through the dialog revalidates
+   * the page, the server re-renders with the new row, and the list went on
+   * showing the array it had mounted with until the tab was reloaded.
+   * `useState(serverValue)` reads its argument once. See useServerState.
+   */
+  test('rows the server sends after mount replace the list, without a reload', () => {
+    const { rerender } = render(<WorkflowTasks workflowId="w1" tasks={[open]} staff={STAFF} />)
+    expect(screen.queryByText('Lodge the claim')).toBeNull()
+
+    // What a revalidation delivers: the same component, a new array.
+    rerender(
+      <WorkflowTasks
+        workflowId="w1"
+        tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
+        staff={STAFF}
+      />,
+    )
+    expect(screen.getByText('Lodge the claim')).toBeTruthy()
+    expect(screen.getAllByRole('checkbox').length).toBe(2)
   })
 
   test('every task is a checkbox — a boolean selection — labelled by what ticking it does', () => {

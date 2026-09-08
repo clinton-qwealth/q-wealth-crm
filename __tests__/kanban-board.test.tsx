@@ -81,6 +81,28 @@ describe('KanbanBoard', () => {
     await waitFor(() => expect(actions.moveWorkflow).toHaveBeenCalledWith('w1', 'complete'))
   })
 
+  /**
+   * The same defect the task list had: a workflow started from the board's own
+   * Start workflow modal revalidates the page, and the board went on showing
+   * the cards it mounted with. Both lists share useWorkflowCards, which now
+   * re-seeds from the server. See useServerState.
+   */
+  test('cards the server sends after mount replace the lanes, without a reload', () => {
+    const { rerender } = render(<KanbanBoard cards={[card({ id: 'w1', name: 'Annual review 2026' })]} cancelled={0} />)
+    expect(screen.queryByText('Onboarding — Test Trade')).toBeNull()
+
+    rerender(
+      <KanbanBoard
+        cards={[
+          card({ id: 'w1', name: 'Annual review 2026' }),
+          card({ id: 'w2', name: 'Onboarding — Test Trade', status: 'not_started' }),
+        ]}
+        cancelled={0}
+      />,
+    )
+    expect(screen.getByText('Onboarding — Test Trade')).toBeTruthy()
+  })
+
   test('a refused move goes back where it was, with the reason', async () => {
     vi.mocked(actions.moveWorkflow).mockResolvedValueOnce({ error: 'Not within your access' })
     const user = userEvent.setup()

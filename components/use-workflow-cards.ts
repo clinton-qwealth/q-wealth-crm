@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useServerState } from './use-server-state'
 import { moveWorkflow, setWorkflowPriority } from '@/app/(shell)/groups/actions'
 import { columnFor, type BoardCard, type BoardColumn, type Priority } from '@/lib/workflow-board'
 
@@ -16,7 +17,10 @@ import { columnFor, type BoardCard, type BoardColumn, type Priority } from '@/li
  * two copies of the same eight lines.
  */
 export function useWorkflowCards(initial: BoardCard[]) {
-  const [cards, setCards] = useState(initial)
+  /* Seeded from the server and RE-seeded when the server sends new rows —
+     otherwise a workflow started from the board would not appear on it until
+     the tab was reloaded. See useServerState. */
+  const [cards, setCards] = useServerState(initial)
   const [error, setError] = useState<string | null>(null)
   const [, start] = useTransition()
 

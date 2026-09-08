@@ -71,9 +71,17 @@ export async function getStaffChoices(): Promise<{ id: string; name: string }[]>
 }
 
 /**
- * A workflow's tasks, oldest first — the order they were added, which for
- * template-generated tasks will be the order of the template. Through the
- * security_invoker view, so a task is visible exactly when its workflow is.
+ * A workflow's tasks, **soonest due first**. Through the security_invoker view,
+ * so a task is visible exactly when its workflow is.
+ *
+ * `nullsFirst: false` puts the undated tasks after the dated ones rather than
+ * before: Postgres would sort NULLs last for an ascending order anyway, but
+ * saying so means the order does not depend on knowing that. A task with no
+ * deadline is not due sooner than every task that has one.
+ *
+ * `created_at` breaks the tie, so tasks sharing a due date — which
+ * template-generated tasks will — keep the order they were made in rather than
+ * shuffling between renders.
  */
 export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
@@ -83,6 +91,7 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
       'id, workflow_id, task_type, subject, description, comment, due_at, status, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at',
     )
     .eq('workflow_id', workflowId)
+    .order('due_at', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
   return (data ?? []) as WorkflowTask[]
 }

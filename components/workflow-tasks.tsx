@@ -9,6 +9,7 @@ import {
 import type { WorkflowTask } from '@/lib/workflow-board'
 import { formatCalendarDate } from '@/lib/note-date'
 import { InitialsTile, Pill, SHEET } from './ui'
+import { useServerState } from './use-server-state'
 import { PlusIcon } from './icons'
 
 const INPUT =
@@ -39,7 +40,10 @@ export function WorkflowTasks({
   tasks: WorkflowTask[]
   staff: Staff[]
 }) {
-  const [tasks, setTasks] = useState(initial)
+  /* Seeded from the server and RE-seeded when the server sends new rows. A
+     task added through the dialog below revalidates this page, and without
+     this the list would go on showing the array it mounted with. */
+  const [tasks, setTasks] = useServerState(initial)
   const [error, setError] = useState<string | null>(null)
   const [, start] = useTransition()
 
@@ -116,27 +120,39 @@ export function WorkflowTasks({
                           {t.description}
                         </span>
                       ) : null}
+                      {/* Who owns it, in words rather than initials alone. The
+                          tile is the site's mark for a person and gives the
+                          line an anchor; the name is what makes it readable
+                          without hovering. On its own line because names vary
+                          in width and a right-hand column would reflow with
+                          them — the lesson the detail page's field row taught. */}
+                      <span className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                        {t.assigned_to_name ? (
+                          <>
+                            <span className="[&>span]:h-5 [&>span]:w-5 [&>span]:text-[9px]">
+                              <InitialsTile name={t.assigned_to_name} />
+                            </span>
+                            Assigned to {t.assigned_to_name}
+                          </>
+                        ) : (
+                          /* Named, not left blank: an unassigned task is the
+                             one most likely to be missed, and "Unassigned" is
+                             the word the board's filter and the workflow's own
+                             owner picker use for the same state. */
+                          <span className="text-neutral-400">Unassigned</span>
+                        )}
+                      </span>
                       {t.comment ? (
                         <span className="mt-1 block text-xs italic leading-snug text-neutral-400">
                           “{t.comment}”
                         </span>
                       ) : null}
                     </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      {t.due_at ? (
-                        <span className="text-xs tabular-nums text-neutral-500">
-                          {formatCalendarDate(t.due_at)}
-                        </span>
-                      ) : null}
-                      {t.assigned_to_name ? (
-                        <span
-                          title={t.assigned_to_name}
-                          className="[&>span]:h-6 [&>span]:w-6 [&>span]:text-[10px]"
-                        >
-                          <InitialsTile name={t.assigned_to_name} />
-                        </span>
-                      ) : null}
-                    </span>
+                    {t.due_at ? (
+                      <span className="shrink-0 text-xs tabular-nums text-neutral-500">
+                        {formatCalendarDate(t.due_at)}
+                      </span>
+                    ) : null}
                   </li>
                 )
               })}

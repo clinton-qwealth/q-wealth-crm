@@ -593,6 +593,9 @@ export async function startWorkflow(
   if (error) return { error: error.message }
 
   revalidatePath('/groups')
+  /* The board lists every workflow, so one started from either screen belongs
+     on it — without this, a new workflow reached the board only on a reload. */
+  revalidatePath('/workflows')
   return { ok: true }
 }
 
@@ -660,6 +663,7 @@ export async function fileNoteUnderNewWorkflow(
   }
 
   revalidatePath('/groups')
+  revalidatePath('/workflows')
   return { ok: true }
 }
 

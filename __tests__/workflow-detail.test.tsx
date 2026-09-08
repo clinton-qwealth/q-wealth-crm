@@ -39,11 +39,15 @@ vi.mock('@/lib/supabase/server', () => ({
           if (table === 'workflow_board') id = v
           return chain
         },
-        // Lists: the staff directory and the task list. workflow_board is one row.
-        order: async () => ({
-          data: table === 'staff_directory' ? [{ id: 's1', full_name: 'A Adviser', status: 'active' }] : [],
-          error: null,
-        }),
+        /* order() returns the chain, not a promise: the task query chains two
+           of them — due date, then created_at as the tie-break. The chain is
+           thenable instead, so `await`ing it ends the query. */
+        order: () => chain,
+        then: (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: table === 'staff_directory' ? [{ id: 's1', full_name: 'A Adviser', status: 'active' }] : [],
+            error: null,
+          }).then(resolve),
         maybeSingle: async () => ({ data: (id && rows[id]) ?? null, error: null }),
       }
       return chain
