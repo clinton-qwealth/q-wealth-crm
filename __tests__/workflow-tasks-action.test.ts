@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, saveWorkflowTaskDetails, postWorkflowActivity } =
+const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, saveWorkflowTaskDetails, postWorkflowActivity, togglePostReaction } =
   await import('@/app/(shell)/groups/actions')
 
 const form = (entries: Record<string, string>) => {
@@ -169,6 +169,31 @@ describe('postWorkflowActivity', () => {
   test('the database’s own message is returned', async () => {
     failure = 'A post may not contain "heading"'
     expect(await postWorkflowActivity('w1', 't1', DOC)).toEqual({ error: 'A post may not contain "heading"' })
+  })
+})
+
+describe('togglePostReaction', () => {
+  test('calls the toggle with the post and the key — the workflow is for revalidation only', async () => {
+    await togglePostReaction('w1', 'p1', 'thumbs_up')
+    expect(calls[0].name).toBe('toggle_post_reaction')
+    expect(calls[0].args).toEqual({ p_post_id: 'p1', p_reaction: 'thumbs_up' })
+  })
+
+  test('refuses a key the feed does not offer before any call — the glyph itself included', async () => {
+    expect(await togglePostReaction('w1', 'p1', 'poop')).toEqual({ error: 'Not a reaction this feed offers.' })
+    expect(await togglePostReaction('w1', 'p1', '👍')).toEqual({ error: 'Not a reaction this feed offers.' })
+    expect(calls.length).toBe(0)
+  })
+
+  test('refuses a missing post or workflow before any call', async () => {
+    expect(await togglePostReaction('w1', '', 'tick')).toEqual({ error: 'No post selected.' })
+    expect(await togglePostReaction('', 'p1', 'tick')).toEqual({ error: 'No workflow selected.' })
+    expect(calls.length).toBe(0)
+  })
+
+  test('returns the database’s own message', async () => {
+    failure = 'No such post, or not within your access'
+    expect(await togglePostReaction('w1', 'p1', 'tick')).toEqual({ error: 'No such post, or not within your access' })
   })
 })
 

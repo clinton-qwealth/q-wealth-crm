@@ -1,17 +1,18 @@
 import type { PostDoc, WorkflowPost } from '@/lib/workflow-board'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
   postWorkflowActivity: vi.fn(async () => ({ ok: true as const })),
+  togglePostReaction: vi.fn(async () => ({ ok: true as const })),
 }))
 
 /**
  * The composer is ProseMirror, which a test cannot type into the way a person
  * does. It has its own test; here it is a button that hands the feed a fixed
  * document, so what is under test is the feed's own behaviour — ordering,
- * filtering, the optimistic entry and the refusal path.
+ * filtering, the optimistic entry, the refusal path, and reactions.
  */
 const FIXED_DOC: PostDoc = {
   type: 'doc',
@@ -43,6 +44,7 @@ const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   body_text: 'Hello',
   created_at: '2026-09-08T04:00:00Z',
   mentioned: [],
+  reactions: [],
   ...o,
 })
 
@@ -112,6 +114,8 @@ describe('the activity feed', () => {
     expect(first.textContent).toContain('Posting…')
     expect(items().length).toBe(2)
     expect(actions.postWorkflowActivity).toHaveBeenCalledWith('w1', 't1', FIXED_DOC)
+    // Nothing to react to until the server has it.
+    expect(within(first).queryByRole('button', { name: 'Add reaction' })).toBeNull()
 
     release({ ok: true })
     // The composer is told the post was accepted, so it may clear.
@@ -119,7 +123,7 @@ describe('the activity feed', () => {
   })
 
   test('a refused post is removed again, the reason shown, and the composer told to keep its words', async () => {
-    vi.mocked(actions.postWorkflowActivity).mockResolvedValueOnce({ error: 'A post may not contain "heading"' })
+    vi.mocked(actions.postWorkflowActivity).mockResolvedValueOnce({ error: 'A post may not contain "table"' })
     show([older])
     // Through the composer's own callback, so its answer can be checked: false
     // is what tells it not to clear.
@@ -128,7 +132,7 @@ describe('the activity feed', () => {
       accepted = await lastOnPost!(FIXED_DOC)
     })
     expect(accepted).toBe(false)
-    expect((await screen.findByRole('alert')).textContent).toContain('may not contain "heading"')
+    expect((await screen.findByRole('alert')).textContent).toContain('may not contain "table"')
     expect(items().length).toBe(1)
     expect(screen.queryByText('Posted from the test.')).toBeNull()
   })
@@ -165,5 +169,92 @@ describe('the activity feed', () => {
       }),
     ])
     expect(items()[0].textContent).toContain('@Clinton Hatcher')
+  })
+})
+
+/**
+ * Reactions: a chip per kind with its count, pressed when the viewer is among
+ * them, an add button offering the six, and the same optimistic-then-revert
+ * contract as every other control on the page.
+ */
+describe('reactions on a post', () => {
+  beforeEach(() => vi.mocked(actions.togglePostReaction).mockClear())
+  const reacted = post({
+    id: 'pr',
+    reactions: [
+      { reaction: 'thumbs_up', by: [{ staff_id: 's1', full_name: 'Sarah Chen' }, { staff_id: 's2', full_name: 'Clinton Hatcher' }] },
+      { reaction: 'eyes', by: [{ staff_id: 's1', full_name: 'Sarah Chen' }] },
+    ],
+  })
+
+  test('each kind is a chip with its count, pressed when the viewer gave it, naming who did', () => {
+    show([reacted])
+    const thumbs = screen.getByRole<HTMLButtonElement>('button', { name: 'Thumbs up: 2' })
+    const eyes = screen.getByRole<HTMLButtonElement>('button', { name: 'Looking at this: 1' })
+    expect(thumbs.getAttribute('aria-pressed')).toBe('true')
+    expect(eyes.getAttribute('aria-pressed')).toBe('false')
+    expect(thumbs.title).toBe('Sarah Chen, Clinton Hatcher')
+  })
+
+  test('pressing a chip you have not given adds you at once and calls the action; pressing one you have takes you off', async () => {
+    const user = userEvent.setup()
+    show([reacted])
+    await user.click(screen.getByRole('button', { name: 'Looking at this: 1' }))
+    expect(screen.getByRole('button', { name: 'Looking at this: 2' }).getAttribute('aria-pressed')).toBe('true')
+    expect(actions.togglePostReaction).toHaveBeenCalledWith('w1', 'pr', 'eyes')
+
+    await user.click(screen.getByRole('button', { name: 'Thumbs up: 2' }))
+    expect(screen.getByRole('button', { name: 'Thumbs up: 1' }).getAttribute('aria-pressed')).toBe('false')
+    expect(actions.togglePostReaction).toHaveBeenCalledWith('w1', 'pr', 'thumbs_up')
+  })
+
+  test('taking away the last of a kind removes its chip', async () => {
+    const user = userEvent.setup()
+    show([post({ id: 'pr', reactions: [{ reaction: 'heart', by: [{ staff_id: 's2', full_name: 'Clinton Hatcher' }] }] })])
+    await user.click(screen.getByRole('button', { name: 'Love: 1' }))
+    expect(screen.queryByRole('button', { name: /^Love:/ })).toBeNull()
+  })
+
+  test('Add reaction opens the six on offer; choosing one adds a new chip and calls the action', async () => {
+    const user = userEvent.setup()
+    show([reacted])
+    await user.click(screen.getByRole('button', { name: 'Add reaction' }))
+    const group = screen.getByRole('group', { name: 'Add a reaction' })
+    expect(within(group).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Thumbs up', 'Done', 'Looking at this', 'Celebrate', 'Love', 'Thanks',
+    ])
+    await user.click(within(group).getByRole('button', { name: 'Celebrate' }))
+    expect(screen.queryByRole('group', { name: 'Add a reaction' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Celebrate: 1' }).getAttribute('aria-pressed')).toBe('true')
+    expect(actions.togglePostReaction).toHaveBeenCalledWith('w1', 'pr', 'party')
+  })
+
+  test('a refused reaction is put back, with the reason', async () => {
+    const user = userEvent.setup()
+    vi.mocked(actions.togglePostReaction).mockResolvedValueOnce({ error: 'permission denied for function toggle_post_reaction' })
+    show([reacted])
+    await user.click(screen.getByRole('button', { name: 'Looking at this: 1' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('permission denied')
+    const eyes = screen.getByRole('button', { name: 'Looking at this: 1' })
+    expect(eyes.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  test('a reaction action that THROWS is put back too', async () => {
+    const user = userEvent.setup()
+    vi.mocked(actions.togglePostReaction).mockRejectedValueOnce(new Error('boom'))
+    show([reacted])
+    await user.click(screen.getByRole('button', { name: 'Thumbs up: 2' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('could not be saved')
+    expect(screen.getByRole('button', { name: 'Thumbs up: 2' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  test('Escape closes the add-reaction popover without choosing', async () => {
+    const user = userEvent.setup()
+    show([reacted])
+    await user.click(screen.getByRole('button', { name: 'Add reaction' }))
+    expect(screen.getByRole('group', { name: 'Add a reaction' })).toBeTruthy()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('group', { name: 'Add a reaction' })).toBeNull()
+    expect(actions.togglePostReaction).not.toHaveBeenCalledWith('w1', 'pr', expect.anything())
   })
 })

@@ -38,3 +38,18 @@ if (typeof HTMLDialogElement !== 'undefined' && !HTMLDialogElement.prototype.sho
     this.dispatchEvent(new Event('close'))
   }
 }
+
+// jsdom's Range has no geometry: neither getClientRects nor
+// getBoundingClientRect exists on it. ProseMirror asks a Range for both when
+// it works out where the caret is — which the composer's @ and : menus do the
+// moment they open. Empty rectangles are the honest answer from a runtime with
+// no layout; the menus render against them, and where they land is a browser
+// measurement, not a jsdom one.
+if (typeof Range !== 'undefined' && !Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = function getClientRects() {
+    return [] as unknown as DOMRectList
+  }
+  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return new DOMRect(0, 0, 0, 0)
+  }
+}

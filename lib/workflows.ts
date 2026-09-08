@@ -110,7 +110,7 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data } = await supabase
     .from('workflow_posts_summary')
-    .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned')
+    .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned, reactions')
     .eq('workflow_id', workflowId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })

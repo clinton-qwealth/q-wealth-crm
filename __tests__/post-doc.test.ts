@@ -29,6 +29,40 @@ describe('postDocText', () => {
     expect(postDocText({ type: 'doc' })).toBe('')
   })
 
+  test('a heading, a quote, a code block and a rule each end a line — the same reading the database gives', () => {
+    expect(
+      postDocText({ type: 'doc', content: [
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Title' }] },
+        { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'quoted', marks: [{ type: 'underline' }] }] }] },
+        { type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text: 'x = 1' }] },
+        { type: 'horizontalRule' },
+        { type: 'paragraph', content: [{ type: 'text', text: 'end 👍' }] },
+      ] }),
+    ).toBe('Title\nquoted\nx = 1\nend 👍')
+  })
+
+  /**
+   * The case that matters: a heading or a code block AFTER a paragraph. A
+   * paragraph puts its newline before its own text, so a block that follows
+   * one has to supply the boundary itself — the first fixture here had the
+   * heading first, and a mutation that dropped it from the block set passed.
+   */
+  test('a heading or a code block after a paragraph still starts a new line', () => {
+    expect(
+      postDocText({ type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Intro' }] },
+        { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Title' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+        { type: 'codeBlock', content: [{ type: 'text', text: 'x = 1' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'End' }] },
+      ] }),
+    ).toBe('Intro\nTitle\nBody\nx = 1\nEnd')
+  })
+
+  test('a rule alone is nothing — the database refuses it as wordless', () => {
+    expect(postDocText({ type: 'doc', content: [{ type: 'horizontalRule' }] })).toBe('')
+  })
+
   test('a hard break is a line, not a space', () => {
     expect(
       postDocText({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'One' }, { type: 'hardBreak' }, { type: 'text', text: 'two' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Three' }] }] }),

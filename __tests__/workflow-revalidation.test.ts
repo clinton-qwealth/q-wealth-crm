@@ -24,6 +24,7 @@ const {
   setWorkflowTaskPriority,
   saveWorkflowTaskDetails,
   postWorkflowActivity,
+  togglePostReaction,
   startWorkflow,
 } = await import(
   '@/app/(shell)/groups/actions'
@@ -62,6 +63,11 @@ describe('a write revalidates every screen that shows it', () => {
    */
   test('posting to a task refreshes the workflow whose page the feed is on', async () => {
     await postWorkflowActivity('w1', 't1', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] })
+    expect(paths()).toContain('/workflows/w1')
+  })
+
+  test('reacting to a post refreshes the workflow whose page the feed is on', async () => {
+    await togglePostReaction('w1', 'p1', 'thumbs_up')
     expect(paths()).toContain('/workflows/w1')
   })
 

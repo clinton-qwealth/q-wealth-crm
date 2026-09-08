@@ -13,6 +13,11 @@ import type { PostDoc, PostMark, PostMention, PostNode } from '@/lib/workflow-bo
  * Mentions show the person's CURRENT name where the view supplies it, falling
  * back to the label as typed. The document keeps what was written; the screen
  * says who that is today.
+ *
+ * A post's headings are drawn as h4, h5 and h6. A post sits inside a panel
+ * whose own headings are h2 and h3, and a comment must not be able to insert
+ * itself above them in the page's outline: "Heading 1" in a post is the
+ * largest of three sizes of emphasis, not the page's title.
  */
 export function PostBody({ doc, mentioned = [] }: { doc: PostDoc; mentioned?: PostMention[] }) {
   const names = new Map(mentioned.map((m) => [m.staff_id, m.full_name]))
@@ -24,6 +29,14 @@ export function PostBody({ doc, mentioned = [] }: { doc: PostDoc; mentioned?: Po
 }
 
 const SAFE_HREF = /^https?:\/\//i
+
+/** Post level 1–3 → h4–h6, beneath the panel's h2 and its boxes' h3. */
+function headingTag(level: unknown): 'h4' | 'h5' | 'h6' {
+  const n = typeof level === 'number' ? level : Number(level)
+  if (n === 2) return 'h5'
+  if (n === 3) return 'h6'
+  return 'h4'
+}
 
 function renderNode(node: PostNode, key: number, names: Map<string, string>): ReactNode {
   const children = (node.content ?? []).map((c, i) => renderNode(c, i, names))
@@ -40,6 +53,22 @@ function renderNode(node: PostNode, key: number, names: Map<string, string>): Re
       return <ol key={key}>{children}</ol>
     case 'listItem':
       return <li key={key}>{children}</li>
+    case 'heading': {
+      const Tag = headingTag(node.attrs?.level)
+      return <Tag key={key}>{children}</Tag>
+    }
+    case 'blockquote':
+      return <blockquote key={key}>{children}</blockquote>
+    case 'codeBlock':
+      // The language attribute is not drawn: it is a hint for a highlighter
+      // this feed does not have, and there is no reason to echo it as a class.
+      return (
+        <pre key={key}>
+          <code>{children}</code>
+        </pre>
+      )
+    case 'horizontalRule':
+      return <hr key={key} />
     case 'mention': {
       const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
       const label = names.get(id) ?? (typeof node.attrs?.label === 'string' ? node.attrs.label : 'someone')
@@ -68,6 +97,9 @@ function applyMarks(text: string, marks: PostMark[]): ReactNode {
         break
       case 'italic':
         out = <em>{out}</em>
+        break
+      case 'underline':
+        out = <u>{out}</u>
         break
       case 'strike':
         out = <s>{out}</s>

@@ -272,12 +272,18 @@ export type WorkflowTask = {
  * anything else, so every stored document is one the renderer knows how to
  * draw, and nothing that reaches the screen is ever interpreted as markup.
  * The same list, in the same order, lives in that function; if one grows the
- * other must.
+ * other must. It grew once, on 8 September, when the editor's remaining
+ * built-in blocks — heading, blockquote, codeBlock, horizontalRule — and the
+ * underline mark were switched on; the database's list grew in the same
+ * change, and a heading may be level 1, 2 or 3 and nothing else.
  */
 export const POST_NODE_TYPES = [
   'doc', 'paragraph', 'text', 'hardBreak', 'mention', 'bulletList', 'orderedList', 'listItem',
+  'heading', 'blockquote', 'codeBlock', 'horizontalRule',
 ] as const
-export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link'] as const
+export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'underline'] as const
+/** A heading in a post is one of three sizes; the renderer draws them under the panel's own headings. */
+export const POST_HEADING_LEVELS = [1, 2, 3] as const
 
 export type PostMark = { type: (typeof POST_MARK_TYPES)[number]; attrs?: { href?: string } }
 export type PostNode = {
@@ -304,6 +310,50 @@ export type WorkflowPost = {
   created_at: string
   /** Who the post names, resolved to their CURRENT names by the view. */
   mentioned: PostMention[]
+  /** Reactions grouped by kind, in the order each kind first appeared, each naming who gave it. */
+  reactions: PostReaction[]
+}
+
+/**
+ * The six reactions a post can carry. A closed set, stored as the KEY rather
+ * than the character: "heart" cannot arrive with and without a variation
+ * selector and become two rows, and the key is what the accessible label is
+ * built from. The database's check constraint holds the same six; if one list
+ * grows the other must.
+ */
+export const REACTIONS = [
+  { key: 'thumbs_up', glyph: '👍', label: 'Thumbs up' },
+  { key: 'tick', glyph: '✅', label: 'Done' },
+  { key: 'eyes', glyph: '👀', label: 'Looking at this' },
+  { key: 'party', glyph: '🎉', label: 'Celebrate' },
+  { key: 'heart', glyph: '❤️', label: 'Love' },
+  { key: 'thanks', glyph: '🙏', label: 'Thanks' },
+] as const
+export type ReactionKey = (typeof REACTIONS)[number]['key']
+export const REACTION_KEYS: readonly ReactionKey[] = REACTIONS.map((r) => r.key)
+export function isReactionKey(value: unknown): value is ReactionKey {
+  return typeof value === 'string' && (REACTION_KEYS as readonly string[]).includes(value)
+}
+export type PostReaction = { reaction: ReactionKey; by: PostMention[] }
+
+/**
+ * The optimistic half of a toggle: what the reactions look like once the
+ * viewer's reaction is added or taken away. Mirrors what the view will say
+ * after the server's round trip — a new kind goes on the end, an emptied kind
+ * disappears — so the provisional and the real render the same.
+ */
+export function toggleReaction(
+  reactions: PostReaction[],
+  key: ReactionKey,
+  viewer: PostMention,
+): PostReaction[] {
+  const existing = reactions.find((r) => r.reaction === key)
+  if (!existing) return [...reactions, { reaction: key, by: [viewer] }]
+  const mine = existing.by.some((b) => b.staff_id === viewer.staff_id)
+  const by = mine ? existing.by.filter((b) => b.staff_id !== viewer.staff_id) : [...existing.by, viewer]
+  return reactions
+    .map((r) => (r.reaction === key ? { ...r, by } : r))
+    .filter((r) => r.by.length > 0)
 }
 
 /** The cheap shape check a client can do before a round trip. The database does the real one. */
@@ -319,12 +369,13 @@ export function isPostDoc(value: unknown): value is PostDoc {
  * `activity_doc_text()` is the authority; this agrees with it on the cases the
  * client needs and is tested against the same inputs.
  */
+const POST_TEXT_BLOCKS = new Set(['paragraph', 'listItem', 'hardBreak', 'heading', 'blockquote', 'codeBlock', 'horizontalRule'])
 export function postDocText(doc: PostDoc): string {
   const out: string[] = []
   const walk = (n: PostNode) => {
     if (n.type === 'text') out.push(n.text ?? '')
     else if (n.type === 'mention') out.push('@' + String(n.attrs?.label ?? ''))
-    else if (n.type === 'paragraph' || n.type === 'listItem' || n.type === 'hardBreak') out.push('\n')
+    else if (POST_TEXT_BLOCKS.has(n.type)) out.push('\n')
     for (const c of n.content ?? []) walk(c)
   }
   for (const c of doc.content ?? []) walk(c)

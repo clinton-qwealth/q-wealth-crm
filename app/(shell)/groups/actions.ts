@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { isPostDoc, postDocText, type BoardColumn, type Priority, type TaskStatus } from '@/lib/workflow-board'
+import { isPostDoc, isReactionKey, postDocText, type BoardColumn, type Priority, type TaskStatus } from '@/lib/workflow-board'
 import type { WorkflowStatus } from '@/lib/notes'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
@@ -884,6 +884,34 @@ export async function postWorkflowActivity(
     p_workflow_id: workflowId,
     p_task_id: taskId,
     p_body: body,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
+ * Add or take away the caller's reaction to a post.
+ *
+ * The key is checked against the six the feed offers before any call, so a
+ * client sending "poop" gets a sentence rather than a constraint name. The
+ * database toggles — one row per person per reaction — and stamps the person
+ * from the session; the row a person may delete is their own.
+ */
+export async function togglePostReaction(
+  workflowId: string,
+  postId: string,
+  reaction: unknown,
+): Promise<NoteState> {
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!postId) return { error: 'No post selected.' }
+  if (!isReactionKey(reaction)) return { error: 'Not a reaction this feed offers.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('toggle_post_reaction', {
+    p_post_id: postId,
+    p_reaction: reaction,
   })
   if (error) return { error: error.message }
 
