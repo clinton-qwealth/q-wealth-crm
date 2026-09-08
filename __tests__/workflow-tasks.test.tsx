@@ -6,10 +6,12 @@ import userEvent from '@testing-library/user-event'
 vi.mock('@/app/(shell)/groups/actions', () => ({
   createWorkflowTask: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
+  setWorkflowTaskPriority: vi.fn(async () => ({ ok: true as const })),
 }))
 
 const actions = await import('@/app/(shell)/groups/actions')
 const { WorkflowTasks } = await import('@/components/workflow-tasks')
+const { formatCalendarDate, todayISO } = await import('@/lib/note-date')
 const { default: React } = await import('react')
 
 const task = (o: Partial<WorkflowTask>): WorkflowTask => ({
@@ -92,16 +94,49 @@ describe('the workflow’s tasks', () => {
     expect(row.textContent).not.toContain('Assigned to')
   })
 
-  test('each row carries a priority glyph, and it follows the record', () => {
-    const { container } = show([
+  test('the priority is a picker at the row’s right, after the subject — not a glyph in front of it', () => {
+    show([
       task({ id: 'a', subject: 'Urgent one', priority: 'urgent' }),
       task({ id: 'b', subject: 'Low one', priority: 'low' }),
     ])
-    const glyphs = [...container.querySelectorAll('li svg[aria-hidden]')]
-    expect(glyphs.length).toBe(2)
+    const urgent = screen.getByRole('button', { name: 'Priority: Urgent. Change priority of Urgent one' })
+    const low = screen.getByRole('button', { name: 'Priority: Low. Change priority of Low one' })
     // Colour says the level as well as the shape — urgent is red, low is cool.
-    expect(glyphs[0].parentElement!.className).toContain('text-red-600')
-    expect(glyphs[1].parentElement!.className).toContain('text-sky-600')
+    expect(urgent.querySelector('svg')!.parentElement!.className).toContain('text-red-600')
+    expect(low.querySelector('svg')!.parentElement!.className).toContain('text-sky-600')
+
+    // After the subject in the DOM, i.e. to its right — the subject leads the row.
+    const subject = screen.getByText('Urgent one')
+    expect(subject.compareDocumentPosition(urgent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // And NOT inside the button that opens the panel: a control inside a
+    // control is invalid, and changing a priority must not open anything.
+    expect(screen.getByRole('button', { name: 'Open task: Urgent one' }).contains(urgent)).toBe(false)
+  })
+
+  test('choosing a priority changes the glyph at once and calls the action for this workflow', async () => {
+    const user = userEvent.setup()
+    show([task({ id: 'a', subject: 'Urgent one', priority: 'urgent' })])
+    await user.click(screen.getByRole('button', { name: /Change priority of Urgent one/ }))
+    const menu = screen.getByRole('menu', { name: 'Priority of Urgent one' })
+    // Hangs from the trigger's RIGHT edge: the trigger sits at the right of the
+    // row, and a menu opening rightwards from there would leave the card.
+    expect(menu.className).toContain('right-0')
+    // And the list is not a clipping sheet: in a browser the sheet's
+    // overflow-hidden cut the last row's menu to one reachable item.
+    expect(menu.closest('ul.divide-y')!.parentElement!.className).not.toContain('overflow-hidden')
+    await user.click(within(menu).getByRole('menuitemradio', { name: /Low/ }))
+    expect(actions.setWorkflowTaskPriority).toHaveBeenCalledWith('a', 'low', 'w1')
+    expect(screen.getByRole('button', { name: /^Priority: Low\./ })).toBeTruthy()
+  })
+
+  test('a refused priority change is put back, with the reason', async () => {
+    vi.mocked(actions.setWorkflowTaskPriority).mockResolvedValueOnce({ error: 'Not yours to change' })
+    const user = userEvent.setup()
+    show([task({ id: 'a', subject: 'Urgent one', priority: 'urgent' })])
+    await user.click(screen.getByRole('button', { name: /Change priority of Urgent one/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: /Low/ }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Not yours to change')
+    expect(screen.getByRole('button', { name: /^Priority: Urgent\./ })).toBeTruthy()
   })
 
   test('the task’s type is a pill after the assignee', () => {
@@ -120,28 +155,47 @@ describe('the workflow’s tasks', () => {
   const rowOf = (subject: string) =>
     screen.getByRole('checkbox', { name: new RegExp(subject) }).closest('li')! as HTMLElement
 
-  test('the due date is labelled, and an overdue one is named as well as coloured', () => {
-    // Fixed "today" cannot be injected through the component, so the two cases
-    // are a date far in the past and one far in the future.
-    show([
-      task({ id: 'p', subject: 'Late one', due_at: '2020-01-15' }),
-      task({ id: 'f', subject: 'Future one', due_at: '2099-01-15' }),
-    ])
-    const future = within(rowOf('Future one')).getByText(/^Due date/)
-    expect(future.textContent).toContain('15 Jan 2099')
-    expect(future.className).not.toContain('text-red-600')
-
-    const late = within(rowOf('Late one')).getByText(/^Overdue/)
-    expect(late.textContent).toContain('15 Jan 2020')
-    // Colour is never the only signal: the label itself changes.
-    expect(late.className).toContain('text-red-600')
+  test('the due date is a chip: the date with a calendar glyph, and "Due" for a screen reader', () => {
+    show([task({ id: 'f', subject: 'Future one', due_at: '2099-01-15' })])
+    const row = rowOf('Future one')
+    const chip = within(row).getByText('15 Jan 2099').closest('.ring-1')!
+    // Quiet tone, with the glyph, and the word spoken but not printed.
+    expect(chip.className).toContain('text-neutral-600')
+    expect(chip.querySelector('svg')).toBeTruthy()
+    expect(chip.textContent).toBe('Due 15 Jan 2099')
+    expect(within(row).getByText('Due').className).toContain('sr-only')
+    expect(row.querySelector('.text-red-700, .text-amber-800')).toBeNull()
   })
 
-  test('a done task with a past due date is not marked overdue', () => {
-    show([task({ id: 'd', subject: 'Late but finished', due_at: '2020-01-15', status: 'done' })])
-    const row = within(rowOf('Late but finished'))
-    expect(row.queryByText(/^Overdue/)).toBeNull()
-    expect(row.getByText(/^Due date/).textContent).toContain('15 Jan 2020')
+  test('an overdue task says Overdue, in red — the word as well as the colour', () => {
+    show([task({ id: 'p', subject: 'Late one', due_at: '2020-01-15' })])
+    const late = within(rowOf('Late one')).getByText(/^Overdue/)
+    expect(late.textContent).toBe('Overdue 15 Jan 2020')
+    expect(late.className).toContain('text-red-700')
+  })
+
+  test('a task due today says so, in amber, with the date a hover away', () => {
+    const today = todayISO()
+    show([task({ id: 'n', subject: 'Today one', due_at: today })])
+    const chip = within(rowOf('Today one')).getByText('Due today')
+    expect(chip.className).toContain('text-amber-800')
+    expect(chip.getAttribute('title')).toBe(`Due ${formatCalendarDate(today)}`)
+  })
+
+  test('a done task with a past due date is not marked overdue — it is finished, not late', () => {
+    show([
+      task({ id: 'd', subject: 'Late but finished', due_at: '2020-01-15', status: 'done' }),
+      task({ id: 'c', subject: 'Today but cancelled', due_at: todayISO(), status: 'cancelled' }),
+    ])
+    const done = within(rowOf('Late but finished'))
+    expect(done.queryByText(/^Overdue/)).toBeNull()
+    expect(done.getByText('15 Jan 2020').closest('.ring-1')!.textContent).toBe('Due 15 Jan 2020')
+    expect(within(rowOf('Today but cancelled')).queryByText('Due today')).toBeNull()
+  })
+
+  test('a long description is clamped to two lines on the row; the panel has the whole text', () => {
+    show([task({ id: 'l', subject: 'Long one', description: 'A '.repeat(200) })])
+    expect(within(rowOf('Long one')).getByText(/^A A A/).className).toContain('line-clamp-2')
   })
 
   /**
@@ -234,8 +288,11 @@ describe('the workflow’s tasks', () => {
     expect(panel().hasAttribute('open')).toBe(false)
 
     // Ticking must not open anything — the checkbox is a sibling of the button,
-    // not inside it.
+    // not inside it. Nor must changing the priority.
     await user.click(screen.getByRole('checkbox', { name: /Collect signed authority/ }))
+    expect(panel().hasAttribute('open')).toBe(false)
+    await user.click(screen.getByRole('button', { name: /Change priority of Collect signed authority/ }))
+    await user.click(screen.getByRole('menuitemradio', { name: /High/ }))
     expect(panel().hasAttribute('open')).toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'Open task: Collect signed authority' }))

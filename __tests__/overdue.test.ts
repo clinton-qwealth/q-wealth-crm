@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { isOverdue, todayISO } from '@/lib/note-date'
+import { dueState, isOverdue, todayISO } from '@/lib/note-date'
 
 /**
  * The date trap, in reverse.
@@ -60,6 +60,12 @@ describe('isOverdue', () => {
     expect(isOverdue('2026-01-01', '2025-12-31')).toBe(false)
   })
 
+  test('agrees with dueState, of which it is the past case', () => {
+    for (const d of ['2026-09-07', '2026-09-08', '2026-09-09', null, 'junk']) {
+      expect(isOverdue(d, today)).toBe(dueState(d, today) === 'overdue')
+    }
+  })
+
   /**
    * The substantive claim: at one instant, two readers can honestly disagree
    * about whether a task is overdue, and each is right about their own day.
@@ -69,5 +75,28 @@ describe('isOverdue', () => {
     // A task due on the 7th: already yesterday in Sydney, still today in New York.
     withTz('Australia/Sydney', () => expect(isOverdue('2026-09-07', todayISO(instant))).toBe(true))
     withTz('America/New_York', () => expect(isOverdue('2026-09-07', todayISO(instant))).toBe(false))
+  })
+})
+
+describe('dueState', () => {
+  const today = '2026-09-08'
+
+  test('names the three places a due date can stand against today', () => {
+    expect(dueState('2026-09-07', today)).toBe('overdue')
+    expect(dueState('2026-09-08', today)).toBe('today')
+    expect(dueState('2026-09-09', today)).toBe('upcoming')
+  })
+
+  test('no date, or something that is not a date, has no state rather than throwing', () => {
+    expect(dueState(null, today)).toBeNull()
+    expect(dueState(undefined, today)).toBeNull()
+    expect(dueState('', today)).toBeNull()
+    expect(dueState('soon', today)).toBeNull()
+  })
+
+  test('"today" is the reader’s own day, so the same instant is "today" in Sydney and "upcoming" in New York', () => {
+    const instant = new Date('2026-09-07T22:30:00Z')
+    withTz('Australia/Sydney', () => expect(dueState('2026-09-08', todayISO(instant))).toBe('today'))
+    withTz('America/New_York', () => expect(dueState('2026-09-08', todayISO(instant))).toBe('upcoming'))
   })
 })

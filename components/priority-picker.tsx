@@ -54,12 +54,15 @@ export function PriorityPicker({
   onChange,
   name,
   withLabel = false,
+  menuAlign,
 }: {
   value: Priority
   onChange: (next: Priority) => void
-  /** The workflow's name, for the accessible label. */
+  /** The record's name — a workflow's, or a task's subject — for the accessible label. */
   name: string
   withLabel?: boolean
+  /** See MenuPicker. A picker at the right edge of a row passes `end`. */
+  menuAlign?: 'start' | 'end'
 }) {
   const label = PRIORITIES.find((p) => p.id === value)!.label
   return (
@@ -95,6 +98,7 @@ export function PriorityPicker({
           : 'h-6 w-6 rounded-md hover:bg-neutral-100'
       }
       menuClassName="w-36"
+      menuAlign={menuAlign}
     />
   )
 }

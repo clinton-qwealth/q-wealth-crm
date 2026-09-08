@@ -91,8 +91,27 @@ export function todayISO(now: Date = new Date()) {
  * has the whole of its due date to be done in.
  */
 export function isOverdue(dueAt: string | null | undefined, today: string = todayISO()) {
-  if (!dueAt) return false
+  return dueState(dueAt, today) === 'overdue'
+}
+
+export type DueState = 'overdue' | 'today' | 'upcoming'
+
+/**
+ * Where a due date stands against today: past, today, or still to come.
+ *
+ * The same comparison as isOverdue, with the middle case named. "Due today" is
+ * worth a word of its own on a task list — it is the day the task has to be
+ * done, and neither "overdue" nor "some time ahead" says that. Null for no
+ * date, or a value that is not one.
+ */
+export function dueState(
+  dueAt: string | null | undefined,
+  today: string = todayISO(),
+): DueState | null {
+  if (!dueAt) return null
   const m = /^\d{4}-\d{2}-\d{2}/.exec(dueAt)
-  if (!m) return false
-  return m[0] < today
+  if (!m) return null
+  if (m[0] < today) return 'overdue'
+  if (m[0] === today) return 'today'
+  return 'upcoming'
 }

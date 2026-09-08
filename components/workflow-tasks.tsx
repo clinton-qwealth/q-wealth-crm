@@ -3,19 +3,21 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
 import {
   createWorkflowTask,
+  setWorkflowTaskPriority,
   setWorkflowTaskStatus,
   type NoteState,
 } from '@/app/(shell)/groups/actions'
 import {
   PRIORITIES,
   TASK_TYPE_LABEL,
+  type Priority,
   type WorkflowTask,
 } from '@/lib/workflow-board'
-import { formatCalendarDate, formatNoteDate, isOverdue } from '@/lib/note-date'
-import { Pill, SHEET } from './ui'
+import { dueState, formatCalendarDate, formatNoteDate, isOverdue, type DueState } from '@/lib/note-date'
+import { Pill, SHEET_SURFACE } from './ui'
 import { useServerState } from './use-server-state'
-import { PriorityGlyph } from './priority-picker'
-import { PlusIcon } from './icons'
+import { PriorityGlyph, PriorityPicker } from './priority-picker'
+import { CalendarIcon, PlusIcon } from './icons'
 
 const INPUT =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -91,6 +93,23 @@ export function WorkflowTasks({
     })
   }
 
+  /* The same optimistic contract as ticking: the glyph changes at once and is
+     put back with the server's reason if refused. The first caller of
+     set_workflow_task_priority(), which had waited in the database with no
+     caller since the column arrived. */
+  function reprioritise(task: WorkflowTask, next: Priority) {
+    const before = tasks
+    setError(null)
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, priority: next } : t)))
+    start(async () => {
+      const result = await setWorkflowTaskPriority(task.id, next, workflowId)
+      if (result && 'error' in result) {
+        setTasks(before)
+        setError(result.error)
+      }
+    })
+  }
+
   const done = tasks.filter((t) => t.status === 'done').length
   const live = tasks.filter((t) => t.status !== 'cancelled').length
 
@@ -116,17 +135,21 @@ export function WorkflowTasks({
 
       {tasks.length ? (
         <>
-          <div className={SHEET}>
+          {/* SHEET_SURFACE, not SHEET: the sheet's clip would cut the last row's
+              priority menu off at the sheet's edge — the board's cards learned
+              the same lesson. Without the clip, the rows round their own outer
+              corners so a hovered first or last row still meets the edge. */}
+          <div className={SHEET_SURFACE}>
             <ul className="divide-y divide-neutral-200/80">
               {tasks.map((t) => {
                 const isDone = t.status === 'done'
                 const cancelled = t.status === 'cancelled'
-                // Only work still to be done can be overdue. A finished task
-                // was late or it was not; either way it is not a thing to
-                // chase, so it is not marked.
-                const late = t.status === 'open' && isOverdue(t.due_at)
+                const finished = isDone || cancelled
                 return (
-                  <li key={t.id} className="flex items-start gap-3 px-3.5 py-3">
+                  <li
+                    key={t.id}
+                    className="flex items-start gap-3 px-3.5 py-3 transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-neutral-50"
+                  >
                     {/* The checkbox IS the task's status, and it is a SIBLING of
                         the button below rather than inside it: a control inside
                         a control is invalid, and a tick must not also open the
@@ -140,76 +163,81 @@ export function WorkflowTasks({
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-neutral-300 accent-emerald-600 outline-none focus-visible:ring-2 focus-visible:ring-brand/30 disabled:opacity-40"
                     />
 
-                    {/* Everything else opens the panel. A button rather than a
-                        click handler on the row, so it is reachable by keyboard
-                        and announced as something that does something. Its
+                    {/* The text opens the panel. A button rather than a click
+                        handler on the row, so it is reachable by keyboard and
+                        announced as something that does something. Its
                         accessible name is the subject alone — the row's full
-                        text would make a paragraph of it. */}
+                        text would make a paragraph of it. The subject leads:
+                        nothing sits in front of it, so the eye lands on what
+                        the task is. */}
                     <button
                       type="button"
                       onClick={() => openTask(t.id)}
                       aria-label={`Open task: ${t.subject}`}
-                      className="-my-1 flex min-w-0 flex-1 items-start gap-3 rounded-md px-1 py-1 text-left outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+                      className="-m-1 min-w-0 flex-1 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                     >
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          {/* Display only. The row is a button, so a picker here
-                              would be a control inside a control — a task's
-                              priority is changed in the panel. */}
-                          <PriorityGlyph priority={t.priority} className="h-3.5 w-3.5" />
-                          <span
-                            className={`truncate text-sm font-semibold ${
-                              isDone || cancelled ? 'text-neutral-400 line-through' : 'text-neutral-900'
-                            }`}
-                          >
-                            {t.subject}
-                          </span>
-                          {cancelled ? <Pill tone="neutral">Cancelled</Pill> : null}
-                        </span>
-
-                        {t.description ? (
-                          <span className="mt-0.5 block text-xs leading-snug text-neutral-500">
-                            {t.description}
-                          </span>
-                        ) : null}
-
-                        {/* The footer, set off from the description above it so
-                            the two do not read as one paragraph. */}
-                        <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-                          {t.assigned_to_name ? (
-                            <span>Assigned to {t.assigned_to_name}</span>
-                          ) : (
-                            /* Named, not left blank: an unassigned task is the
-                               one most likely to be missed, and "Unassigned" is
-                               the word the board's filter and the workflow's own
-                               owner picker use for the same state. */
-                            <span className="text-neutral-400">Unassigned</span>
-                          )}
-                          <Pill tone="neutral">{TASK_TYPE_LABEL[t.task_type]}</Pill>
-                        </span>
-
-                        {t.comment ? (
-                          <span className="mt-1 block text-xs italic leading-snug text-neutral-400">
-                            “{t.comment}”
-                          </span>
-                        ) : null}
-                      </span>
-
-                      {t.due_at ? (
-                        /* The label carries the meaning and the colour
-                           reinforces it — never the colour alone, which would
-                           leave the fact invisible to a reader who cannot
-                           distinguish red from grey. */
+                      <span className="flex items-center gap-2">
                         <span
-                          className={`shrink-0 text-xs ${
-                            late ? 'font-semibold text-red-600' : 'text-neutral-500'
+                          className={`truncate text-sm font-semibold ${
+                            finished ? 'text-neutral-400 line-through' : 'text-neutral-900'
                           }`}
                         >
-                          {late ? 'Overdue' : 'Due date'}{' '}
-                          <span className="tabular-nums">{formatCalendarDate(t.due_at)}</span>
+                          {t.subject}
+                        </span>
+                        {cancelled ? <Pill tone="neutral">Cancelled</Pill> : null}
+                      </span>
+
+                      {t.description ? (
+                        /* Two lines at most. A row is scanned, not read; the
+                           panel has the whole text. Clamping also keeps a long
+                           description from stretching the row into a paragraph
+                           at this column's width. */
+                        <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-neutral-500">
+                          {t.description}
+                        </span>
+                      ) : null}
+
+                      {/* The footer, set off from the description above it so
+                          the two do not read as one paragraph. */}
+                      <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                        {t.assigned_to_name ? (
+                          <span>Assigned to {t.assigned_to_name}</span>
+                        ) : (
+                          /* Named, not left blank: an unassigned task is the
+                             one most likely to be missed, and "Unassigned" is
+                             the word the board's filter and the workflow's own
+                             owner picker use for the same state. */
+                          <span className="text-neutral-400">Unassigned</span>
+                        )}
+                        <Pill tone="neutral">{TASK_TYPE_LABEL[t.task_type]}</Pill>
+                      </span>
+
+                      {t.comment ? (
+                        <span className="mt-1 line-clamp-2 text-xs italic leading-snug text-neutral-400">
+                          “{t.comment}”
                         </span>
                       ) : null}
                     </button>
+
+                    {/* The row's right edge: when it is due, and how much it
+                        matters. Both are OUTSIDE the button — the picker is a
+                        control, and a control inside a control is invalid —
+                        and both sit on the subject's line, which is why the
+                        cluster is nudged up 2px to centre a 24px button on a
+                        20px line. */}
+                    <span className="-my-0.5 flex shrink-0 items-center gap-1.5">
+                      {t.due_at ? (
+                        /* A finished task is not late and is not due today; it
+                           is finished. Its date is kept, in the quiet tone. */
+                        <DueChip dueAt={t.due_at} state={finished ? null : dueState(t.due_at)} />
+                      ) : null}
+                      <PriorityPicker
+                        value={t.priority}
+                        name={t.subject}
+                        onChange={(p) => reprioritise(t, p)}
+                        menuAlign="end"
+                      />
+                    </span>
                   </li>
                 )
               })}
@@ -251,6 +279,49 @@ export function WorkflowTasks({
         ) : null}
       </dialog>
     </div>
+  )
+}
+
+/**
+ * When a task is due, as a chip: a calendar glyph and the date.
+ *
+ * The word carries the meaning and the colour reinforces it — never the colour
+ * alone, which would leave the fact invisible to a reader who cannot tell red
+ * from grey. So an overdue task says **Overdue** and its date in red; a task due
+ * today says **Due today** in amber, with the date a hover away; anything else
+ * is the date in the quiet tone, with "Due" spoken to a screen reader but not
+ * printed — on a task list, a calendar glyph and a date at the right of the
+ * row already say "due" to the eye, and printing the word on every row would
+ * make the one row that says Overdue harder to pick out.
+ *
+ * Always the full date, year included. A firm that gives advice does not
+ * abbreviate a deadline.
+ */
+function DueChip({ dueAt, state }: { dueAt: string; state: DueState | null }) {
+  const date = formatCalendarDate(dueAt)
+  const glyph = <CalendarIcon className="-ml-0.5 mr-1 h-3 w-3 shrink-0" />
+  if (state === 'overdue') {
+    return (
+      <Pill tone="danger">
+        {glyph}
+        Overdue <span className="ml-1 tabular-nums">{date}</span>
+      </Pill>
+    )
+  }
+  if (state === 'today') {
+    return (
+      <Pill tone="warning" title={`Due ${date}`}>
+        {glyph}
+        Due today
+      </Pill>
+    )
+  }
+  return (
+    <Pill tone="neutral">
+      {glyph}
+      <span className="sr-only">Due </span>
+      <span className="tabular-nums">{date}</span>
+    </Pill>
   )
 }
 

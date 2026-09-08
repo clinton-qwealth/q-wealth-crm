@@ -238,7 +238,7 @@ describe('the workflow detail page', () => {
   })
 
   test('the progress bar is green, labelled by status, and reports a percentage', () => {
-    const { container } = show({ ...card, status: 'in_progress' })
+    show({ ...card, status: 'in_progress' })
     const bar = screen.getByRole('progressbar')
     expect(bar.getAttribute('aria-valuenow')).toBe('33')
     expect(bar.getAttribute('aria-valuetext')).toBe('In progress, 33% complete')

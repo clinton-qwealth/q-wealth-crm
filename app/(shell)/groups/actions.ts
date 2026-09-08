@@ -804,3 +804,22 @@ export async function setWorkflowTaskStatus(
   revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }
 }
+
+/**
+ * A task's priority, from the glyph on its row. The first caller of
+ * set_workflow_task_priority(), which had waited in the database since the
+ * column arrived. Only the task's own page shows a task, so that is the one
+ * path revalidated.
+ */
+export async function setWorkflowTaskPriority(
+  id: string,
+  priority: Priority,
+  workflowId: string,
+): Promise<NoteState> {
+  if (!id) return { error: 'No task selected.' }
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_task_priority', { p_id: id, p_priority: priority })
+  if (error) return { error: error.message }
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}

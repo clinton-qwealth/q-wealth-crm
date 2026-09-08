@@ -18,7 +18,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const { revalidatePath } = await import('next/cache')
-const { createWorkflowTask, setWorkflowTaskStatus, startWorkflow } = await import(
+const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, startWorkflow } = await import(
   '@/app/(shell)/groups/actions'
 )
 
@@ -40,6 +40,11 @@ describe('a write revalidates every screen that shows it', () => {
 
   test('ticking a task refreshes the workflow it belongs to', async () => {
     await setWorkflowTaskStatus('t1', 'done', 'w1')
+    expect(paths()).toContain('/workflows/w1')
+  })
+
+  test('changing a task’s priority refreshes the workflow it belongs to', async () => {
+    await setWorkflowTaskPriority('t1', 'high', 'w1')
     expect(paths()).toContain('/workflows/w1')
   })
 

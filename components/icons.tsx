@@ -288,6 +288,16 @@ export function PriorityUrgentIcon({ className = 'h-4 w-4' }: { className?: stri
 }
 
 /** A small chevron, to say that a control opens something. */
+/** A due date's mark: a page-a-day calendar, one bar of binding at the top. */
+export function CalendarIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
+      <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M2.25 6.5h11.5M5.5 1.75v3M10.5 1.75v3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden className={className}>

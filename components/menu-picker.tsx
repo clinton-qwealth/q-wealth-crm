@@ -33,6 +33,7 @@ export function MenuPicker<T extends string>({
   menuAriaLabel,
   triggerClassName = '',
   menuClassName = 'w-40',
+  menuAlign = 'start',
 }: {
   value: T
   options: readonly MenuOption<T>[]
@@ -44,6 +45,13 @@ export function MenuPicker<T extends string>({
   menuAriaLabel: string
   triggerClassName?: string
   menuClassName?: string
+  /**
+   * Which edge of the trigger the menu hangs from. `start` (the default) opens
+   * it rightwards from the trigger's left edge, which is right for a glyph at
+   * the left of a card. A trigger at the RIGHT edge of its container needs
+   * `end`, or a 9rem menu runs 8rem past the container it belongs to.
+   */
+  menuAlign?: 'start' | 'end'
 }) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -87,7 +95,7 @@ export function MenuPicker<T extends string>({
           id={menuId}
           role="menu"
           aria-label={menuAriaLabel}
-          className={`absolute left-0 top-full z-20 mt-1 ${menuClassName} overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)]`}
+          className={`absolute top-full z-20 mt-1 ${menuAlign === 'end' ? 'right-0' : 'left-0'} ${menuClassName} overflow-hidden rounded-lg border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_24px_-12px_rgb(0_0_0/0.18)]`}
         >
           {options.map((o) => {
             const current = o.id === value

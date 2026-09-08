@@ -306,7 +306,9 @@ const PILL_TONES: Record<PillTone, string> = {
   // Red is the mirror of success: a value moving the wrong way. Same weights, so
   // an up mark and a down mark read as one pair rather than two designs.
   danger: 'bg-red-50 text-red-700 ring-red-200 font-semibold',
-  neutral: 'bg-neutral-100 text-neutral-500 ring-neutral-200 font-medium',
+  // neutral-600, not 500: 500 on the 100 ground measured 4.35:1 in a browser,
+  // under the 4.5:1 floor for text this small. 600 measures 7.17:1.
+  neutral: 'bg-neutral-100 text-neutral-600 ring-neutral-200 font-medium',
 }
 
 /**
@@ -323,15 +325,19 @@ const PILL_TONES: Record<PillTone, string> = {
 export function Pill({
   on = false,
   tone,
+  title,
   children,
 }: {
   on?: boolean
   tone?: PillTone
+  /** A native tooltip, for a chip that abbreviates — e.g. "Due today" carrying the date. */
+  title?: string
   children: ReactNode
 }) {
   const resolved = tone ?? (on ? 'success' : 'neutral')
   return (
     <span
+      title={title}
       className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ring-1 ${PILL_TONES[resolved]}`}
     >
       {children}

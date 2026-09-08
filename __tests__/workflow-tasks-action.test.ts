@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { createWorkflowTask, setWorkflowTaskStatus } = await import('@/app/(shell)/groups/actions')
+const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority } = await import('@/app/(shell)/groups/actions')
 
 const form = (entries: Record<string, string>) => {
   const fd = new FormData()
@@ -64,6 +64,23 @@ describe('createWorkflowTask', () => {
     failure = 'No such workflow, or not within your access'
     const result = await createWorkflowTask(null, form({ workflow_id: 'w1', subject: 'x' }))
     expect(result).toEqual({ error: 'No such workflow, or not within your access' })
+  })
+})
+
+describe('setWorkflowTaskPriority', () => {
+  test('calls the priority function with the task and the level', async () => {
+    await setWorkflowTaskPriority('t1', 'urgent', 'w1')
+    expect(calls[0]).toEqual({ name: 'set_workflow_task_priority', args: { p_id: 't1', p_priority: 'urgent' } })
+  })
+
+  test('no task is refused before any call is made', async () => {
+    expect(await setWorkflowTaskPriority('', 'low', 'w1')).toEqual({ error: 'No task selected.' })
+    expect(calls.length).toBe(0)
+  })
+
+  test('the database’s own message is returned', async () => {
+    failure = 'No such task, or not within your access'
+    expect(await setWorkflowTaskPriority('t1', 'low', 'w1')).toEqual({ error: 'No such task, or not within your access' })
   })
 })
 
