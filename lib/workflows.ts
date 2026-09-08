@@ -186,6 +186,13 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
    * So this throws. A workflow page that fails loudly is worth more than one
    * that quietly under-reports what people said, and an unknown column is a
    * deployment mistake to be seen rather than absorbed.
+   *
+   * IT HAPPENED A SECOND TIME the same afternoon, and the throw is what caught
+   * it: `entities` was added to the select above while the migration adding
+   * that column was still unapplied, and the page became a server error rather
+   * than a silent lie. **A SELECT may only name columns the deployed schema
+   * has** — so a migration and the query that depends on it are one change, not
+   * two, and the migration goes first.
    */
   if (error) {
     throw new Error(`The workflow's posts could not be read: ${error.message}`)
