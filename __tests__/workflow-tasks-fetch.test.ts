@@ -31,7 +31,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { getWorkflowTasks } = await import('@/lib/workflows')
+const { getWorkflowTasks, getWorkflowPosts } = await import('@/lib/workflows')
 
 beforeEach(() => {
   ordered.length = 0
@@ -65,5 +65,31 @@ describe('getWorkflowTasks', () => {
 
   test('no rows is an empty list, never null', async () => {
     expect(await getWorkflowTasks('w1')).toEqual([])
+  })
+})
+
+/**
+ * Posts come back newest first, for the whole workflow. The task panel filters
+ * them to its own task; the workflow's timeline shows all of them. Ordered in
+ * the query, with a tie-break on id so two posts in the same instant do not
+ * shuffle between renders.
+ */
+describe('getWorkflowPosts', () => {
+  test('reads the summary view — the only thing that names the author — for this workflow', async () => {
+    await getWorkflowPosts('w1')
+    expect(table).toBe('workflow_posts_summary')
+    expect(filtered).toEqual(['workflow_id', 'w1'])
+  })
+
+  test('newest first, ties broken by id', async () => {
+    await getWorkflowPosts('w1')
+    expect(ordered).toEqual([
+      { column: 'created_at', options: { ascending: false } },
+      { column: 'id', options: { ascending: false } },
+    ])
+  })
+
+  test('no posts is an empty list, not null', async () => {
+    expect(await getWorkflowPosts('w1')).toEqual([])
   })
 })

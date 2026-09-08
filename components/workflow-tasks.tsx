@@ -14,12 +14,14 @@ import {
   TASK_TYPE_LABEL,
   type Priority,
   type TaskStatus,
+  type WorkflowPost,
   type WorkflowTask,
 } from '@/lib/workflow-board'
 import { dueState, formatCalendarDate, formatNoteDate, type DueState } from '@/lib/note-date'
 import { Pill, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
 import { Tabs } from './tabs'
+import { ActivityFeed } from './activity-feed'
 import { useServerState } from './use-server-state'
 import { PriorityGlyph, PriorityPicker } from './priority-picker'
 import { CalendarIcon, PlusIcon } from './icons'
@@ -50,6 +52,8 @@ const TASK_STATUS_TONE: Record<TaskStatus, PillTone> = {
 }
 
 type Staff = { id: string; name: string }
+/** The signed-in staff member, for the optimistic entry a post makes before the server answers. */
+type Viewer = { id: string; name: string }
 
 /**
  * The centre column of the workflow detail page: the work itself, as a list of
@@ -68,13 +72,18 @@ export function WorkflowTasks({
   workflowId,
   groupName,
   tasks: initial,
+  posts,
   staff,
+  viewer,
 }: {
   workflowId: string
   /** The client group the workflow is for. Named in the panel — see TaskPanel. */
   groupName: string
   tasks: WorkflowTask[]
+  /** Every post on the workflow; the panel shows a task's own. */
+  posts: WorkflowPost[]
   staff: Staff[]
+  viewer: Viewer
 }) {
   /* Seeded from the server and RE-seeded when the server sends new rows. A
      task added through the dialog below revalidates this page, and without
@@ -252,11 +261,6 @@ export function WorkflowTasks({
                         <Pill tone="neutral">{TASK_TYPE_LABEL[t.task_type]}</Pill>
                       </span>
 
-                      {t.comment ? (
-                        <span className="mt-1 line-clamp-2 text-xs italic leading-snug text-neutral-400">
-                          “{t.comment}”
-                        </span>
-                      ) : null}
                     </button>
 
                     {/* The row's right edge: when it is due, and how much it
@@ -319,7 +323,9 @@ export function WorkflowTasks({
             task={selected}
             workflowId={workflowId}
             groupName={groupName}
+            posts={posts}
             staff={staff}
+            viewer={viewer}
             onClose={() => panelRef.current?.close()}
           />
         ) : null}
@@ -401,13 +407,17 @@ function TaskPanel({
   task,
   workflowId,
   groupName,
+  posts,
   staff,
+  viewer,
   onClose,
 }: {
   task: WorkflowTask
   workflowId: string
   groupName: string
+  posts: WorkflowPost[]
   staff: Staff[]
+  viewer: Viewer
   onClose: () => void
 }) {
   const priority = PRIORITIES.find((p) => p.id === task.priority)!
@@ -514,6 +524,12 @@ function TaskPanel({
                 }
               />
               <Field label="Description" value={task.description} wrap span />
+              {/* Only once it has happened: for an open task "Completed —"
+                  says nothing the Open pill above has not, and the Activity
+                  tab it used to live in is now the feed. */}
+              {task.completed_at ? (
+                <Field label="Completed" value={formatNoteDate(task.completed_at)} span />
+              ) : null}
             </dl>
           }
           edit={
@@ -566,6 +582,10 @@ function TaskPanel({
                   className={FIELD_INPUT}
                 />
               </EditField>
+
+              {task.completed_at ? (
+                <ReadonlyField label="Completed" value={formatNoteDate(task.completed_at)} />
+              ) : null}
             </div>
           }
         />
@@ -583,46 +603,18 @@ function TaskPanel({
             id: 'activity',
             label: 'Activity',
             panel: (
-              <div className="flex flex-col gap-4 px-5 pb-6">
-                {/* The comment lives here, as asked — and "Completion" is the
-                    box rather than "Comment", because the two fields are one
-                    fact: a comment is what the person DOING the task said when
-                    they did it, not something the person creating it wrote.
-                    When it was finished and what they said belong together, and
-                    both are activity rather than definition. */}
-                <FieldBox
-                  title="Completion"
-                  action={saveWorkflowTaskDetails}
-                  identity={identity}
-                  view={
-                    <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
-                      <Field
-                        label="Completed"
-                        value={task.completed_at ? formatNoteDate(task.completed_at) : null}
-                      />
-                      <Field label="Comment" value={task.comment} wrap span />
-                    </dl>
-                  }
-                  edit={
-                    <div className="flex flex-col gap-3">
-                      {/* Not editable: it is stamped by the function that sets
-                          the status, so a completion date can never sit on
-                          something that is no longer done. */}
-                      <ReadonlyField
-                        label="Completed"
-                        value={task.completed_at ? formatNoteDate(task.completed_at) : null}
-                      />
-                      <EditField label="Comment">
-                        <textarea
-                          name="comment"
-                          rows={4}
-                          defaultValue={task.comment ?? ''}
-                          placeholder="What happened when this was done."
-                          className={FIELD_INPUT}
-                        />
-                      </EditField>
-                    </div>
-                  }
+              <div className="px-5 pb-6">
+                {/* The feed replaced the comment field on 8 September. A post
+                    is what a comment was trying to be — who said what, when —
+                    with the two things a single column could never hold: more
+                    than one of them, and a relationship to the workflow's
+                    timeline as well as to this task. */}
+                <ActivityFeed
+                  workflowId={workflowId}
+                  taskId={task.id}
+                  posts={posts}
+                  staff={staff}
+                  viewer={viewer}
                 />
               </div>
             ),

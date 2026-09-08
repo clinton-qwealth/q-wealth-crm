@@ -258,3 +258,86 @@ export type WorkflowTask = {
   created_at: string
   updated_at: string
 }
+
+/* ------------------------------------------------------------------------ */
+/* Posts: the activity feed                                                 */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * A post's body is a DOCUMENT, never HTML.
+ *
+ * The shape is ProseMirror's — the editor produces it, the database validates
+ * it, the renderer walks it — and it is deliberately a small subset: the node
+ * and mark types below and no others. `post_workflow_activity()` refuses
+ * anything else, so every stored document is one the renderer knows how to
+ * draw, and nothing that reaches the screen is ever interpreted as markup.
+ * The same list, in the same order, lives in that function; if one grows the
+ * other must.
+ */
+export const POST_NODE_TYPES = [
+  'doc', 'paragraph', 'text', 'hardBreak', 'mention', 'bulletList', 'orderedList', 'listItem',
+] as const
+export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link'] as const
+
+export type PostMark = { type: (typeof POST_MARK_TYPES)[number]; attrs?: { href?: string } }
+export type PostNode = {
+  type: string
+  text?: string
+  attrs?: Record<string, unknown>
+  marks?: PostMark[]
+  content?: PostNode[]
+}
+export type PostDoc = { type: 'doc'; content?: PostNode[] }
+export type PostMention = { staff_id: string; full_name: string }
+
+export type WorkflowPost = {
+  id: string
+  workflow_id: string
+  /** Null for a post on the workflow as a whole; the timeline shows both. */
+  task_id: string | null
+  author_staff_id: string
+  author_name: string | null
+  body: PostDoc
+  /** The database's plain-text reading of the body. */
+  body_text: string
+  /** A timestamptz — an instant. Rendered in the reader's timezone. */
+  created_at: string
+  /** Who the post names, resolved to their CURRENT names by the view. */
+  mentioned: PostMention[]
+}
+
+/** The cheap shape check a client can do before a round trip. The database does the real one. */
+export function isPostDoc(value: unknown): value is PostDoc {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as { type?: unknown; content?: unknown }
+  return v.type === 'doc' && (v.content === undefined || Array.isArray(v.content))
+}
+
+/**
+ * The plain text of a document, for "is there anything here" and for the
+ * optimistic entry before the server's own `body_text` arrives. The database's
+ * `activity_doc_text()` is the authority; this agrees with it on the cases the
+ * client needs and is tested against the same inputs.
+ */
+export function postDocText(doc: PostDoc): string {
+  const out: string[] = []
+  const walk = (n: PostNode) => {
+    if (n.type === 'text') out.push(n.text ?? '')
+    else if (n.type === 'mention') out.push('@' + String(n.attrs?.label ?? ''))
+    else if (n.type === 'paragraph' || n.type === 'listItem' || n.type === 'hardBreak') out.push('\n')
+    for (const c of n.content ?? []) walk(c)
+  }
+  for (const c of doc.content ?? []) walk(c)
+  return out.join('').replace(/\n{2,}/g, '\n').trim()
+}
+
+/** Every staff id a document mentions, once each. */
+export function postMentionIds(doc: PostDoc): string[] {
+  const ids = new Set<string>()
+  const walk = (n: PostNode) => {
+    if (n.type === 'mention' && typeof n.attrs?.id === 'string') ids.add(n.attrs.id)
+    for (const c of n.content ?? []) walk(c)
+  }
+  for (const c of doc.content ?? []) walk(c)
+  return [...ids]
+}

@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardCard, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
+import type {
+  WorkflowPost, BoardCard, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
 /**
  * Every workflow the caller can see, across every group — the view is
@@ -94,4 +95,24 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
     .order('due_at', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
   return (data ?? []) as WorkflowTask[]
+}
+
+/**
+ * Every post on the workflow — with a task or without — **newest first**.
+ *
+ * Fetched for the whole workflow rather than per task, on purpose: the task
+ * panel filters this to its own task, and the workflow's timeline (to come)
+ * shows all of it. One query, two views of the result, and the panel opening
+ * costs no round trip. Ordered here, not in the component: a feed is read from
+ * the top, and the tie-break on id keeps two posts in the same instant stable.
+ */
+export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data } = await supabase
+    .from('workflow_posts_summary')
+    .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned')
+    .eq('workflow_id', workflowId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+  return (data ?? []) as WorkflowPost[]
 }

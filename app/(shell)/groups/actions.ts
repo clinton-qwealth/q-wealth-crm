@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import type { BoardColumn, Priority, TaskStatus } from '@/lib/workflow-board'
+import { isPostDoc, postDocText, type BoardColumn, type Priority, type TaskStatus } from '@/lib/workflow-board'
 import type { WorkflowStatus } from '@/lib/notes'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
@@ -857,6 +857,36 @@ export async function setWorkflowTaskPriority(
   const supabase = await createSupabaseServerClient()
   const { error } = await supabase.rpc('set_workflow_task_priority', { p_id: id, p_priority: priority })
   if (error) return { error: error.message }
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
+ * A post on a workflow's timeline — about one task when `taskId` is given, or
+ * about the workflow itself when it is null.
+ *
+ * The body is a document, not text and never HTML. Two cheap checks here save
+ * a round trip for the obvious cases; the database does the real validation —
+ * node and mark types, link schemes, mentions — and its message comes back
+ * verbatim, because it is the one that knows why.
+ */
+export async function postWorkflowActivity(
+  workflowId: string,
+  taskId: string | null,
+  body: unknown,
+): Promise<NoteState> {
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!isPostDoc(body)) return { error: 'A post must be a document.' }
+  if (!postDocText(body)) return { error: 'Write something before posting.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('post_workflow_activity', {
+    p_workflow_id: workflowId,
+    p_task_id: taskId,
+    p_body: body,
+  })
+  if (error) return { error: error.message }
+
   revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }
 }

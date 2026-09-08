@@ -21,6 +21,20 @@
  */
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/**
+ * An instant with its time of day — "8 Sep 2026, 14:32" — for a feed, where two
+ * posts on the same day need telling apart. The same conversion as
+ * formatNoteDate: local calendar parts of the instant, month from a fixed list,
+ * and a 24-hour clock so the runtime's locale cannot change what a test sees.
+ */
+export function formatNoteDateTime(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`
+}
+
 export function formatNoteDate(iso: string) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso

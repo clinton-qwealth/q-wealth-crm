@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
+import type { WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
 import { Card, Placeholder } from './ui'
 import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
@@ -35,11 +35,17 @@ export function WorkflowWorkspace({
   workflow: w,
   staff,
   tasks,
+  posts,
+  viewer,
 }: {
   workflow: WorkflowDetail
-  /** Active staff, for the owner and assignee pickers. Empty in a preview. */
+  /** Active staff, for the owner and assignee pickers and the @ menu. Empty in a preview. */
   staff: { id: string; name: string }[]
   tasks: WorkflowTask[]
+  /** Every post on the workflow, newest first. */
+  posts: WorkflowPost[]
+  /** The signed-in staff member — the author of anything posted from here. */
+  viewer: { id: string; name: string }
 }) {
   return (
     <>
@@ -83,7 +89,14 @@ export function WorkflowWorkspace({
 
       {/* Centre — the work itself: the tasks under this workflow */}
       <Column span={5}>
-        <WorkflowTasks workflowId={w.id} groupName={w.group_name} tasks={tasks} staff={staff} />
+        <WorkflowTasks
+          workflowId={w.id}
+          groupName={w.group_name}
+          tasks={tasks}
+          posts={posts}
+          staff={staff}
+          viewer={viewer}
+        />
       </Column>
 
       {/* Right — the notes filed under it */}

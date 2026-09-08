@@ -14,7 +14,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, saveWorkflowTaskDetails } =
+const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, saveWorkflowTaskDetails, postWorkflowActivity } =
   await import('@/app/(shell)/groups/actions')
 
 const form = (entries: Record<string, string>) => {
@@ -127,6 +127,48 @@ describe('saveWorkflowTaskDetails', () => {
     expect(await saveWorkflowTaskDetails(null, form({ task_id: 't1', comment: 'x' }))).toEqual({
       error: 'No such task, or not within your access',
     })
+  })
+})
+
+const DOC = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }] }
+
+describe('postWorkflowActivity', () => {
+  test('calls the post function with the workflow, the task and the document as given', async () => {
+    await postWorkflowActivity('w1', 't1', DOC)
+    expect(calls[0]).toEqual({ name: 'post_workflow_activity', args: { p_workflow_id: 'w1', p_task_id: 't1', p_body: DOC } })
+  })
+
+  test('a post on the workflow itself sends a null task', async () => {
+    await postWorkflowActivity('w1', null, DOC)
+    expect(calls[0].args).toMatchObject({ p_task_id: null })
+  })
+
+  test('the document is sent as a document — never serialised, never HTML', async () => {
+    await postWorkflowActivity('w1', 't1', DOC)
+    expect(typeof calls[0].args.p_body).toBe('object')
+  })
+
+  test('something that is not a document is refused before any call', async () => {
+    expect(await postWorkflowActivity('w1', 't1', '<p>hi</p>')).toEqual({ error: 'A post must be a document.' })
+    expect(await postWorkflowActivity('w1', 't1', { type: 'paragraph' })).toEqual({ error: 'A post must be a document.' })
+    expect(calls.length).toBe(0)
+  })
+
+  test('an empty document is refused before any call', async () => {
+    expect(await postWorkflowActivity('w1', 't1', { type: 'doc', content: [{ type: 'paragraph' }] })).toEqual({
+      error: 'Write something before posting.',
+    })
+    expect(calls.length).toBe(0)
+  })
+
+  test('no workflow is refused before any call', async () => {
+    expect(await postWorkflowActivity('', 't1', DOC)).toEqual({ error: 'No workflow selected.' })
+    expect(calls.length).toBe(0)
+  })
+
+  test('the database’s own message is returned', async () => {
+    failure = 'A post may not contain "heading"'
+    expect(await postWorkflowActivity('w1', 't1', DOC)).toEqual({ error: 'A post may not contain "heading"' })
   })
 })
 

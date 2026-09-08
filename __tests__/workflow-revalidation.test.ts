@@ -23,6 +23,7 @@ const {
   setWorkflowTaskStatus,
   setWorkflowTaskPriority,
   saveWorkflowTaskDetails,
+  postWorkflowActivity,
   startWorkflow,
 } = await import(
   '@/app/(shell)/groups/actions'
@@ -59,6 +60,11 @@ describe('a write revalidates every screen that shows it', () => {
    * same array the rows do — so the revalidation is what puts the saved values
    * behind it. Without this path the box would close over stale text.
    */
+  test('posting to a task refreshes the workflow whose page the feed is on', async () => {
+    await postWorkflowActivity('w1', 't1', { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }] })
+    expect(paths()).toContain('/workflows/w1')
+  })
+
   test('saving a task’s details refreshes the workflow whose page the panel is on', async () => {
     const fd = new FormData()
     fd.set('task_id', 't1')

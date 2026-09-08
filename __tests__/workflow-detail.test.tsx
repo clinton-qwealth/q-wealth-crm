@@ -77,8 +77,9 @@ const STAFF = [
 ]
 
 /** Every render goes through here so the staff list is not repeated. */
+const VIEWER = { id: 's1', name: 'Sarah Chen' }
 const show = (workflow: WorkflowDetail = card) =>
-  render(<WorkflowWorkspace workflow={workflow} staff={STAFF} tasks={[]} />)
+  render(<WorkflowWorkspace workflow={workflow} staff={STAFF} tasks={[]} posts={[]} viewer={VIEWER} />)
 
 describe('the workflow detail page', () => {
   test('the workflow’s name is the page’s one h1, and it sits in the left card', () => {
@@ -148,6 +149,8 @@ describe('the workflow detail page', () => {
       <WorkflowWorkspace
         workflow={card}
         staff={STAFF}
+        posts={[]}
+        viewer={VIEWER}
         tasks={[
           {
             id: 't1', workflow_id: 'w1', task_type: 'checkbox', subject: 'Collect the authority',
