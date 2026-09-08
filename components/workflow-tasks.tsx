@@ -316,7 +316,7 @@ export function WorkflowTasks({
           // panel lands on the panel.
           if (e.target === panelRef.current) panelRef.current?.close()
         }}
-        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
+        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-lg lg:w-[40%] lg:min-w-lg lg:max-w-2xl"
       >
         {selected ? (
           <TaskPanel
@@ -456,7 +456,7 @@ function TaskPanel({
             {/* Who the work is for, set off from the marks by a real gap: these
                 are properties of the task, that is the client it belongs to.
                 Every task in this panel is for the same group — but the panel
-                covers 45% of the screen and hides the page behind it, so the
+                covers 40% of the screen and hides the page behind it, so the
                 one place the client's name is worth repeating is the one place
                 you cannot see it. */}
             <span className="ml-2 text-xs text-neutral-500">For {groupName}</span>
@@ -606,24 +606,24 @@ function TaskPanel({
               /* A READING COLUMN, not a full-width pane.
 
                  The composer and the posts are prose that people write and
-                 read, and this panel is 34rem to 46rem wide — so a full-bleed
-                 line runs to about 670px at the top end, well past the point
-                 where the eye loses its place returning to the left margin.
+                 read, so the column is capped rather than left to fill a panel
+                 that runs to 42rem. `max-w-xl` sets it at 36rem and `mx-auto`
+                 centres it, so the slack on a wide panel becomes even margins
+                 instead of an over-long line.
 
-                 TWO LEVERS, and they do different jobs, which is why both are
-                 here. `max-w-lg` caps the column at 32rem and `mx-auto`
-                 centres it, so on a wide panel the slack becomes even margins.
-                 `px-8` never comes off: it is the FLOOR for a narrow panel,
-                 where the cap is wider than the space available and does
-                 nothing. Padding alone would take the same 4rem bite at every
-                 size, cramping 34rem to fix 46rem.
+                 `px-6` never comes off: it is the FLOOR for a narrow panel,
+                 where the cap is wider than the space available and therefore
+                 does nothing at all. Padding alone would take the same bite at
+                 every size — cramping the 32rem panel to fix the 42rem one —
+                 which is why both levers are here rather than one.
 
-                 They are on SEPARATE elements deliberately. Tailwind's box
-                 model is border-box, so `max-w-lg px-8` together would cap the
-                 whole thing at 32rem and leave 28rem of content — the padding
-                 eating into the measure rather than sitting outside it. */
-              <div className="px-8 pb-6">
-                <div className="mx-auto w-full max-w-lg">
+                 They sit on SEPARATE elements deliberately. Tailwind's box
+                 model is border-box, so `max-w-xl px-6` on one element would
+                 cap the whole thing at 36rem and leave 33rem of content, the
+                 padding eating into the measure rather than sitting outside
+                 it. The column is a scale step inside the panel's: xl in 2xl. */
+              <div className="px-6 pb-6">
+                <div className="mx-auto w-full max-w-xl">
                   {/* The feed replaced the comment field on 8 September. A post
                       is what a comment was trying to be — who said what, when —
                       with the two things a single column could never hold: more
