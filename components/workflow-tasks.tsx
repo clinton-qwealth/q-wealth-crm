@@ -603,7 +603,13 @@ function TaskPanel({
             id: 'activity',
             label: 'Activity',
             panel: (
-              <div className="px-5 pb-6">
+              /* Inset further than the other tabs (px-5), on purpose. The
+                 composer and the posts are a column of prose that people read
+                 and write in, not a data table, and at the panel's wider sizes
+                 a full-bleed line is tiring to follow. The tab labels above
+                 keep the panel's own gutter; the reading column sits inside
+                 it. One value to change if it wants to be wider or narrower. */
+              <div className="px-8 pb-6">
                 {/* The feed replaced the comment field on 8 September. A post
                     is what a comment was trying to be — who said what, when —
                     with the two things a single column could never hold: more
