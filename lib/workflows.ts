@@ -108,11 +108,33 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
  */
 export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('workflow_posts_summary')
     .select('id, workflow_id, task_id, author_staff_id, author_name, body, body_text, created_at, mentioned, reactions, media')
     .eq('workflow_id', workflowId)
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
+
+  /*
+   * A FAILED READ MUST NEVER LOOK LIKE AN EMPTY FEED.
+   *
+   * This function used to discard `error` and return `data ?? []`, so a query
+   * PostgREST rejected came back as zero posts and the panel said "Nothing
+   * posted yet." That is the worst possible lie for this screen: an adviser
+   * reading a blank timeline concludes nothing was ever discussed about a
+   * client, when in truth the question was never answered.
+   *
+   * It cost real time on 8 September. The app began selecting `media` before
+   * the migration adding that column had been applied; every post on every
+   * workflow disappeared from the screen while sitting safely in the table,
+   * and nothing anywhere said why.
+   *
+   * So this throws. A workflow page that fails loudly is worth more than one
+   * that quietly under-reports what people said, and an unknown column is a
+   * deployment mistake to be seen rather than absorbed.
+   */
+  if (error) {
+    throw new Error(`The workflow's posts could not be read: ${error.message}`)
+  }
   return (data ?? []) as WorkflowPost[]
 }
