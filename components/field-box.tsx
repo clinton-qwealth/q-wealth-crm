@@ -160,14 +160,18 @@ export function Field({
   wrap?: boolean
   /** A real word standing in for an absent value — quieter, like the em-dash. */
   muted?: boolean
-  /** Take the whole row of the two-column grid. */
+  /**
+   * Take the whole row, whatever the grid's column count. `col-span-full`
+   * rather than `col-span-2`: the task panel's Details box is three across and
+   * the workflow's is two, and a description has to cross both.
+   */
   span?: boolean
   /** A mark before the value, e.g. an initials tile for a person. */
   leading?: ReactNode
 }) {
   const absent = value === null || value === undefined || value === ''
   return (
-    <div className={`min-w-0 ${span ? 'col-span-2' : ''}`}>
+    <div className={`min-w-0 ${span ? 'col-span-full' : ''}`}>
       <dt className="text-xs leading-snug text-neutral-500">{label}</dt>
       <dd
         className={`mt-0.5 flex items-center gap-2 text-sm ${

@@ -69,7 +69,9 @@ const STAFF = [
   { id: 's2', name: 'Clinton Hatcher' },
 ]
 const show = (tasks: WorkflowTask[]) =>
-  render(<WorkflowTasks workflowId="w1" tasks={tasks} staff={STAFF} />)
+  render(
+    <WorkflowTasks workflowId="w1" groupName="Testsmith Household" tasks={tasks} staff={STAFF} />,
+  )
 
 describe('the workflow’s tasks', () => {
   test('the header is the template name’s placeholder on the left and Add task on the right', () => {
@@ -233,13 +235,16 @@ describe('the workflow’s tasks', () => {
    * `useState(serverValue)` reads its argument once. See useServerState.
    */
   test('rows the server sends after mount replace the list, without a reload', () => {
-    const { rerender } = render(<WorkflowTasks workflowId="w1" tasks={[open]} staff={STAFF} />)
+    const { rerender } = render(
+      <WorkflowTasks workflowId="w1" groupName="Testsmith Household" tasks={[open]} staff={STAFF} />,
+    )
     expect(screen.queryByText('Lodge the claim')).toBeNull()
 
     // What a revalidation delivers: the same component, a new array.
     rerender(
       <WorkflowTasks
         workflowId="w1"
+        groupName="Testsmith Household"
         tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
         staff={STAFF}
       />,
@@ -434,7 +439,61 @@ describe('the task panel', () => {
     // The box precedes the strip in the DOM, i.e. the tabs are below it.
     expect(details.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const labels = [...details.querySelectorAll('dt')].map((dt) => dt.textContent)
-    expect(labels).toEqual(['Assigned to', 'Due date', 'Added', 'Description'])
+    expect(labels).toEqual(['Assigned to', 'Added', 'Due date', 'Description'])
+  })
+
+  test('the top row is three fields — assignee, added, due date — with the description below', async () => {
+    const { panel } = await open()
+    const details = boxOf(panel, 'Edit details')
+    const grid = details.querySelector('dl')!
+    // Three across, not two: this box is 607px, where a cell fits a real name.
+    expect(grid.className).toContain('grid-cols-3')
+    expect([...grid.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual([
+      'Assigned to',
+      'Added',
+      'Due date',
+      'Description',
+    ])
+    // The description crosses the whole grid, whatever the column count.
+    const description = [...grid.querySelectorAll('dt')].find((dt) => dt.textContent === 'Description')!
+    expect(description.parentElement!.className).toContain('col-span-full')
+    // ...and the first three do not.
+    for (const label of ['Assigned to', 'Added', 'Due date']) {
+      const dt = [...grid.querySelectorAll('dt')].find((d) => d.textContent === label)!
+      expect(dt.parentElement!.className).not.toContain('col-span-full')
+    }
+  })
+
+  /**
+   * Green means live work, and it is the WORKFLOW's rule: `in_progress` is
+   * green on a workflow's pill and `complete` is neutral. Until this changed,
+   * a done task was green while a completed workflow was grey — the two
+   * screens disagreeing about what green meant.
+   */
+  test('the status pill is green while open and neutral once it has stopped', async () => {
+    const pillOf = (panel: HTMLElement, text: string) =>
+      within(panel).getByText(text).closest('.ring-1')!
+
+    const a = await open(task({ id: 't7', subject: 'Live one', status: 'open' }))
+    expect(pillOf(a.panel, 'Open').className).toContain('emerald')
+
+    const b = await open(task({ id: 't7', subject: 'Done one', status: 'done' }))
+    const done = pillOf(b.panel, 'Done')
+    expect(done.className).toContain('neutral')
+    expect(done.className).not.toContain('emerald')
+
+    const c = await open(task({ id: 't7', subject: 'Dropped one', status: 'cancelled' }))
+    expect(pillOf(c.panel, 'Cancelled').className).toContain('neutral')
+  })
+
+  test('the marks row says which client group the work is for, after the priority', async () => {
+    const { panel } = await open()
+    const marks = within(panel).getByText('High').closest('div')!
+    expect(marks.textContent).toContain('For Testsmith Household')
+    // After the priority in the DOM, i.e. to its right, and set off by a gap.
+    const forWhom = within(panel).getByText('For Testsmith Household')
+    expect(within(panel).getByText('High').compareDocumentPosition(forWhom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(forWhom.className).toContain('ml-2')
   })
 
   test('the comment is in the Activity tab, not in the fields box', async () => {

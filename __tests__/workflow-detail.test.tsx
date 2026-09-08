@@ -137,6 +137,34 @@ describe('the workflow detail page', () => {
     expect(cols.reduce((a, b) => a + Number(b), 0)).toBe(12)
   })
 
+  /**
+   * The wiring, not the rendering: the panel names the CLIENT GROUP, and the
+   * only place that name exists is the workflow row the page fetched. A test
+   * that rendered the task list directly would pass with any string passed in.
+   */
+  test('a task opened from the page names the client group the workflow is for', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <WorkflowWorkspace
+        workflow={card}
+        staff={STAFF}
+        tasks={[
+          {
+            id: 't1', workflow_id: 'w1', task_type: 'checkbox', subject: 'Collect the authority',
+            description: null, comment: null, due_at: null, status: 'open', priority: 'medium',
+            assigned_to_staff_id: null, assigned_to_name: null, completed_at: null,
+            created_at: '2026-09-07T00:00:00Z', updated_at: '2026-09-07T00:00:00Z',
+          },
+        ]}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Open task: Collect the authority' }))
+    const panel = container.querySelector('dialog.qw-drawer')!
+    expect(panel.textContent).toContain('For Testsmith Household')
+    // Not the workflow's own name, which is the thing most easily passed by mistake.
+    expect(panel.textContent).not.toContain('For Annual review 2026')
+  })
+
   test('only the right column is still a placeholder; the centre is the task list', () => {
     const { container } = show()
     expect(screen.getByText(/File notes filed under this workflow go here/)).toBeTruthy()
@@ -167,11 +195,13 @@ describe('the workflow detail page', () => {
       'Due date',
       'Description',
     ])
-    // Owner and description take the full row; the dates share one.
-    expect(fields[0].className).toContain('col-span-2')
-    expect(fields[1].className).not.toContain('col-span-2')
-    expect(fields[2].className).not.toContain('col-span-2')
-    expect(fields[3].className).toContain('col-span-2')
+    /* Owner and description take the full row; the dates share one.
+       `col-span-full`, not `col-span-2`: the shared Field crosses whatever
+       grid it lands in, because the task panel's is three across. */
+    expect(fields[0].className).toContain('col-span-full')
+    expect(fields[1].className).not.toContain('col-span-full')
+    expect(fields[2].className).not.toContain('col-span-full')
+    expect(fields[3].className).toContain('col-span-full')
     expect(grid.textContent).toContain('Sarah Chen')
     expect(grid.textContent).toContain('6 Jul 2026')
     expect(grid.textContent).toContain('30 Sep 2026')
@@ -205,7 +235,7 @@ describe('the workflow detail page', () => {
     const fields = [...container.querySelectorAll('form dl > div')] as HTMLElement[]
     const last = fields.at(-1)!
     expect(last.querySelector('dt')!.textContent).toBe('Description')
-    expect(last.className).toContain('col-span-2')
+    expect(last.className).toContain('col-span-full')
     expect(last.textContent).toContain('Refresh the fact find')
   })
 

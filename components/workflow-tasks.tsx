@@ -10,12 +10,14 @@ import {
 } from '@/app/(shell)/groups/actions'
 import {
   PRIORITIES,
+  TASK_STATUS_LABEL,
   TASK_TYPE_LABEL,
   type Priority,
+  type TaskStatus,
   type WorkflowTask,
 } from '@/lib/workflow-board'
 import { dueState, formatCalendarDate, formatNoteDate, type DueState } from '@/lib/note-date'
-import { Pill, SHEET_SURFACE } from './ui'
+import { Pill, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
 import { Tabs } from './tabs'
 import { useServerState } from './use-server-state'
@@ -25,6 +27,27 @@ import { CalendarIcon, PlusIcon } from './icons'
 const INPUT =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
 const LABEL = 'text-xs font-medium text-neutral-600'
+
+/**
+ * Green for live work, neutral for work that has stopped.
+ *
+ * This is the same rule the WORKFLOW's status pill follows — `in_progress` is
+ * green there and `complete` is neutral — and until 8 September the task pill
+ * had it backwards: a done task was green while a completed workflow was grey,
+ * so the two screens disagreed about what green meant. An **open** task is the
+ * live one: it is the work still to do. A done task is finished, which is not a
+ * state to draw the eye to, and a cancelled one is not either.
+ *
+ * Done and cancelled are both neutral, and that is fine: the WORD carries the
+ * difference and the colour only reinforces it, the same rule the overdue chip
+ * follows. The green tick inside a task's checkbox is a different thing — that
+ * is the control's own accent for "ticked", not a status mark.
+ */
+const TASK_STATUS_TONE: Record<TaskStatus, PillTone> = {
+  open: 'success',
+  done: 'neutral',
+  cancelled: 'neutral',
+}
 
 type Staff = { id: string; name: string }
 
@@ -43,10 +66,13 @@ type Staff = { id: string; name: string }
  */
 export function WorkflowTasks({
   workflowId,
+  groupName,
   tasks: initial,
   staff,
 }: {
   workflowId: string
+  /** The client group the workflow is for. Named in the panel — see TaskPanel. */
+  groupName: string
   tasks: WorkflowTask[]
   staff: Staff[]
 }) {
@@ -292,6 +318,7 @@ export function WorkflowTasks({
           <TaskPanel
             task={selected}
             workflowId={workflowId}
+            groupName={groupName}
             staff={staff}
             onClose={() => panelRef.current?.close()}
           />
@@ -373,11 +400,13 @@ function DueChip({ dueAt, state }: { dueAt: string; state: DueState | null }) {
 function TaskPanel({
   task,
   workflowId,
+  groupName,
   staff,
   onClose,
 }: {
   task: WorkflowTask
   workflowId: string
+  groupName: string
   staff: Staff[]
   onClose: () => void
 }) {
@@ -407,13 +436,20 @@ function TaskPanel({
           </h2>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <Pill tone="neutral">{TASK_TYPE_LABEL[task.task_type]}</Pill>
-            {task.status === 'done' ? <Pill tone="success">Done</Pill> : null}
-            {task.status === 'cancelled' ? <Pill tone="neutral">Cancelled</Pill> : null}
-            {task.status === 'open' ? <Pill tone="neutral">Open</Pill> : null}
+            {/* One pill driven by a map rather than three conditionals, so a
+                fourth status could not arrive without a tone. */}
+            <Pill tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Pill>
             <span className="inline-flex items-center gap-1 text-xs text-neutral-600">
               <PriorityGlyph priority={task.priority} className="h-3.5 w-3.5" />
               {priority.label}
             </span>
+            {/* Who the work is for, set off from the marks by a real gap: these
+                are properties of the task, that is the client it belongs to.
+                Every task in this panel is for the same group — but the panel
+                covers 45% of the screen and hides the page behind it, so the
+                one place the client's name is worth repeating is the one place
+                you cannot see it. */}
+            <span className="ml-2 text-xs text-neutral-500">For {groupName}</span>
           </div>
         </div>
         <button
@@ -445,7 +481,15 @@ function TaskPanel({
           action={saveWorkflowTaskDetails}
           identity={identity}
           view={
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+            /* Three across the top row, then the description across all of it.
+               Three-across is the layout that FAILED on the workflow's own
+               field box, where the column is 248px and a cell is 72px — too
+               narrow for a real name. Here the box is 607px and a cell is
+               about 180px, which fits "Clinton Hatcher" (100px) and an overdue
+               chip with room to spare. The same layout, opposite verdict,
+               because the width is different — which is why it was measured
+               rather than assumed either time. */
+            <dl className="grid grid-cols-3 gap-x-4 gap-y-4">
               {/* "Unassigned" rather than an em-dash, the word the board's
                   filter and this box's own picker use for the same state. No
                   initials tile: the task row dropped its own on 8 September
@@ -455,11 +499,12 @@ function TaskPanel({
                 label="Assigned to"
                 value={task.assigned_to_name ?? 'Unassigned'}
                 muted={!task.assigned_to_name}
-                span
               />
-              {/* The same chip as the row, so the fact the reader clicked on is
-                  the fact they land on. A finished task shows its date in the
-                  quiet tone: it is not late, it is finished. */}
+              <Field label="Added" value={formatNoteDate(task.created_at)} />
+              {/* Rightmost, and the same chip as the row — so the fact the
+                  reader clicked on is the fact they land on. A finished task
+                  shows its date in the quiet tone: it is not late, it is
+                  finished. */}
               <Field
                 label="Due date"
                 value={
@@ -468,7 +513,6 @@ function TaskPanel({
                   ) : null
                 }
               />
-              <Field label="Added" value={formatNoteDate(task.created_at)} />
               <Field label="Description" value={task.description} wrap span />
             </dl>
           }

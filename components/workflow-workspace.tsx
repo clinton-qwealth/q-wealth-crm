@@ -83,7 +83,7 @@ export function WorkflowWorkspace({
 
       {/* Centre — the work itself: the tasks under this workflow */}
       <Column span={5}>
-        <WorkflowTasks workflowId={w.id} tasks={tasks} staff={staff} />
+        <WorkflowTasks workflowId={w.id} groupName={w.group_name} tasks={tasks} staff={staff} />
       </Column>
 
       {/* Right — the notes filed under it */}
