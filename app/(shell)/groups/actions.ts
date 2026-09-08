@@ -2,7 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { isPostDoc, isReactionKey, postDocText, type BoardColumn, type Priority, type TaskStatus } from '@/lib/workflow-board'
+import {
+  POST_MEDIA_BUCKET,
+  POST_MEDIA_SIZE_LIMIT,
+  isPostDoc,
+  isPostMediaType,
+  isReactionKey,
+  postDocText,
+  type BoardColumn,
+  type Priority,
+  type TaskStatus,
+} from '@/lib/workflow-board'
 import type { WorkflowStatus } from '@/lib/notes'
 
 export type CreateAccountState = { error: string } | { ok: true } | null
@@ -914,6 +924,92 @@ export async function togglePostReaction(
     p_reaction: reaction,
   })
   if (error) return { error: error.message }
+
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+export type PostMediaSlot = { id: string; storage_path: string }
+export type PostMediaState = { error: string } | PostMediaSlot
+
+/**
+ * Reserve a place for a file a post will carry, before its bytes are uploaded.
+ *
+ * ROW FIRST, THEN BYTES. The order is not an implementation detail: the storage
+ * policy that decides whether this staff member may write this path works by
+ * matching the path against a `workflow_post_media` row belonging to them. With
+ * no row there is nothing to check against, and the bucket becomes a place any
+ * staff member can write anything.
+ *
+ * The bytes themselves go straight from the browser to Storage rather than
+ * through this action. A Server Action's request body is capped at 1 MB by
+ * default, and routing ten megabytes through the server would send them over
+ * the wire twice for no gain — the upload is evaluated by the same RLS either
+ * way.
+ *
+ * The checks here are the cheap ones, so a 40 MB drop is refused before any
+ * round trip. `create_post_media()` checks them all again, and the bucket's own
+ * `file_size_limit` and `allowed_mime_types` are the rule.
+ */
+export async function createPostMedia(
+  workflowId: string,
+  file: { mime: string; size: number; name: string; width?: number | null; height?: number | null },
+): Promise<PostMediaState> {
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!file?.name?.trim()) return { error: 'That file has no name.' }
+  if (!isPostMediaType(file.mime)) {
+    return { error: 'A post can carry images, PDFs, Word, Excel, CSV and text files.' }
+  }
+  if (!(file.size > 0)) return { error: 'That file is empty.' }
+  if (file.size > POST_MEDIA_SIZE_LIMIT) {
+    return { error: `That file is larger than the ${POST_MEDIA_SIZE_LIMIT / 1024 / 1024} MB limit.` }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('create_post_media', {
+    p_workflow_id: workflowId,
+    p_mime_type: file.mime,
+    p_byte_size: file.size,
+    p_original_name: file.name.trim(),
+    p_width: file.width ?? null,
+    p_height: file.height ?? null,
+  })
+  if (error) return { error: error.message }
+
+  const row = data as { id?: string; storage_path?: string } | null
+  if (!row?.id || !row?.storage_path) {
+    return { error: 'The upload could not be started. Try again.' }
+  }
+  // No revalidation: nothing on the page reads this row until it is posted.
+  return { id: row.id, storage_path: row.storage_path }
+}
+
+/**
+ * Take an image off a post without altering the post.
+ *
+ * A post is append-only — a correction is a new post — so this does not touch
+ * it. The media row is marked redacted and the bytes are deleted; the feed then
+ * draws a sentence saying who removed it, in the place the picture was. A
+ * redaction is a STATE, which is the same reasoning that gave the reactions
+ * table the only other write-back under this feed.
+ *
+ * Two steps, in this order, and the order is what the storage policy relies on:
+ * the delete policy permits removing the bytes only for a row that is ALREADY
+ * marked. If the second step fails the row still reads as redacted, so the
+ * screen is correct and the bytes are what a sweep collects — the failure that
+ * leaves a stale row visible is the one worth avoiding, and this is not it.
+ */
+export async function redactPostMedia(workflowId: string, mediaId: string): Promise<NoteState> {
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!mediaId) return { error: 'No file selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data: path, error } = await supabase.rpc('redact_post_media', { p_id: mediaId })
+  if (error) return { error: error.message }
+
+  if (typeof path === 'string' && path) {
+    await supabase.storage.from(POST_MEDIA_BUCKET).remove([path])
+  }
 
   revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }

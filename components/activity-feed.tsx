@@ -1,24 +1,32 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { postWorkflowActivity, togglePostReaction } from '@/app/(shell)/groups/actions'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  createPostMedia,
+  postWorkflowActivity,
+  redactPostMedia,
+  togglePostReaction,
+} from '@/app/(shell)/groups/actions'
+import {
+  POST_MEDIA_BUCKET,
   REACTIONS,
   postDocText,
   toggleReaction,
   type PostDoc,
+  type PostMedia,
   type PostReaction,
   type ReactionKey,
   type WorkflowPost,
 } from '@/lib/workflow-board'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { formatNoteDateTime } from '@/lib/note-date'
 import { useServerState } from './use-server-state'
-import { PostComposer } from './post-composer'
+import { PostComposer, type PostUploader } from './post-composer'
 import { PostBody } from './post-body'
 import { InitialsTile } from './ui'
 
 type Staff = { id: string; name: string }
-type Viewer = { id: string; name: string }
+type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
 
 /**
  * The activity feed: a composer, then what has been posted, newest first.
@@ -56,6 +64,41 @@ export function ActivityFeed({
 
   const shown = taskId === null ? posts : posts.filter((p) => p.task_id === taskId)
 
+  /**
+   * How a picture gets out of the browser, in the two steps the database
+   * requires: reserve the row, then write the bytes to the path it names.
+   *
+   * `send` goes straight from here to Storage rather than through a Server
+   * Action. A Server Action's body is capped at 1 MB by default, and pushing
+   * ten megabytes through the server would put them on the wire twice for
+   * nothing — the upload is evaluated by the same RLS either way, as the same
+   * staff member, because the browser client uses the publishable key and this
+   * person's session.
+   */
+  const uploader = useMemo<PostUploader>(
+    () => ({
+      reserve: async (file, dimensions) => {
+        const reserved = await createPostMedia(workflowId, {
+          mime: file.type,
+          size: file.size,
+          name: file.name,
+          width: dimensions?.width ?? null,
+          height: dimensions?.height ?? null,
+        })
+        if ('error' in reserved) return reserved
+        return { id: reserved.id, path: reserved.storage_path }
+      },
+      send: async (path, file) => {
+        const supabase = createSupabaseBrowserClient()
+        const { error: failure } = await supabase.storage
+          .from(POST_MEDIA_BUCKET)
+          .upload(path, file, { contentType: file.type, upsert: false })
+        return failure ? { error: failure.message } : null
+      },
+    }),
+    [workflowId],
+  )
+
   async function post(doc: PostDoc): Promise<boolean> {
     const provisional: WorkflowPost & { pending: true } = {
       id: `pending-${Date.now()}`,
@@ -67,6 +110,9 @@ export function ActivityFeed({
       body_text: postDocText(doc),
       created_at: new Date().toISOString(),
       mentioned: [],
+      /* Empty, and the renderer expects that: an image in a post the server
+         has not accepted yet is drawn from the document alone. */
+      media: [],
       reactions: [],
       pending: true,
     }
@@ -92,6 +138,44 @@ export function ActivityFeed({
     return true
   }
 
+  /**
+   * Take a picture off a post.
+   *
+   * The post is not touched — it cannot be, and should not be: what somebody
+   * wrote stands. The upload is marked redacted and its bytes are deleted, and
+   * the feed then says so in the place the picture was. Optimistic like the
+   * reactions, and put back with the reason if the server refuses.
+   */
+  async function removeImage(postId: string, mediaId: string) {
+    const before = posts.find((p) => p.id === postId)?.media
+    if (!before) return
+    setError(null)
+    setPosts((ps) =>
+      ps.map((p) =>
+        p.id === postId
+          ? {
+              ...p,
+              media: p.media.map((m) =>
+                m.id === mediaId
+                  ? { ...m, redacted_at: new Date().toISOString(), redacted_by_name: viewer.name }
+                  : m,
+              ),
+            }
+          : p,
+      ),
+    )
+    let result: Awaited<ReturnType<typeof redactPostMedia>>
+    try {
+      result = await redactPostMedia(workflowId, mediaId)
+    } catch {
+      result = { error: 'The image could not be removed. Try again.' }
+    }
+    if (result && 'error' in result) {
+      setPosts((ps) => ps.map((p) => (p.id === postId ? { ...p, media: before } : p)))
+      setError(result.error)
+    }
+  }
+
   async function react(postId: string, key: ReactionKey) {
     const before = posts.find((p) => p.id === postId)?.reactions
     if (!before) return
@@ -112,7 +196,7 @@ export function ActivityFeed({
 
   return (
     <div className="flex flex-col gap-4">
-      <PostComposer staff={staff} onPost={post} />
+      <PostComposer staff={staff} onPost={post} uploader={uploader} />
 
       {error ? (
         <p role="alert" className="text-sm text-red-600">
@@ -139,9 +223,16 @@ export function ActivityFeed({
                     </span>
                   </div>
                   <div className={`mt-1 ${pending ? 'opacity-60' : ''}`}>
-                    <PostBody doc={p.body} mentioned={p.mentioned} />
+                    <PostBody doc={p.body} mentioned={p.mentioned} media={p.media} />
                   </div>
                   {/* A post that has not been accepted yet has nothing to react to. */}
+                  {pending ? null : (
+                    <RemovableImages
+                      media={p.media}
+                      canRemove={p.author_staff_id === viewer.id || viewer.canRemoveAnyImage}
+                      onRemove={(mediaId) => removeImage(p.id, mediaId)}
+                    />
+                  )}
                   {pending ? null : (
                     <Reactions
                       reactions={p.reactions}
@@ -159,6 +250,71 @@ export function ActivityFeed({
           Nothing posted yet. Updates, questions and decisions about this task go here, and will also
           appear on the workflow’s timeline.
         </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The way a picture comes back off a post.
+ *
+ * Offered only to the person who wrote the post and to an administrator,
+ * which is the same pair `redact_post_media()` will accept — a control that
+ * could only fail is worse than no control.
+ *
+ * TWO STEPS ON PURPOSE. The post survives, but the bytes do not: this is the
+ * one irreversible thing anywhere in the feed, and "Remove" landing under a
+ * mis-aimed click would be a poor way to discover that. Nothing is shown at
+ * all for a post whose pictures are all still there and unremovable, so an
+ * ordinary post carries no extra furniture.
+ */
+function RemovableImages({
+  media,
+  canRemove,
+  onRemove,
+}: {
+  media: PostMedia[]
+  canRemove: boolean
+  onRemove: (mediaId: string) => void
+}) {
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const removable = media.filter((m) => m.kind === 'image' && !m.redacted_at)
+  if (!canRemove || removable.length === 0) return null
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+      {removable.map((m) =>
+        confirming === m.id ? (
+          <span key={m.id} className="inline-flex items-center gap-2 text-xs text-neutral-600">
+            Remove {m.name} for good?
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(null)
+                onRemove(m.id)
+              }}
+              className="rounded px-1.5 py-0.5 font-medium text-red-600 outline-none hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-300"
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(null)}
+              className="rounded px-1.5 py-0.5 outline-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              Keep
+            </button>
+          </span>
+        ) : (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setConfirming(m.id)}
+            className="rounded text-xs text-neutral-400 underline decoration-dotted underline-offset-2 outline-none hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            {removable.length === 1 ? 'Remove image' : `Remove ${m.name}`}
+          </button>
+        ),
       )}
     </div>
   )

@@ -1,9 +1,9 @@
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
 import type { Editor } from '@tiptap/react'
-import { PostComposer } from '@/components/post-composer'
+import { PostComposer, type PostUploader } from '@/components/post-composer'
 import { POST_MARK_TYPES, POST_NODE_TYPES, type PostDoc } from '@/lib/workflow-board'
 
 const STAFF = [{ id: 's1', name: 'Sarah Chen' }, { id: 's2', name: 'Clinton Hatcher' }]
@@ -16,14 +16,30 @@ const STAFF = [{ id: 's1', name: 'Sarah Chen' }, { id: 's2', name: 'Clinton Hatc
  * when told the post was accepted.
  */
 type OnPost = (doc: PostDoc) => Promise<boolean>
-async function mount(onPost = vi.fn<OnPost>(async () => true)) {
+async function mount(onPost = vi.fn<OnPost>(async () => true), uploader?: PostUploader) {
   let editor: Editor | null = null
-  render(<PostComposer staff={STAFF} onPost={onPost} onReady={(e) => (editor = e)} />)
+  render(<PostComposer staff={STAFF} onPost={onPost} onReady={(e) => (editor = e)} uploader={uploader} />)
   await waitFor(() => expect(editor).not.toBeNull())
   return { editor: editor!, onPost }
 }
 
 const postButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Post' })
+
+/**
+ * Choosing a file, as the toolbar's hidden input receives it. The input has no
+ * label on purpose — it is not a control anyone should find by name — so it is
+ * reached through the DOM rather than by role.
+ */
+async function addPicture(
+  _editor: Editor,
+  file = new File(['bytes'], 'shot.png', { type: 'image/png' }),
+) {
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement
+  Object.defineProperty(input, 'files', { value: [file], configurable: true })
+  fireEvent.change(input)
+  // Let the reserve/insert/send chain get going before anything is asserted.
+  await Promise.resolve()
+}
 
 describe('the post composer', () => {
   test('starts empty, with a placeholder and Post disabled', async () => {
@@ -88,6 +104,11 @@ describe('the post composer', () => {
    * The editor's schema and the database's whitelist are the same list. The
    * editor may hold nothing the database refuses, and — now that everything
    * StarterKit ships is on — everything the database allows is reachable.
+   *
+   * `image` is on the list as of 8 September; `table`, `iframe` and `taskList`
+   * are not, and the point of this test is that adding one to the editor
+   * without adding it to the database's whitelist fails here rather than in a
+   * refusal after somebody has written a post.
    */
   test('the schema is exactly what the database allows: every node and mark, and nothing else', async () => {
     const { editor } = await mount()
@@ -95,7 +116,7 @@ describe('the post composer', () => {
     const marks = Object.keys(editor.schema.marks).sort()
     expect(nodes).toEqual([...POST_NODE_TYPES].sort())
     expect(marks).toEqual([...POST_MARK_TYPES].sort())
-    for (const banned of ['table', 'image', 'iframe', 'taskList']) expect(nodes).not.toContain(banned)
+    for (const banned of ['table', 'iframe', 'taskList']) expect(nodes).not.toContain(banned)
   })
 
   test('a heading is level 1, 2 or 3 — the editor cannot make a level 4', async () => {
@@ -149,7 +170,7 @@ describe('the post composer', () => {
     expect(labels).toEqual([
       'Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code',
       'Heading 1', 'Heading 2', 'Heading 3',
-      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule',
+      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule', 'Image',
       'Link', 'Undo', 'Redo',
     ])
     expect(screen.getByRole('button', { name: 'Undo' }).getAttribute('aria-disabled')).toBe('true')
@@ -215,5 +236,161 @@ describe('the post composer', () => {
     editor.commands.insertContent(' :t')
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  /**
+   * Pictures.
+   *
+   * The invariant under test throughout is that a document may hold an
+   * upload's ID and nothing that looks like an address, and that it never
+   * names bytes which have not arrived.
+   */
+  describe('pictures', () => {
+    /**
+     * jsdom neither loads images nor hands out blob URLs, so both are stubbed:
+     * without the first, `measure()` waits out its own 600ms cap in every test
+     * here, and without the second there is no preview to show. The stub
+     * reports a size, so the dimensions the composer passes to `reserve` are
+     * exercised rather than skipped.
+     */
+    beforeEach(() => {
+      vi.stubGlobal(
+        'Image',
+        class {
+          naturalWidth = 800
+          naturalHeight = 600
+          onload: (() => void) | null = null
+          onerror: (() => void) | null = null
+          set src(_value: string) {
+            queueMicrotask(() => this.onload?.())
+          }
+        },
+      )
+      URL.createObjectURL = vi.fn(() => 'blob:preview')
+      URL.revokeObjectURL = vi.fn()
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    /**
+     * Until an `image` node existed, a pasted `<img>` was dropped because the
+     * schema had nothing to parse one into — the safety came for free. It does
+     * not any more, so this is the test that a loose `parseHTML` cannot slip
+     * in: an image from a web page, with a real address on it, must still
+     * produce nothing.
+     */
+    test('an img with a src is not a picture — pasted markup produces no node', async () => {
+      const { editor } = await mount()
+      editor.commands.setContent(
+        '<p>before</p><img src="https://evil.example/pixel.gif"><img src="data:image/gif;base64,R0lGOD"><p>after</p>',
+      )
+      const types = editor.getJSON().content!.map((n) => n.type)
+      expect(types).not.toContain('image')
+      expect(JSON.stringify(editor.getJSON())).not.toContain('evil.example')
+      expect(JSON.stringify(editor.getJSON())).not.toContain('data:image')
+    })
+
+    /** Our own marker round-trips, so copying a picture within the editor keeps it. */
+    test('our own marker parses back, but only when it carries a real id', async () => {
+      const { editor } = await mount()
+      editor.commands.setContent(
+        '<img data-post-media="3f1a2b4c-5d6e-4f70-8901-23456789abcd" data-name="shot.png">',
+      )
+      expect(editor.getJSON().content![0]).toMatchObject({
+        type: 'image',
+        attrs: { id: '3f1a2b4c-5d6e-4f70-8901-23456789abcd', name: 'shot.png' },
+      })
+
+      editor.commands.setContent('<img data-post-media="not-an-id" data-name="shot.png">')
+      expect(JSON.stringify(editor.getJSON())).not.toContain('image')
+    })
+
+    test('the Image button is dead without an uploader', async () => {
+      await mount()
+      expect(screen.getByRole('button', { name: 'Image' }).getAttribute('aria-disabled')).toBe('true')
+    })
+
+    /**
+     * The two steps the database requires, in order: the row is reserved
+     * first, and only then may the bytes go to the path it named. The picture
+     * appears BETWEEN them, so a slow upload is visible — and Post stays
+     * disabled until the bytes land, because a document naming bytes that
+     * never arrived is a post the database would refuse.
+     */
+    test('reserves, shows the picture, sends the bytes — and Post waits for them', async () => {
+      let release: (v: null) => void = () => {}
+      const uploader = {
+        reserve: vi.fn(async () => ({ id: '3f1a2b4c-5d6e-4f70-8901-23456789abcd', path: 'w1/3f1a2b4c-5d6e-4f70-8901-23456789abcd' })),
+        send: vi.fn(() => new Promise<null>((r) => { release = r })),
+      }
+      const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
+
+      void addPicture(editor)
+
+      // The picture is in the document while the bytes are still going.
+      await waitFor(() => expect(JSON.stringify(editor.getJSON())).toContain('3f1a2b4c'))
+      expect(uploader.reserve).toHaveBeenCalledTimes(1)
+      // The picture's own pixel size goes with the reservation, so the feed can
+      // reserve its shape and not jump as it loads.
+      expect(uploader.reserve).toHaveBeenCalledWith(expect.anything(), { width: 800, height: 600 })
+      await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Adding a picture'))
+      expect(postButton().disabled).toBe(true)
+      expect(uploader.send).toHaveBeenCalledWith('w1/3f1a2b4c-5d6e-4f70-8901-23456789abcd', expect.anything())
+
+      release(null)
+      await waitFor(() => expect(postButton().disabled).toBe(false))
+      expect(screen.queryByRole('status')).toBeNull()
+      // The node carries the id and no address of any kind.
+      const node = editor.getJSON().content!.find((n) => n.type === 'image')!
+      expect(Object.keys(node.attrs!).sort()).toEqual(['alt', 'id', 'name', 'width'])
+    })
+
+    /**
+     * A failed upload takes its node back out. Leaving it in would only move
+     * the failure to the moment somebody pressed Post, and the writer would
+     * lose the picture either way — but this way they keep their words and are
+     * told why.
+     */
+    test('bytes that do not arrive take the picture back out, and say so', async () => {
+      const uploader = {
+        reserve: vi.fn(async () => ({ id: '3f1a2b4c-5d6e-4f70-8901-23456789abcd', path: 'w1/x' })),
+        send: vi.fn(async () => ({ error: 'The network gave up.' })),
+      }
+      const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
+      editor.commands.setContent('<p>Keep me</p>')
+
+      await addPicture(editor)
+
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('The network gave up.'))
+      expect(JSON.stringify(editor.getJSON())).not.toContain('3f1a2b4c')
+      expect(editor.getText()).toContain('Keep me')
+    })
+
+    test('a refused reservation never puts a picture in the document', async () => {
+      const uploader = {
+        reserve: vi.fn(async () => ({ error: 'That file is larger than the 10 MB limit.' })),
+        send: vi.fn(async () => null),
+      }
+      const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
+
+      await addPicture(editor)
+
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('10 MB limit'))
+      expect(uploader.send).not.toHaveBeenCalled()
+      expect(JSON.stringify(editor.getJSON())).not.toContain('image')
+    })
+
+    /** The client's copy of the bucket's type list, so a refusal costs no round trip. */
+    test('a kind of file a post cannot carry is refused without asking the server', async () => {
+      const uploader = {
+        reserve: vi.fn(async () => ({ id: 'x', path: 'y' })),
+        send: vi.fn(async () => null),
+      }
+      const { editor } = await mount(vi.fn<OnPost>(async () => true), uploader)
+
+      await addPicture(editor, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }))
+
+      await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('logo.svg'))
+      expect(uploader.reserve).not.toHaveBeenCalled()
+    })
   })
 })

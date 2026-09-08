@@ -276,10 +276,18 @@ export type WorkflowTask = {
  * built-in blocks — heading, blockquote, codeBlock, horizontalRule — and the
  * underline mark were switched on; the database's list grew in the same
  * change, and a heading may be level 1, 2 or 3 and nothing else.
+ *
+ * It grew again on 8 September to admit `image`, which is the first node that
+ * is not typed. An image carries an ID from `workflow_post_media` and NOTHING
+ * RESEMBLING AN ADDRESS — a `src` would let a document point at any host on
+ * the internet, which is the class of thing this closed list exists to
+ * prevent. `post_workflow_activity()` refuses an image node carrying one
+ * outright rather than scrubbing it, because nothing in this system produces
+ * one.
  */
 export const POST_NODE_TYPES = [
   'doc', 'paragraph', 'text', 'hardBreak', 'mention', 'bulletList', 'orderedList', 'listItem',
-  'heading', 'blockquote', 'codeBlock', 'horizontalRule',
+  'heading', 'blockquote', 'codeBlock', 'horizontalRule', 'image',
 ] as const
 export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'underline'] as const
 /** A heading in a post is one of three sizes; the renderer draws them under the panel's own headings. */
@@ -295,6 +303,68 @@ export type PostNode = {
 }
 export type PostDoc = { type: 'doc'; content?: PostNode[] }
 export type PostMention = { staff_id: string; full_name: string }
+
+/* ---- the bytes a post carries ----------------------------------------- */
+
+/**
+ * What a post may carry, and how big.
+ *
+ * The same three facts live in `post_media_size_limit()`,
+ * `post_media_mime_types()` and `post_media_kind()` in the database, and THOSE
+ * are the rule — they are the bucket's own settings, so Storage refuses a
+ * wrong-typed or oversized body before a policy is even consulted. These
+ * copies exist so a 40 MB drop is a sentence in the composer instead of a
+ * round trip, and a test holds the two lists to each other.
+ *
+ * SVG and HTML are absent on purpose. Both can carry script, and drawing
+ * either would undo the rule the entire document model exists to enforce.
+ */
+export const POST_MEDIA_BUCKET = 'post-media'
+export const POST_MEDIA_SIZE_LIMIT = 10 * 1024 * 1024
+export const POST_MEDIA_MIME_TYPES = [
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv', 'text/plain',
+] as const
+/** Drawn in the post, or offered as a chip to download. Derived, never taken from a client. */
+export function postMediaKind(mime: string): 'image' | 'file' {
+  return mime.startsWith('image/') ? 'image' : 'file'
+}
+export function isPostMediaType(mime: string): mime is (typeof POST_MEDIA_MIME_TYPES)[number] {
+  return (POST_MEDIA_MIME_TYPES as readonly string[]).includes(mime)
+}
+/** What the composer may drag an image to, and what the database will accept. */
+export const POST_IMAGE_MIN_WIDTH = 40
+export const POST_IMAGE_MAX_WIDTH = 2000
+
+/**
+ * A file on a post, as the feed's view reports it.
+ *
+ * The document names only the id; everything else comes from here, so a
+ * filename corrected in the row shows through on a post that cannot itself be
+ * edited. `redacted_at` set means the bytes are gone: the post is unchanged and
+ * the screen says who removed it, which is the whole point of redacting rather
+ * than deleting.
+ */
+export type PostMedia = {
+  id: string
+  kind: 'image' | 'file'
+  name: string
+  mime_type: string
+  byte_size: number
+  /** Images only, measured by the browser: enough to reserve the space so the feed does not jump. */
+  width: number | null
+  height: number | null
+  redacted_at: string | null
+  redacted_by_name: string | null
+}
+
+/** Where the app serves a post's bytes from. The route re-checks access and signs a short-lived URL. */
+export function postMediaUrl(id: string): string {
+  return `/api/post-media/${id}`
+}
 
 export type WorkflowPost = {
   id: string
@@ -312,6 +382,8 @@ export type WorkflowPost = {
   mentioned: PostMention[]
   /** Reactions grouped by kind, in the order each kind first appeared, each naming who gave it. */
   reactions: PostReaction[]
+  /** The files the post carries, by upload order. Empty on a post still being accepted. */
+  media: PostMedia[]
 }
 
 /**
@@ -375,6 +447,10 @@ export function postDocText(doc: PostDoc): string {
   const walk = (n: PostNode) => {
     if (n.type === 'text') out.push(n.text ?? '')
     else if (n.type === 'mention') out.push('@' + String(n.attrs?.label ?? ''))
+    /* A newline AND its words, in that order: an image emits text where every
+       other block emits a boundary, so without the newline its alt text runs
+       into the paragraph above — "we saw thisscreenshot.png". */
+    else if (n.type === 'image') out.push('\n' + imageWords(n))
     else if (POST_TEXT_BLOCKS.has(n.type)) out.push('\n')
     for (const c of n.content ?? []) walk(c)
   }
@@ -382,11 +458,35 @@ export function postDocText(doc: PostDoc): string {
   return out.join('').replace(/\n{2,}/g, '\n').trim()
 }
 
+/** What an image reads as: its alt text, else its filename, else the word. */
+function imageWords(n: PostNode): string {
+  const alt = String(n.attrs?.alt ?? '').trim()
+  const name = String(n.attrs?.name ?? '').trim()
+  return alt || name || 'Image'
+}
+
 /** Every staff id a document mentions, once each. */
 export function postMentionIds(doc: PostDoc): string[] {
   const ids = new Set<string>()
   const walk = (n: PostNode) => {
     if (n.type === 'mention' && typeof n.attrs?.id === 'string') ids.add(n.attrs.id)
+    for (const c of n.content ?? []) walk(c)
+  }
+  for (const c of doc.content ?? []) walk(c)
+  return [...ids]
+}
+
+/**
+ * Every upload a document names, once each.
+ *
+ * The composer uses this to know whether anything in the document is still
+ * being uploaded — a post whose document names bytes that never arrived is a
+ * broken post, so Post stays disabled until every one of these has landed.
+ */
+export function postMediaIds(doc: PostDoc): string[] {
+  const ids = new Set<string>()
+  const walk = (n: PostNode) => {
+    if (n.type === 'image' && typeof n.attrs?.id === 'string') ids.add(n.attrs.id)
     for (const c of n.content ?? []) walk(c)
   }
   for (const c of doc.content ?? []) walk(c)

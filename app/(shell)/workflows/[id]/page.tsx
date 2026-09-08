@@ -35,7 +35,15 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       staff={staffChoices}
       tasks={tasks}
       posts={posts}
-      viewer={{ id: staff.id, name: staff.full_name }}
+      /* `manage_staff` is what current_staff_has('admin') reads, so this is
+         the same question the database asks when it decides who may take an
+         image off somebody else's post. Sent down so the feed offers the
+         control only where it would succeed. */
+      viewer={{
+        id: staff.id,
+        name: staff.full_name,
+        canRemoveAnyImage: staff.access_profiles.manage_staff,
+      }}
     />
   )
 }

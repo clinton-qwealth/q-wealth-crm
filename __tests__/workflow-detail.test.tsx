@@ -30,7 +30,16 @@ vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
   redirect: () => { throw REDIRECT },
 }))
-vi.mock('@/lib/staff', () => ({ getCurrentStaff: vi.fn(async () => ({ id: 's1', full_name: 'A Adviser' })) }))
+/* The access profile is part of the shape, not decoration: getCurrentStaff()
+   returns null rather than a staff member without one, and the page reads
+   manage_staff from it to decide who may take an image off a post. */
+vi.mock('@/lib/staff', () => ({
+  getCurrentStaff: vi.fn(async () => ({
+    id: 's1',
+    full_name: 'A Adviser',
+    access_profiles: { manage_staff: false },
+  })),
+}))
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => ({
     from: (table: string) => {
@@ -77,7 +86,7 @@ const STAFF = [
 ]
 
 /** Every render goes through here so the staff list is not repeated. */
-const VIEWER = { id: 's1', name: 'Sarah Chen' }
+const VIEWER = { id: 's1', name: 'Sarah Chen', canRemoveAnyImage: false }
 const show = (workflow: WorkflowDetail = card) =>
   render(<WorkflowWorkspace workflow={workflow} staff={STAFF} tasks={[]} posts={[]} viewer={VIEWER} />)
 

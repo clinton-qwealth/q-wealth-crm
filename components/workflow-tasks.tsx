@@ -53,7 +53,7 @@ const TASK_STATUS_TONE: Record<TaskStatus, PillTone> = {
 
 type Staff = { id: string; name: string }
 /** The signed-in staff member, for the optimistic entry a post makes before the server answers. */
-type Viewer = { id: string; name: string }
+type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
 
 /**
  * The centre column of the workflow detail page: the work itself, as a list of

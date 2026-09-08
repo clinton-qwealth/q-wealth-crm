@@ -45,6 +45,7 @@ const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   created_at: '2026-09-08T04:00:00Z',
   mentioned: [],
   reactions: [],
+  media: [],
   ...o,
 })
 
@@ -54,7 +55,7 @@ const onOtherTask = post({ id: 'p3', task_id: 't2', body: { type: 'doc', content
 const onWorkflow = post({ id: 'p4', task_id: null, body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Whole workflow' }] }] } })
 
 const STAFF = [{ id: 's1', name: 'Sarah Chen' }, { id: 's2', name: 'Clinton Hatcher' }]
-const VIEWER = { id: 's2', name: 'Clinton Hatcher' }
+const VIEWER = { id: 's2', name: 'Clinton Hatcher', canRemoveAnyImage: false }
 const show = (posts: WorkflowPost[], taskId: string | null = 't1') =>
   render(<ActivityFeed workflowId="w1" taskId={taskId} posts={posts} staff={STAFF} viewer={VIEWER} />)
 

@@ -45,7 +45,7 @@ export function WorkflowWorkspace({
   /** Every post on the workflow, newest first. */
   posts: WorkflowPost[]
   /** The signed-in staff member — the author of anything posted from here. */
-  viewer: { id: string; name: string }
+  viewer: { id: string; name: string; canRemoveAnyImage: boolean }
 }) {
   return (
     <>

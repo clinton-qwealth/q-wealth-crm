@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { isPostDoc, postDocText, postMentionIds, type PostDoc } from '@/lib/workflow-board'
+import {
+  POST_MEDIA_SIZE_LIMIT,
+  isPostDoc,
+  isPostMediaType,
+  postDocText,
+  postMediaIds,
+  postMediaKind,
+  postMentionIds,
+  type PostDoc,
+} from '@/lib/workflow-board'
 import { formatNoteDateTime } from '@/lib/note-date'
 
 /**
@@ -68,6 +77,38 @@ describe('postDocText', () => {
       postDocText({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'One' }, { type: 'hardBreak' }, { type: 'text', text: 'two' }] }, { type: 'paragraph', content: [{ type: 'text', text: 'Three' }] }] }),
     ).toBe('One\ntwo\nThree')
   })
+
+  /**
+   * An image reads as its description, falling back to its filename. NOT
+   * cosmetic: `workflow_posts_body_not_blank` is a table check constraint on
+   * the generated column, so a picture that contributed nothing would make an
+   * image-only post impossible to store at all.
+   */
+  test('an image reads as its description, else its filename, else the word', () => {
+    const image = (attrs: Record<string, unknown>): PostDoc => ({ type: 'doc', content: [{ type: 'image', attrs }] })
+    expect(postDocText(image({ id: 'm1', name: 'shot.png', alt: 'The balance screen' }))).toBe('The balance screen')
+    expect(postDocText(image({ id: 'm1', name: 'shot.png', alt: null }))).toBe('shot.png')
+    expect(postDocText(image({ id: 'm1', name: '  ', alt: '  ' }))).toBe('Image')
+  })
+
+  /**
+   * The case the database's newline-before-the-words exists for. An image
+   * emits TEXT where every other block emits a boundary, so without its own
+   * leading newline it runs into the paragraph above it.
+   */
+  test('an image after a paragraph starts a new line rather than running on', () => {
+    expect(
+      postDocText({ type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'We saw this' }] },
+        { type: 'image', attrs: { id: 'm1', name: 'shot.png', alt: null } },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Thoughts?' }] },
+      ] }),
+    ).toBe('We saw this\nshot.png\nThoughts?')
+  })
+
+  test('an image alone is enough for a post — unlike a rule, it is not wordless', () => {
+    expect(postDocText({ type: 'doc', content: [{ type: 'image', attrs: { id: 'm1', name: 'shot.png' } }] })).toBe('shot.png')
+  })
 })
 
 describe('isPostDoc', () => {
@@ -89,6 +130,47 @@ describe('postMentionIds', () => {
         { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: { id: 'b', label: 'B' } }] }] }] },
       ] }),
     ).toEqual(['a', 'b'])
+  })
+})
+
+describe('postMediaIds', () => {
+  test('every upload the document names, once, however deep', () => {
+    expect(
+      postMediaIds({ type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Look' }] },
+        { type: 'image', attrs: { id: 'm1', name: 'a.png' } },
+        { type: 'image', attrs: { id: 'm1', name: 'a.png' } },
+        { type: 'blockquote', content: [{ type: 'image', attrs: { id: 'm2', name: 'b.png' } }] },
+      ] }),
+    ).toEqual(['m1', 'm2'])
+  })
+
+  test('a document with no pictures names none', () => {
+    expect(postMediaIds({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hi' }] }] })).toEqual([])
+  })
+})
+
+/**
+ * The client's copies of the bucket's own rules. The database is the
+ * authority — these exist so a 40 MB drop is a sentence in the composer rather
+ * than a round trip — and this holds them to the same closed list.
+ */
+describe('what a post may carry', () => {
+  test('images, PDFs and Office documents; NOT svg or html, which can carry script', () => {
+    expect(isPostMediaType('image/png')).toBe(true)
+    expect(isPostMediaType('application/pdf')).toBe(true)
+    expect(isPostMediaType('image/svg+xml')).toBe(false)
+    expect(isPostMediaType('text/html')).toBe(false)
+    expect(isPostMediaType('application/x-msdownload')).toBe(false)
+  })
+
+  test('the kind is derived from the mime type, never taken from a client', () => {
+    expect(postMediaKind('image/webp')).toBe('image')
+    expect(postMediaKind('application/pdf')).toBe('file')
+  })
+
+  test('the limit matches the bucket’s file_size_limit', () => {
+    expect(POST_MEDIA_SIZE_LIMIT).toBe(10 * 1024 * 1024)
   })
 })
 

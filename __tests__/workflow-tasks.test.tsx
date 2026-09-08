@@ -68,7 +68,7 @@ const STAFF = [
   { id: 's1', name: 'Sarah Chen' },
   { id: 's2', name: 'Clinton Hatcher' },
 ]
-const VIEWER = { id: 's2', name: 'Clinton Hatcher' }
+const VIEWER = { id: 's2', name: 'Clinton Hatcher', canRemoveAnyImage: false }
 const show = (tasks: WorkflowTask[]) =>
   render(
     <WorkflowTasks

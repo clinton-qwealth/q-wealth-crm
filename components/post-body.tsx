@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { PostDoc, PostMark, PostMention, PostNode } from '@/lib/workflow-board'
+import { postMediaUrl, type PostDoc, type PostMark, type PostMedia, type PostMention, type PostNode } from '@/lib/workflow-board'
 
 /**
  * Draws a post's document.
@@ -14,19 +14,43 @@ import type { PostDoc, PostMark, PostMention, PostNode } from '@/lib/workflow-bo
  * back to the label as typed. The document keeps what was written; the screen
  * says who that is today.
  *
+ * An image is the same idea taken further: the document holds ONLY an upload's
+ * id, and everything drawn — the filename, the dimensions to reserve, whether
+ * it has since been removed — comes from `media`. So a post that cannot itself
+ * be edited still shows a corrected filename, and a redacted picture becomes a
+ * sentence rather than a broken image and a request that would fail.
+ *
  * A post's headings are drawn as h4, h5 and h6. A post sits inside a panel
  * whose own headings are h2 and h3, and a comment must not be able to insert
  * itself above them in the page's outline: "Heading 1" in a post is the
  * largest of three sizes of emphasis, not the page's title.
  */
-export function PostBody({ doc, mentioned = [] }: { doc: PostDoc; mentioned?: PostMention[] }) {
-  const names = new Map(mentioned.map((m) => [m.staff_id, m.full_name]))
+export function PostBody({
+  doc,
+  mentioned = [],
+  media = [],
+}: {
+  doc: PostDoc
+  mentioned?: PostMention[]
+  media?: PostMedia[]
+}) {
+  const ctx: Context = {
+    names: new Map(mentioned.map((m) => [m.staff_id, m.full_name])),
+    media: new Map(media.map((m) => [m.id, m])),
+  }
   return (
     <div className="qw-post text-sm leading-relaxed text-neutral-800">
-      {(doc.content ?? []).map((n, i) => renderNode(n, i, names))}
+      {(doc.content ?? []).map((n, i) => renderNode(n, i, ctx))}
     </div>
   )
 }
+
+/**
+ * What the walk needs beyond the node itself: the people a post names and the
+ * files it carries, both resolved to what they are TODAY. One object rather
+ * than a growing parameter list, because the document model grows.
+ */
+type Context = { names: Map<string, string>; media: Map<string, PostMedia> }
 
 const SAFE_HREF = /^https?:\/\//i
 
@@ -38,8 +62,9 @@ function headingTag(level: unknown): 'h4' | 'h5' | 'h6' {
   return 'h4'
 }
 
-function renderNode(node: PostNode, key: number, names: Map<string, string>): ReactNode {
-  const children = (node.content ?? []).map((c, i) => renderNode(c, i, names))
+function renderNode(node: PostNode, key: number, ctx: Context): ReactNode {
+  const { names } = ctx
+  const children = (node.content ?? []).map((c, i) => renderNode(c, i, ctx))
   switch (node.type) {
     case 'paragraph':
       return <p key={key}>{children.length ? children : <br />}</p>
@@ -69,6 +94,8 @@ function renderNode(node: PostNode, key: number, names: Map<string, string>): Re
       )
     case 'horizontalRule':
       return <hr key={key} />
+    case 'image':
+      return renderImage(node, key, ctx)
     case 'mention': {
       const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
       const label = names.get(id) ?? (typeof node.attrs?.label === 'string' ? node.attrs.label : 'someone')
@@ -85,6 +112,60 @@ function renderNode(node: PostNode, key: number, names: Map<string, string>): Re
     default:
       return null
   }
+}
+
+/**
+ * A picture.
+ *
+ * The document says which upload, and only that. Everything else is the row:
+ * the filename to fall back on for a description, the pixel dimensions so the
+ * browser reserves the right shape before the bytes arrive, and the redaction.
+ *
+ * A row that is not there is not an error — it is a post the server has not
+ * accepted yet, drawn optimistically from the document alone — so the picture
+ * is still drawn, just without a reserved shape.
+ */
+function renderImage(node: PostNode, key: number, ctx: Context): ReactNode {
+  const id = typeof node.attrs?.id === 'string' ? node.attrs.id : ''
+  if (!id) return null
+  const row = ctx.media.get(id)
+  const name = typeof node.attrs?.name === 'string' ? node.attrs.name : ''
+  const alt = typeof node.attrs?.alt === 'string' && node.attrs.alt ? node.attrs.alt : row?.name || name
+  const width = typeof node.attrs?.width === 'number' ? node.attrs.width : null
+
+  /* Removed, and the post left exactly as it was written. Nothing is
+     requested: the bytes are gone, and a broken image icon would say only that
+     something failed rather than that someone decided. */
+  if (row?.redacted_at) {
+    return (
+      <p
+        key={key}
+        className="my-2 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2 text-xs text-neutral-500"
+      >
+        Image removed{row.redacted_by_name ? ` by ${row.redacted_by_name}` : ''}
+      </p>
+    )
+  }
+
+  return (
+    <span key={key} className="my-2 block">
+      {/* eslint-disable-next-line @next/next/no-img-element -- the route this
+          points at re-checks access and redirects to a short-lived signed URL,
+          which next/image's loader cannot follow on the client's behalf. */}
+      <img
+        src={postMediaUrl(id)}
+        alt={alt}
+        // The natural size, so the aspect ratio is known before the bytes
+        // land and the feed does not jump as pictures fill in.
+        width={row?.width ?? undefined}
+        height={row?.height ?? undefined}
+        loading="lazy"
+        decoding="async"
+        style={width ? { width } : undefined}
+        className="block h-auto max-w-full rounded-md border border-neutral-200"
+      />
+    </span>
+  )
 }
 
 /** Marks nest from the inside out, so a bold link is a link around bold text. */

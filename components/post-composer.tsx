@@ -1,18 +1,102 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
+import {
+  EditorContent,
+  NodeViewWrapper,
+  ReactNodeViewRenderer,
+  useEditor,
+  useEditorState,
+  type NodeViewProps,
+} from '@tiptap/react'
 import type { Editor } from '@tiptap/react'
-import { Extension, mergeAttributes, type ChainedCommands } from '@tiptap/core'
+import { Extension, Node, mergeAttributes, type ChainedCommands } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
 import Heading from '@tiptap/extension-heading'
 import Mention from '@tiptap/extension-mention'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
-import { POST_HEADING_LEVELS, type PostDoc } from '@/lib/workflow-board'
+import {
+  POST_HEADING_LEVELS,
+  POST_IMAGE_MAX_WIDTH,
+  POST_IMAGE_MIN_WIDTH,
+  POST_MEDIA_SIZE_LIMIT,
+  isPostMediaType,
+  postMediaKind,
+  postMediaUrl,
+  type PostDoc,
+} from '@/lib/workflow-board'
 import { searchEmoji, type Emoji } from '@/lib/emoji'
 
 type Staff = { id: string; name: string }
+
+/**
+ * How bytes get out of the browser, in the two steps the database requires.
+ *
+ * ROW FIRST, THEN BYTES: `reserve` creates the `workflow_post_media` row and
+ * returns the id the document will name and the path the bytes must go to.
+ * Only then may `send` write them, because the storage policy decides by
+ * matching that path against that row. The composer inserts the picture into
+ * the document BETWEEN the two, so a slow upload is something the writer can
+ * see happening rather than a pause with nothing on screen.
+ *
+ * Passed in rather than done here, for the same reason the composer does not
+ * post: this component knows about documents, not about Supabase, and the tests
+ * mount it with neither.
+ */
+export type PostUploader = {
+  reserve: (
+    file: File,
+    dimensions: { width: number; height: number } | null,
+  ) => Promise<{ id: string; path: string } | { error: string }>
+  send: (path: string, file: File) => Promise<{ error: string } | null>
+}
+
+/* ---- what is still going up ------------------------------------------- */
+
+/**
+ * Upload state lives OUTSIDE React's tree, deliberately.
+ *
+ * An image's node view is mounted by ProseMirror, not by this component, so it
+ * cannot be handed props, and it renders through a portal whose position in the
+ * React tree is TipTap's business rather than ours. A tiny external store is
+ * the one thing certainly reachable from both sides. The keys are database
+ * uuids, so two composers on one page cannot collide, and an entry is deleted
+ * the moment its upload finishes — no entry means "this is a finished picture",
+ * which is exactly what a node view rendering a posted document should see.
+ */
+/* No 'failed': a picture whose bytes did not arrive is taken back out of the
+   document, so there is no such thing as a failed one still on screen. */
+type Upload = { status: 'sending' | 'ready'; preview: string }
+const uploads = new Map<string, Upload>()
+const uploadListeners = new Set<() => void>()
+
+function subscribeUploads(fn: () => void) {
+  uploadListeners.add(fn)
+  return () => {
+    uploadListeners.delete(fn)
+  }
+}
+
+function setUpload(id: string, upload: Upload | null) {
+  if (upload) uploads.set(id, upload)
+  else uploads.delete(id)
+  for (const listener of uploadListeners) listener()
+}
+
+/** Let go of a preview's blob, and of the entry, once the node is gone. */
+function forgetUpload(id: string) {
+  const existing = uploads.get(id)
+  if (existing) URL.revokeObjectURL(existing.preview)
+  setUpload(id, null)
+}
 
 /**
  * The box a post is written in.
@@ -30,6 +114,11 @@ type Staff = { id: string; name: string }
  * choosing one inserts the CHARACTER into ordinary text — no new node type,
  * the same thing the keyboard's own picker has always produced.
  *
+ * A picture can be pasted, dropped or chosen from the toolbar, and its node
+ * carries the UPLOAD'S ID and nothing resembling an address. Post stays
+ * disabled while any of them is still going up: a document naming bytes that
+ * never arrived is a broken post, and the database would refuse it anyway.
+ *
  * The composer does not post. It hands the document to `onPost` and clears
  * itself only when told the post was accepted — so a refusal never costs the
  * writer their words.
@@ -38,14 +127,21 @@ export function PostComposer({
   staff,
   onPost,
   onReady,
+  uploader,
 }: {
   staff: Staff[]
   /** Return true if the post was accepted, so the editor clears. */
   onPost: (doc: PostDoc) => Promise<boolean>
   /** For tests, which cannot type into ProseMirror the way a person does. */
   onReady?: (editor: Editor) => void
+  /** Absent means this composer cannot carry pictures; the Image button says so. */
+  uploader?: PostUploader
 }) {
   const [posting, setPosting] = useState(false)
+  /* How many uploads are in flight. A count rather than a boolean: two
+     screenshots pasted together must both land before Post comes back. */
+  const [sending, setSending] = useState(0)
+  const [problem, setProblem] = useState<string | null>(null)
   const [popup, setPopupState] = useState<Popup | null>(null)
   /* The keyboard handler TipTap calls lives outside React's render cycle, so
      it reads the latest popup from a ref rather than a closed-over state value. */
@@ -85,11 +181,30 @@ export function PostComposer({
       EmojiSuggestion.configure({
         render: suggestionRender<Emoji>('emoji', setPopup, popupRef, (props, e) => props.command(e)),
       }),
+      PostImage,
     ],
     editorProps: {
       attributes: {
         class: 'qw-post min-h-[4.5rem] px-3 py-2 text-sm leading-relaxed text-neutral-900 outline-none',
         'aria-label': 'Write a post',
+      },
+      /* Pasting a screenshot is the way people actually add one, so it is
+         handled first and the browser's own behaviour — which would drop an
+         image file entirely, there being no node to parse it into — never
+         runs. Returning true only when files were actually taken, so pasting
+         text still pastes text. */
+      handlePaste: (_view, event) => {
+        const files = imageFilesFrom(event.clipboardData)
+        if (!files.length) return false
+        void addFilesRef.current(files)
+        return true
+      },
+      handleDrop: (_view, event) => {
+        const files = imageFilesFrom((event as DragEvent).dataTransfer)
+        if (!files.length) return false
+        event.preventDefault()
+        void addFilesRef.current(files)
+        return true
       },
     },
   })
@@ -97,6 +212,96 @@ export function PostComposer({
   useEffect(() => {
     if (editor && onReady) onReady(editor)
   }, [editor, onReady])
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  /* ProseMirror's paste and drop handlers are captured when the editor is
+     built, so they cannot close over a callback that changes with `uploader`.
+     They read the current one from here instead — the same reason the
+     suggestion key handler reads the popup from a ref. */
+  const addFilesRef = useRef<(files: File[]) => Promise<void>>(async () => {})
+  /* The uploads THIS composer made. The store behind it is module-scoped and
+     keyed by database uuid, so two composers cannot collide — but only this
+     set says whose blobs are whose when one of them goes away. */
+  const ownedRef = useRef<Set<string>>(new Set())
+
+  const addFiles = useCallback(
+    async (files: File[]) => {
+      if (!editor) return
+      if (!uploader) {
+        setProblem('Pictures cannot be added here.')
+        return
+      }
+      for (const file of files) {
+        /* The same two rules the database and the bucket enforce, asked here
+           so a 40 MB drop is a sentence rather than a round trip. */
+        if (!isPostMediaType(file.type) || postMediaKind(file.type) !== 'image') {
+          setProblem(`${file.name || 'That file'} is not a kind of picture a post can carry.`)
+          continue
+        }
+        if (file.size > POST_MEDIA_SIZE_LIMIT) {
+          const mb = POST_MEDIA_SIZE_LIMIT / 1024 / 1024
+          setProblem(`${file.name || 'That picture'} is larger than the ${mb} MB limit.`)
+          continue
+        }
+        setProblem(null)
+
+        const preview = URL.createObjectURL(file)
+        const reserved = await uploader.reserve(file, await measure(preview))
+        if ('error' in reserved) {
+          URL.revokeObjectURL(preview)
+          setProblem(reserved.error)
+          continue
+        }
+
+        /* The picture goes in NOW, showing the local file, while its bytes are
+           still on their way. Post is disabled until they land. */
+        ownedRef.current.add(reserved.id)
+        setUpload(reserved.id, { status: 'sending', preview })
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'image',
+            attrs: { id: reserved.id, name: file.name, alt: null, width: null },
+          })
+          .run()
+
+        setSending((n) => n + 1)
+        const failure = await uploader.send(reserved.path, file)
+        setSending((n) => n - 1)
+
+        if (failure) {
+          /* The node comes out. A document that names bytes which are not
+             there is a broken post, and leaving it in would only move the
+             failure to the moment someone pressed Post. */
+          removeImage(editor, reserved.id)
+          ownedRef.current.delete(reserved.id)
+          forgetUpload(reserved.id)
+          setProblem(failure.error)
+          continue
+        }
+        /* Keep the local file on screen for the rest of the writing session:
+           swapping to the served URL the moment the upload finished would
+           flicker for no reason. */
+        setUpload(reserved.id, { status: 'ready', preview })
+      }
+    },
+    [editor, uploader],
+  )
+
+  useEffect(() => {
+    addFilesRef.current = addFiles
+  }, [addFiles])
+
+  /* Previews are blobs, and a blob lives until it is revoked. This composer is
+     the only thing that knows when its own stop mattering. */
+  useEffect(() => {
+    const owned = ownedRef.current
+    return () => {
+      for (const id of owned) forgetUpload(id)
+      owned.clear()
+    }
+  }, [])
 
   /* Re-render on what the toolbar shows, and nothing else. */
   const state = useEditorState({
@@ -125,7 +330,10 @@ export function PostComposer({
   const [linkOpen, setLinkOpen] = useState(false)
 
   async function post() {
-    if (!editor || state.empty || posting) return
+    /* `sending` is part of the guard, not just the button's disabled state: a
+       document naming bytes that have not landed is a post the database will
+       refuse, and the writer would lose nothing but would learn nothing either. */
+    if (!editor || state.empty || posting || sending > 0) return
     setPosting(true)
     try {
       /* Through JSON and back, on purpose. ProseMirror builds a node's `attrs`
@@ -137,7 +345,14 @@ export function PostComposer({
          an ordinary prototype and hands the action what it can read. */
       const doc = JSON.parse(JSON.stringify(editor.getJSON())) as PostDoc
       const ok = await onPost(doc)
-      if (ok) editor.commands.clearContent(true)
+      if (ok) {
+        editor.commands.clearContent(true)
+        /* The post is stored, so the feed will serve these pictures from the
+           row rather than from a blob in this tab. */
+        for (const id of ownedRef.current) forgetUpload(id)
+        ownedRef.current.clear()
+        setProblem(null)
+      }
     } finally {
       setPosting(false)
     }
@@ -210,6 +425,14 @@ export function PostComposer({
           <Tool label="Horizontal rule" on={false} onClick={() => run((c) => c.setHorizontalRule().run())}>
             <span aria-hidden>—</span>
           </Tool>
+          <Tool
+            label="Image"
+            on={false}
+            disabled={!uploader}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImageGlyph />
+          </Tool>
           <Divider />
           <Tool label="Link" on={state.link || linkOpen} onClick={() => setLinkOpen((o) => !o)}>
             <LinkGlyph />
@@ -225,7 +448,7 @@ export function PostComposer({
         <button
           type="button"
           onClick={post}
-          disabled={!editor || state.empty || posting}
+          disabled={!editor || state.empty || posting || sending > 0}
           className="shrink-0 rounded-md bg-brand px-3 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           {posting ? 'Posting…' : 'Post'}
@@ -233,6 +456,34 @@ export function PostComposer({
       </div>
 
       {linkOpen && editor ? <LinkRow editor={editor} onDone={() => setLinkOpen(false)} /> : null}
+
+      {/* Outside the toolbar so it is not in the toolbar's tab ring, and
+          `accept` narrowed to what a post may carry so the file chooser does
+          not offer files that would only be refused. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          // Cleared so choosing the same file twice in a row still fires.
+          e.target.value = ''
+          if (files.length) void addFiles(files)
+        }}
+      />
+
+      {sending > 0 ? (
+        <p role="status" className="border-t border-neutral-100 px-3 py-1.5 text-xs text-neutral-500">
+          {sending === 1 ? 'Adding a picture…' : `Adding ${sending} pictures…`}
+        </p>
+      ) : null}
+      {problem ? (
+        <p role="alert" className="border-t border-neutral-100 px-3 py-1.5 text-xs text-red-600">
+          {problem}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -468,6 +719,283 @@ const PostHeading = Heading.extend({
     return [`h${level + 3}`, mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
   },
 })
+
+/* ---- pictures --------------------------------------------------------- */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * A picture in a post.
+ *
+ * NOT `@tiptap/extension-image`, and the difference is the whole point: that
+ * extension's node is a `src`, and this one has no address of any kind. It
+ * carries the id of a `workflow_post_media` row, the filename it was uploaded
+ * under, an optional description and an optional display width, and
+ * `post_workflow_activity()` refuses the node outright if anything resembling
+ * an address is on it.
+ *
+ * `parseHTML` MATCHES ONLY OUR OWN MARKER, AND ONLY WITH A UUID ON IT. Until
+ * this node existed, a pasted `<img>` was dropped because the schema had
+ * nothing to parse one into — the safety came for free. It does not any more:
+ * a `parseHTML` of `img[src]`, or even `img` unqualified, would turn any image
+ * on any web page into a node with a nonsense id the moment someone pasted a
+ * page into the composer. Copying WITHIN the editor still works, because
+ * `renderHTML` writes the marker back out.
+ */
+const PostImage = Node.create({
+  name: 'image',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-post-media'),
+        renderHTML: (attrs) => ({ 'data-post-media': attrs.id }),
+      },
+      name: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-name') ?? '',
+        renderHTML: (attrs) => ({ 'data-name': attrs.name }),
+      },
+      alt: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('alt'),
+        renderHTML: (attrs) => (attrs.alt ? { alt: attrs.alt } : {}),
+      },
+      width: {
+        default: null,
+        parseHTML: (el) => {
+          const raw = Number(el.getAttribute('width'))
+          return Number.isInteger(raw) && raw > 0 ? raw : null
+        },
+        renderHTML: (attrs) => (attrs.width ? { width: String(attrs.width) } : {}),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'img[data-post-media]',
+        // A marker that is not an id is not one of ours.
+        getAttrs: (el) =>
+          UUID.test((el as HTMLElement).getAttribute('data-post-media') ?? '') ? null : false,
+      },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['img', mergeAttributes(HTMLAttributes)]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageNodeView)
+  },
+})
+
+/**
+ * How a picture looks while it is being written about.
+ *
+ * The local file is shown for the whole writing session — the upload store
+ * holds the blob — so nothing flickers when the bytes land and nothing is
+ * fetched back from the server that this tab already has. A picture with no
+ * store entry is one from a document this composer did not build, and it comes
+ * from the serving route like any other.
+ *
+ * Selecting it reveals the two things worth changing: a description, which is
+ * what a screen reader will read and what the post's plain text falls back to,
+ * and a width, dragged from the right edge and clamped to what the database
+ * will accept.
+ */
+function ImageNodeView({ node, updateAttributes, deleteNode, selected }: NodeViewProps) {
+  const id = String(node.attrs.id ?? '')
+  const name = String(node.attrs.name ?? '')
+  const alt = (node.attrs.alt as string | null) ?? ''
+  const width = node.attrs.width as number | null
+
+  const upload = useSyncExternalStore(
+    subscribeUploads,
+    () => uploads.get(id),
+    () => undefined,
+  )
+  const frameRef = useRef<HTMLSpanElement>(null)
+  const sending = upload?.status === 'sending'
+
+  /* Dragging the right edge. Pointer capture rather than window listeners, so
+     a drag that leaves the composer still ends up here, and the width is
+     clamped to the same range post_workflow_activity() will check. */
+  const onResize = (e: React.PointerEvent<HTMLSpanElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const frame = frameRef.current
+    if (!frame) return
+    const left = frame.getBoundingClientRect().left
+    const ceiling = Math.min(POST_IMAGE_MAX_WIDTH, frame.parentElement?.clientWidth ?? POST_IMAGE_MAX_WIDTH)
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+
+    const move = (ev: PointerEvent) => {
+      const next = Math.round(Math.max(POST_IMAGE_MIN_WIDTH, Math.min(ceiling, ev.clientX - left)))
+      updateAttributes({ width: next })
+    }
+    const done = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', done)
+      handle.removeEventListener('pointercancel', done)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', done)
+    handle.addEventListener('pointercancel', done)
+  }
+
+  return (
+    <NodeViewWrapper as="div" className="my-2">
+      <span ref={frameRef} className="relative inline-block max-w-full align-top">
+        {/* eslint-disable-next-line @next/next/no-img-element -- the source is
+            a blob in this tab or an access-checked route, and next/image would
+            try to optimise both through its loader. */}
+        <img
+          src={upload?.preview ?? postMediaUrl(id)}
+          alt={alt || name}
+          draggable={false}
+          style={width ? { width } : undefined}
+          className={`block h-auto max-w-full rounded-md border ${
+            selected ? 'border-brand-300 ring-2 ring-brand/25' : 'border-neutral-200'
+          } ${sending ? 'opacity-50' : ''}`}
+        />
+        {sending ? (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="rounded bg-neutral-900/70 px-2 py-0.5 text-[11px] text-white">Adding…</span>
+          </span>
+        ) : null}
+        {selected && !sending ? (
+          <>
+            <button
+              type="button"
+              aria-label={`Remove ${name || 'picture'}`}
+              title="Remove"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                deleteNode()
+              }}
+              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded bg-neutral-900/70 text-xs text-white outline-none hover:bg-neutral-900"
+            >
+              <span aria-hidden>✕</span>
+            </button>
+            {/* A grip, not a scrollbar: it is the only affordance for width,
+                and a keyboard user has the width field below instead. */}
+            <span
+              role="presentation"
+              onPointerDown={onResize}
+              className="absolute right-0 top-1/2 h-8 w-2 -translate-y-1/2 translate-x-1/2 cursor-ew-resize rounded-full bg-brand/70"
+            />
+          </>
+        ) : null}
+      </span>
+      {selected && !sending ? (
+        <span className="mt-1 flex flex-wrap items-center gap-2">
+          <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-neutral-500">
+            Description
+            <input
+              type="text"
+              value={alt}
+              placeholder={name}
+              onChange={(e) => updateAttributes({ alt: e.target.value || null })}
+              className="h-6 min-w-0 flex-1 rounded border border-neutral-300 px-1.5 text-xs text-neutral-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand/15"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+            Width
+            <input
+              type="number"
+              min={POST_IMAGE_MIN_WIDTH}
+              max={POST_IMAGE_MAX_WIDTH}
+              value={width ?? ''}
+              placeholder="auto"
+              onChange={(e) => {
+                const raw = Number(e.target.value)
+                updateAttributes({
+                  width: Number.isInteger(raw) && raw >= POST_IMAGE_MIN_WIDTH
+                    ? Math.min(raw, POST_IMAGE_MAX_WIDTH)
+                    : null,
+                })
+              }}
+              className="h-6 w-16 rounded border border-neutral-300 px-1.5 text-xs text-neutral-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand/15"
+            />
+          </label>
+        </span>
+      ) : null}
+    </NodeViewWrapper>
+  )
+}
+
+function ImageGlyph() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <circle cx="5.75" cy="6.5" r="1.15" />
+      <path d="M2.75 11.5l3.2-3.1 2.3 2.2 1.9-1.7 3.1 2.9" />
+    </svg>
+  )
+}
+
+/** The image files in a paste or a drop, and nothing else. */
+function imageFilesFrom(data: DataTransfer | null): File[] {
+  if (!data?.files?.length) return []
+  return Array.from(data.files).filter((f) => f.type.startsWith('image/'))
+}
+
+/**
+ * A picture's own pixel dimensions, so the feed can reserve its space and not
+ * jump as it loads.
+ *
+ * Capped rather than awaited indefinitely: decoding a local blob takes
+ * milliseconds in a real browser, and a picture whose size we never learn is
+ * still perfectly postable — the column is nullable for exactly this reason.
+ */
+function measure(url: string): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value: { width: number; height: number } | null) => {
+      if (settled) return
+      settled = true
+      resolve(value)
+    }
+    const timer = setTimeout(() => finish(null), 600)
+    const img = new globalThis.Image()
+    img.onload = () => {
+      clearTimeout(timer)
+      finish(
+        img.naturalWidth && img.naturalHeight
+          ? { width: img.naturalWidth, height: img.naturalHeight }
+          : null,
+      )
+    }
+    img.onerror = () => {
+      clearTimeout(timer)
+      finish(null)
+    }
+    img.src = url
+  })
+}
+
+/** Take a picture back out of the document, by the id it names. */
+function removeImage(editor: Editor, id: string) {
+  let at = -1
+  editor.state.doc.descendants((node, pos) => {
+    if (at >= 0) return false
+    if (node.type.name === 'image' && node.attrs.id === id) {
+      at = pos
+      return false
+    }
+    return true
+  })
+  if (at >= 0) editor.chain().focus().deleteRange({ from: at, to: at + 1 }).run()
+}
 
 /**
  * `:` opens the emoji list. A plain Suggestion plugin — not TipTap's Emoji
