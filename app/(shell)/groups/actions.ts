@@ -806,6 +806,43 @@ export async function setWorkflowTaskStatus(
 }
 
 /**
+ * A task's assignee, due date, description and comment, from the panel's field
+ * boxes.
+ *
+ * **A patch where key presence decides**, not four parameters defaulting to
+ * null — the contract `set_workflow_details()` already uses, and the reason is
+ * the same: null cannot mean both "leave this alone" and "clear this". So only
+ * the fields the submitted box actually carried go into the patch. That is what
+ * lets the Details box and the Completion box write through ONE function
+ * without either clearing the other's columns.
+ *
+ * Subject, status and priority are not writable here: each has its own path.
+ */
+export async function saveWorkflowTaskDetails(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const id = String(formData.get('task_id') ?? '')
+  if (!id) return { error: 'No task selected.' }
+
+  const patch: Record<string, string> = {}
+  for (const key of ['assigned_to_staff_id', 'due_at', 'description', 'comment'] as const) {
+    if (formData.has(key)) patch[key] = String(formData.get(key) ?? '')
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_task_details', { p_id: id, p_patch: patch })
+  if (error) return { error: error.message }
+
+  /* Only the workflow's own page shows a task. The id rides along in the form
+     because the panel knows it and the task row does not carry it into the
+     patch — see the test that asserts it never leaks in. */
+  const workflowId = String(formData.get('workflow_id') ?? '')
+  if (workflowId) revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
  * A task's priority, from the glyph on its row. The first caller of
  * set_workflow_task_priority(), which had waited in the database since the
  * column arrived. Only the task's own page shows a task, so that is the one

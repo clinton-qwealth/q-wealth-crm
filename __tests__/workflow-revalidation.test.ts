@@ -18,7 +18,13 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const { revalidatePath } = await import('next/cache')
-const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, startWorkflow } = await import(
+const {
+  createWorkflowTask,
+  setWorkflowTaskStatus,
+  setWorkflowTaskPriority,
+  saveWorkflowTaskDetails,
+  startWorkflow,
+} = await import(
   '@/app/(shell)/groups/actions'
 )
 
@@ -45,6 +51,20 @@ describe('a write revalidates every screen that shows it', () => {
 
   test('changing a task’s priority refreshes the workflow it belongs to', async () => {
     await setWorkflowTaskPriority('t1', 'high', 'w1')
+    expect(paths()).toContain('/workflows/w1')
+  })
+
+  /**
+   * The panel is open when the save lands, and it reads the task out of the
+   * same array the rows do — so the revalidation is what puts the saved values
+   * behind it. Without this path the box would close over stale text.
+   */
+  test('saving a task’s details refreshes the workflow whose page the panel is on', async () => {
+    const fd = new FormData()
+    fd.set('task_id', 't1')
+    fd.set('workflow_id', 'w1')
+    fd.set('comment', 'Done')
+    await saveWorkflowTaskDetails(null, fd)
     expect(paths()).toContain('/workflows/w1')
   })
 

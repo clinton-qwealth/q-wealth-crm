@@ -23,6 +23,8 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   saveWorkflowDetails: vi.fn(async () => ({ ok: true as const })),
   createWorkflowTask: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
+  setWorkflowTaskPriority: vi.fn(async () => ({ ok: true as const })),
+  saveWorkflowTaskDetails: vi.fn(async () => ({ ok: true as const })),
 }))
 vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
@@ -120,12 +122,19 @@ describe('the workflow detail page', () => {
     expect(barRow.firstElementChild!.textContent).toBe('Blocked')
   })
 
-  test('three columns, 3 / 6 / 3 of twelve — the group page’s spans again', () => {
+  /**
+   * 3 / 5 / 4 since 8 September: the right column was widened by one step and
+   * the centre gave up the point. The page no longer matches the group page's
+   * 3 / 6 / 3, deliberately — the assertion that would catch a stray change to
+   * the proportions, and the one that records they are no longer shared.
+   */
+  test('three columns, 3 / 5 / 4 of twelve — the right column one point wider', () => {
     const { container } = show()
     const cols = [...container.querySelectorAll('[class*="lg:col-span-"]')]
       .filter((el) => el.querySelector('section')) // the columns, not the heading grid
       .map((el) => el.className.match(/lg:col-span-(\d+)/)![1])
-    expect(cols).toEqual(['3', '6', '3'])
+    expect(cols).toEqual(['3', '5', '4'])
+    expect(cols.reduce((a, b) => a + Number(b), 0)).toBe(12)
   })
 
   test('only the right column is still a placeholder; the centre is the task list', () => {

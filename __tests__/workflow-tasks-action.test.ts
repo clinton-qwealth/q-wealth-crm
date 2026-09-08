@@ -14,7 +14,8 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority } = await import('@/app/(shell)/groups/actions')
+const { createWorkflowTask, setWorkflowTaskStatus, setWorkflowTaskPriority, saveWorkflowTaskDetails } =
+  await import('@/app/(shell)/groups/actions')
 
 const form = (entries: Record<string, string>) => {
   const fd = new FormData()
@@ -64,6 +65,68 @@ describe('createWorkflowTask', () => {
     failure = 'No such workflow, or not within your access'
     const result = await createWorkflowTask(null, form({ workflow_id: 'w1', subject: 'x' }))
     expect(result).toEqual({ error: 'No such workflow, or not within your access' })
+  })
+})
+
+/**
+ * The patch contract, which is the whole reason the panel can have two boxes
+ * writing through one function: key presence decides what gets written, so a
+ * box only ever sends the fields it actually shows.
+ */
+describe('saveWorkflowTaskDetails', () => {
+  test('the patch carries only the keys the form submitted', async () => {
+    await saveWorkflowTaskDetails(null, form({ task_id: 't1', workflow_id: 'w1', comment: 'Done by phone' }))
+    expect(calls[0].name).toBe('set_workflow_task_details')
+    expect(calls[0].args).toEqual({ p_id: 't1', p_patch: { comment: 'Done by phone' } })
+  })
+
+  test('all four go when all four are sent', async () => {
+    await saveWorkflowTaskDetails(
+      null,
+      form({
+        task_id: 't1',
+        workflow_id: 'w1',
+        assigned_to_staff_id: 's2',
+        due_at: '2026-10-15',
+        description: 'Why',
+        comment: 'How it went',
+      }),
+    )
+    expect(calls[0].args).toEqual({
+      p_id: 't1',
+      p_patch: {
+        assigned_to_staff_id: 's2',
+        due_at: '2026-10-15',
+        description: 'Why',
+        comment: 'How it went',
+      },
+    })
+  })
+
+  test('an empty field IS sent, because empty means clear', async () => {
+    await saveWorkflowTaskDetails(null, form({ task_id: 't1', workflow_id: 'w1', due_at: '', description: '' }))
+    expect(calls[0].args).toEqual({ p_id: 't1', p_patch: { due_at: '', description: '' } })
+  })
+
+  test('neither identifier ever leaks into the patch', async () => {
+    await saveWorkflowTaskDetails(null, form({ task_id: 't1', workflow_id: 'w1', comment: 'x' }))
+    const patch = calls[0].args.p_patch as Record<string, string>
+    expect('task_id' in patch).toBe(false)
+    expect('workflow_id' in patch).toBe(false)
+  })
+
+  test('no task is refused before any call is made', async () => {
+    expect(await saveWorkflowTaskDetails(null, form({ comment: 'x' }))).toEqual({
+      error: 'No task selected.',
+    })
+    expect(calls.length).toBe(0)
+  })
+
+  test('the database\u2019s own message is returned', async () => {
+    failure = 'No such task, or not within your access'
+    expect(await saveWorkflowTaskDetails(null, form({ task_id: 't1', comment: 'x' }))).toEqual({
+      error: 'No such task, or not within your access',
+    })
   })
 })
 

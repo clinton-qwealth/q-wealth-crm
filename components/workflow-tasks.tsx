@@ -1,8 +1,9 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import {
   createWorkflowTask,
+  saveWorkflowTaskDetails,
   setWorkflowTaskPriority,
   setWorkflowTaskStatus,
   type NoteState,
@@ -13,8 +14,10 @@ import {
   type Priority,
   type WorkflowTask,
 } from '@/lib/workflow-board'
-import { dueState, formatCalendarDate, formatNoteDate, isOverdue, type DueState } from '@/lib/note-date'
+import { dueState, formatCalendarDate, formatNoteDate, type DueState } from '@/lib/note-date'
 import { Pill, SHEET_SURFACE } from './ui'
+import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
+import { Tabs } from './tabs'
 import { useServerState } from './use-server-state'
 import { PriorityGlyph, PriorityPicker } from './priority-picker'
 import { CalendarIcon, PlusIcon } from './icons'
@@ -177,8 +180,16 @@ export function WorkflowTasks({
                       className="-m-1 min-w-0 flex-1 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                     >
                       <span className="flex items-center gap-2">
+                        {/* Wraps to two lines rather than truncating. The
+                            subject is the task's NAME, and a name you cannot
+                            read is the one thing a list must not do — the same
+                            reason the workflow's own title wraps. It began as
+                            `truncate`, which was safe at the centre column's
+                            old width and started cutting a long subject the
+                            moment the column narrowed to 5. Clamped, not
+                            unbounded, so a row stays a row. */}
                         <span
-                          className={`truncate text-sm font-semibold ${
+                          className={`line-clamp-2 text-sm font-semibold ${
                             finished ? 'text-neutral-400 line-through' : 'text-neutral-900'
                           }`}
                         >
@@ -198,8 +209,11 @@ export function WorkflowTasks({
                       ) : null}
 
                       {/* The footer, set off from the description above it so
-                          the two do not read as one paragraph. */}
-                      <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                          the two do not read as one paragraph. 12px, up from 8:
+                          at 8 the two still read as one block, and the footer
+                          is a different kind of thing from the description —
+                          who has it and what kind it is, not what it is. */}
+                      <span className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
                         {t.assigned_to_name ? (
                           <span>Assigned to {t.assigned_to_name}</span>
                         ) : (
@@ -275,7 +289,12 @@ export function WorkflowTasks({
         className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
       >
         {selected ? (
-          <TaskPanel task={selected} onClose={() => panelRef.current?.close()} />
+          <TaskPanel
+            task={selected}
+            workflowId={workflowId}
+            staff={staff}
+            onClose={() => panelRef.current?.close()}
+          />
         ) : null}
       </dialog>
     </div>
@@ -328,17 +347,56 @@ function DueChip({ dueAt, state }: { dueAt: string; state: DueState | null }) {
 /**
  * One task, at length.
  *
- * Read-only for now: what belongs in here is being decided, and inventing
- * sections ahead of that would be guessing. What it shows is the record —
- * every column the list has room only to summarise.
+ * The panel is the record; the row is the summary. So the row carries what a
+ * list is scanned for and this carries everything else — and since 8 September
+ * it carries the write paths too.
+ *
+ * **The fields sit in a box with a pencil, and so does the comment.** That is
+ * `FieldBox`, the same shell as the workflow detail page's field box and the
+ * member record panel's editable sections, and it is now the standard layout
+ * for a group of fields anywhere on the site. Each box submits only its own
+ * fields, which is exactly what makes one patch function safe for both: key
+ * presence decides, so the Details box cannot clear the comment and the
+ * Completion box cannot clear the description.
+ *
+ * **Tabs below the fields**, the same component and the same configuration as
+ * the individual's record: `fill` so the strip stays put and the active panel
+ * scrolls beneath it, because a strip that scrolls out of reach inside a panel
+ * is a dead end.
+ *
+ * Two things are deliberately NOT editable here. The **subject** is the panel's
+ * heading rather than a field — renaming a task is a different act from
+ * correcting its details, and the database function refuses it. The
+ * **priority** is display-only, because the row's own picker is two inches away
+ * and a second control for one value is a second thing to keep in step.
  */
-function TaskPanel({ task, onClose }: { task: WorkflowTask; onClose: () => void }) {
+function TaskPanel({
+  task,
+  workflowId,
+  staff,
+  onClose,
+}: {
+  task: WorkflowTask
+  workflowId: string
+  staff: Staff[]
+  onClose: () => void
+}) {
   const priority = PRIORITIES.find((p) => p.id === task.priority)!
-  const late = task.status === 'open' && isOverdue(task.due_at)
+  const finished = task.status === 'done' || task.status === 'cancelled'
+
+  /* Named on both boxes, and rendered only while editing — a box being read
+     carries nothing a submit could send. The workflow's id rides along so the
+     action knows which page to revalidate; it never reaches the patch. */
+  const identity = (
+    <>
+      <input type="hidden" name="task_id" value={task.id} />
+      <input type="hidden" name="workflow_id" value={workflowId} />
+    </>
+  )
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-5">
+      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">Task</p>
           <h2
@@ -370,55 +428,209 @@ function TaskPanel({ task, onClose }: { task: WorkflowTask; onClose: () => void 
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
-          <PanelField label="Assigned to" value={task.assigned_to_name} absent="Unassigned" />
-          <PanelField
-            label={late ? 'Overdue' : 'Due date'}
-            value={task.due_at ? formatCalendarDate(task.due_at) : null}
-            tone={late ? 'late' : undefined}
-          />
-          <PanelField label="Added" value={formatNoteDate(task.created_at)} />
-          <PanelField
-            label="Completed"
-            value={task.completed_at ? formatNoteDate(task.completed_at) : null}
-          />
-          <PanelField label="Description" value={task.description} span wrap />
-          <PanelField label="Comment" value={task.comment} span wrap />
-        </dl>
+      {/* The fields, above the tabs — the tab strip sits below the last of them,
+          the description. Capped and scrollable rather than simply shrink-0: a
+          description of a few sentences is the ordinary case and fits, but a very
+          long one must not push the tabs off the bottom of the panel.
+
+          55vh, not 40: the box is at its tallest while EDITING — four stacked
+          rows including a four-line textarea, measured at 368px, 384 with the
+          gutter — and at 40vh of a 950px window that is 380, so it clipped its
+          own bottom border just above the tab strip. Measured again at 55vh:
+          the region takes the 384 it needs, does not scroll, and the box's
+          bottom edge is visible. */}
+      <div className="max-h-[55vh] shrink-0 overflow-y-auto px-5 pb-4">
+        <FieldBox
+          title="Details"
+          action={saveWorkflowTaskDetails}
+          identity={identity}
+          view={
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+              {/* "Unassigned" rather than an em-dash, the word the board's
+                  filter and this box's own picker use for the same state. No
+                  initials tile: the task row dropped its own on 8 September
+                  because the name already says who, and the panel should not
+                  reintroduce the mark the list just lost. */}
+              <Field
+                label="Assigned to"
+                value={task.assigned_to_name ?? 'Unassigned'}
+                muted={!task.assigned_to_name}
+                span
+              />
+              {/* The same chip as the row, so the fact the reader clicked on is
+                  the fact they land on. A finished task shows its date in the
+                  quiet tone: it is not late, it is finished. */}
+              <Field
+                label="Due date"
+                value={
+                  task.due_at ? (
+                    <DueChip dueAt={task.due_at} state={finished ? null : dueState(task.due_at)} />
+                  ) : null
+                }
+              />
+              <Field label="Added" value={formatNoteDate(task.created_at)} />
+              <Field label="Description" value={task.description} wrap span />
+            </dl>
+          }
+          edit={
+            <div className="flex flex-col gap-3">
+              <EditField label="Assigned to">
+                <select
+                  name="assigned_to_staff_id"
+                  defaultValue={task.assigned_to_staff_id ?? ''}
+                  className={FIELD_INPUT}
+                >
+                  <option value="">Unassigned</option>
+                  {staff.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                  {/* An assignee the directory no longer lists — someone who has
+                      left — stays selectable rather than being silently
+                      reassigned to nobody by the next save. The same guard the
+                      workflow's owner picker and the member panel's dropdowns
+                      needed. */}
+                  {task.assigned_to_staff_id &&
+                  !staff.some((s) => s.id === task.assigned_to_staff_id) ? (
+                    <option value={task.assigned_to_staff_id}>
+                      {task.assigned_to_name ?? 'Current assignee'}
+                    </option>
+                  ) : null}
+                </select>
+              </EditField>
+
+              <EditField label="Due date">
+                {/* type="date" hands back YYYY-MM-DD, which is what a `date`
+                    column takes. Empty clears it. */}
+                <input
+                  type="date"
+                  name="due_at"
+                  defaultValue={task.due_at ?? ''}
+                  className={FIELD_INPUT}
+                />
+              </EditField>
+
+              <ReadonlyField label="Added" value={formatNoteDate(task.created_at)} />
+
+              <EditField label="Description">
+                <textarea
+                  name="description"
+                  rows={4}
+                  defaultValue={task.description ?? ''}
+                  placeholder="What this task is."
+                  className={FIELD_INPUT}
+                />
+              </EditField>
+            </div>
+          }
+        />
       </div>
+
+      <Tabs
+        fill
+        gutter={5}
+        flushTop={false}
+        bleed={false}
+        alignFirst
+        label={`${task.subject} task`}
+        items={[
+          {
+            id: 'activity',
+            label: 'Activity',
+            panel: (
+              <div className="flex flex-col gap-4 px-5 pb-6">
+                {/* The comment lives here, as asked — and "Completion" is the
+                    box rather than "Comment", because the two fields are one
+                    fact: a comment is what the person DOING the task said when
+                    they did it, not something the person creating it wrote.
+                    When it was finished and what they said belong together, and
+                    both are activity rather than definition. */}
+                <FieldBox
+                  title="Completion"
+                  action={saveWorkflowTaskDetails}
+                  identity={identity}
+                  view={
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+                      <Field
+                        label="Completed"
+                        value={task.completed_at ? formatNoteDate(task.completed_at) : null}
+                      />
+                      <Field label="Comment" value={task.comment} wrap span />
+                    </dl>
+                  }
+                  edit={
+                    <div className="flex flex-col gap-3">
+                      {/* Not editable: it is stamped by the function that sets
+                          the status, so a completion date can never sit on
+                          something that is no longer done. */}
+                      <ReadonlyField
+                        label="Completed"
+                        value={task.completed_at ? formatNoteDate(task.completed_at) : null}
+                      />
+                      <EditField label="Comment">
+                        <textarea
+                          name="comment"
+                          rows={4}
+                          defaultValue={task.comment ?? ''}
+                          placeholder="What happened when this was done."
+                          className={FIELD_INPUT}
+                        />
+                      </EditField>
+                    </div>
+                  }
+                />
+              </div>
+            ),
+          },
+          {
+            id: 'log',
+            label: 'Log',
+            panel: (
+              <div className="px-5 pb-6">
+                <Unbuilt title="Changes to this task are not recorded yet">
+                  The audit trail covers twenty tables and names whoever made every
+                  change, but <code className="text-neutral-600">workflow_tasks</code> is
+                  not one of them — it was created after the trail was set up. Attaching
+                  the trigger is one line per table, and is logged as a decision rather
+                  than done in passing.
+                </Unbuilt>
+              </div>
+            ),
+          },
+          {
+            id: 'tools',
+            label: 'Tools',
+            panel: (
+              <div className="px-5 pb-6">
+                <Unbuilt title="No tools yet">
+                  Actions belonging to one task rather than to the list would sit here.
+                  Nothing is built, and nothing has been decided about what belongs — so
+                  this says so rather than showing a guess.
+                </Unbuilt>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }
 
-function PanelField({
-  label,
-  value,
-  absent,
-  span = false,
-  wrap = false,
-  tone,
-}: {
-  label: string
-  value: string | null
-  /** A word to show in place of an em-dash when the absence has a name. */
-  absent?: string
-  span?: boolean
-  wrap?: boolean
-  tone?: 'late'
-}) {
+/**
+ * A tab panel that is honest about being empty.
+ *
+ * Dashed, muted, and it names what is missing and why — the same treatment the
+ * member panel's Activity tab uses for the record changes it cannot yet show,
+ * and the same principle as the template-name chip above the task list. A
+ * half-built screen that says what belongs in it reads as a plan; one that
+ * shows nothing reads as broken.
+ */
+function Unbuilt({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className={`min-w-0 ${span ? 'col-span-2' : ''}`}>
-      <dt className={`text-xs leading-snug ${tone === 'late' ? 'font-semibold text-red-600' : 'text-neutral-500'}`}>
-        {label}
-      </dt>
-      <dd
-        className={`mt-0.5 text-sm ${wrap ? 'leading-relaxed' : 'leading-snug'} ${
-          tone === 'late' ? 'font-semibold text-red-600' : 'text-neutral-900'
-        }`}
-      >
-        {value ?? <span className="text-neutral-400">{absent ?? '—'}</span>}
-      </dd>
+    <div className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-6">
+      <p className="text-sm font-medium text-neutral-700">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-neutral-500">{children}</p>
     </div>
   )
 }

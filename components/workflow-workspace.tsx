@@ -5,19 +5,28 @@ import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
 import { WorkflowTasks } from './workflow-tasks'
 
-const SPAN: Record<3 | 6, string> = {
+const SPAN: Record<3 | 4 | 5, string> = {
   3: 'lg:col-span-3',
-  6: 'lg:col-span-6',
+  4: 'lg:col-span-4',
+  5: 'lg:col-span-5',
 }
 
 /**
- * The workflow detail page's body: three columns, **3 / 6 / 3** of twelve at
+ * The workflow detail page's body: three columns, **3 / 5 / 4** of twelve at
  * `lg`, one column below.
  *
- * The same spans as the group page. They were briefly 4 / 5 / 3 — the left
- * column was widened by one step when the page's header moved into it — and
- * moved back once the fields went into a boxed section, which reads as a
- * contained object at any width where the group page's profile card does.
+ * The right column was widened by one step on 8 September and the centre gave
+ * up the point, which is the second half of the same question the task list's
+ * width raised: the centre measured comfortable but slightly loose at 6, and
+ * the right column has file notes coming to it. So the page no longer matches
+ * the group page's 3 / 6 / 3 — a deliberate divergence, because this page's
+ * right column is a record's notes and the group page's centre is a tabbed
+ * working area.
+ *
+ * The left column has been 3 throughout except for part of one day at 4, when
+ * the page's header moved into it; it moved back once the fields went into a
+ * boxed section, which reads as a contained object at the width the group
+ * page's profile card does.
  *
  * Rendered by the page after the staff check and the fetch, and by a preview
  * with fixture data — which is why it takes a record and not an id.
@@ -73,12 +82,12 @@ export function WorkflowWorkspace({
       </Column>
 
       {/* Centre — the work itself: the tasks under this workflow */}
-      <Column span={6}>
+      <Column span={5}>
         <WorkflowTasks workflowId={w.id} tasks={tasks} staff={staff} />
       </Column>
 
       {/* Right — the notes filed under it */}
-      <Column span={3}>
+      <Column span={4}>
         <Placeholder className="h-64">File notes filed under this workflow go here.</Placeholder>
       </Column>
     </>
@@ -92,7 +101,7 @@ export function WorkflowWorkspace({
  * asked for it: three cards in a row with two gutters read as a mistake, and
  * the other two will be built into the same frame.
  */
-function Column({ span, children }: { span: 3 | 6; children: ReactNode }) {
+function Column({ span, children }: { span: 3 | 4 | 5; children: ReactNode }) {
   return (
     <div className={`col-span-full flex flex-col gap-4 ${SPAN[span]}`}>
       <Card padding="roomy">{children}</Card>

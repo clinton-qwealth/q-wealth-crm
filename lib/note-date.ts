@@ -89,6 +89,11 @@ export function todayISO(now: Date = new Date()) {
  *
  * **Due today is not overdue.** The comparison is strictly less than: a task
  * has the whole of its due date to be done in.
+ *
+ * **Nothing in the app calls this today** — the task list needs the middle case
+ * named as well, so it reads `dueState` instead. This is kept as that
+ * function's past case, with a test asserting the two agree for every input, and
+ * it is what the workflow's own due date will use when that is marked.
  */
 export function isOverdue(dueAt: string | null | undefined, today: string = todayISO()) {
   return dueState(dueAt, today) === 'overdue'

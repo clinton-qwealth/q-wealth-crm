@@ -7,6 +7,7 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   createWorkflowTask: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskPriority: vi.fn(async () => ({ ok: true as const })),
+  saveWorkflowTaskDetails: vi.fn(async () => ({ ok: true as const })),
 }))
 
 const actions = await import('@/app/(shell)/groups/actions')
@@ -48,6 +49,20 @@ const done = task({
   comment: 'Sent by email on the 6th.',
 })
 const cancelled = task({ id: 't3', subject: 'Not applicable', status: 'cancelled' })
+
+/** Every column filled, for the panel: each field has something to render. */
+const withEverything = task({
+  id: 't7',
+  subject: 'Confirm the rollover',
+  description: 'Check the receiving fund has the paperwork.',
+  comment: 'Sent by email on the 6th.',
+  due_at: '2026-10-01',
+  status: 'done',
+  priority: 'high',
+  assigned_to_staff_id: 's1',
+  assigned_to_name: 'Sarah Chen',
+  completed_at: '2026-09-06T00:00:00Z',
+})
 
 const STAFF = [
   { id: 's1', name: 'Sarah Chen' },
@@ -143,8 +158,9 @@ describe('the workflow’s tasks', () => {
     show([open])
     const footer = screen.getByText('Assigned to Sarah Chen').parentElement!
     expect(footer.textContent).toBe('Assigned to Sarah ChenCheckbox')
-    // Set off from the description above it, rather than running into it.
-    expect(footer.className).toContain('mt-2')
+    // Set off from the description above it, rather than running into it —
+    // 12px, widened from 8 on 8 September.
+    expect(footer.className).toContain('mt-3')
   })
 
   /**
@@ -196,6 +212,18 @@ describe('the workflow’s tasks', () => {
   test('a long description is clamped to two lines on the row; the panel has the whole text', () => {
     show([task({ id: 'l', subject: 'Long one', description: 'A '.repeat(200) })])
     expect(within(rowOf('Long one')).getByText(/^A A A/).className).toContain('line-clamp-2')
+  })
+
+  /**
+   * The subject is the task's NAME. Truncating it was safe while the centre
+   * column was 6 of 12 and started cutting a long subject the moment it went to
+   * 5 — measured in a browser, not guessed.
+   */
+  test('a long subject wraps rather than being truncated', () => {
+    show([task({ id: 'w', subject: 'Chase the accountant for the trust return before the deadline' })])
+    const subject = screen.getByText(/^Chase the accountant/)
+    expect(subject.className).toContain('line-clamp-2')
+    expect(subject.className).not.toContain('truncate')
   })
 
   /**
@@ -324,10 +352,17 @@ describe('the workflow’s tasks', () => {
     const user = userEvent.setup()
     const { container } = show([task({ id: 'bare', subject: 'Bare task' })])
     await user.click(screen.getByRole('button', { name: 'Open task: Bare task' }))
-    const panel = container.querySelector('dialog.qw-drawer')!
+    const panel = container.querySelector('dialog.qw-drawer')! as HTMLElement
+    // "Unassigned" is a word, not a gap — the state is worth naming.
     expect(panel.textContent).toContain('Unassigned')
-    // Due date, completed, description and comment are all absent.
-    expect([...panel.querySelectorAll('dd')].filter((d) => d.textContent === '—').length).toBe(4)
+    // Due date, description, completed and comment are all absent, and each
+    // says so with an em-dash rather than rendering blank.
+    const dashed = (label: string) =>
+      [...panel.querySelectorAll('dt')].find((dt) => dt.textContent === label)!.nextElementSibling!
+        .textContent
+    for (const label of ['Due date', 'Description', 'Completed', 'Comment']) {
+      expect(dashed(label)).toBe('—')
+    }
   })
 
   test('Add task opens a dialog with subject, description, due date and assignee, and submits them', async () => {
@@ -360,5 +395,178 @@ describe('the workflow’s tasks', () => {
     expect(sent.get('priority')).toBe('medium')
     // No comment field: a comment is what the doer says, not the creator.
     expect(sent.has('comment')).toBe(false)
+  })
+})
+
+/**
+ * The panel's tabs and its two field boxes.
+ *
+ * The boxes are `FieldBox` — the shared shell the workflow detail page and the
+ * member record panel use — so what is asserted here is what THIS panel puts in
+ * them, plus the two rules that travel with the shell and must hold everywhere:
+ * nothing submittable while reading, and a box submits only its own fields.
+ */
+describe('the task panel', () => {
+  const open = async (t = withEverything) => {
+    const user = userEvent.setup()
+    const { container } = show([t])
+    await user.click(screen.getByRole('button', { name: `Open task: ${t.subject}` }))
+    return { user, panel: container.querySelector('dialog.qw-drawer')! as HTMLElement }
+  }
+
+  const boxOf = (panel: HTMLElement, name: string) =>
+    within(panel).getByRole('button', { name }).closest('form')! as HTMLElement
+
+  test('three tabs — Activity, Log, Tools — with Activity showing first', async () => {
+    const { panel } = await open()
+    expect(within(panel).getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Activity',
+      'Log',
+      'Tools',
+    ])
+    expect(within(panel).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  test('the tabs sit below the fields, and the description is the last of them', async () => {
+    const { panel } = await open()
+    const details = boxOf(panel, 'Edit details')
+    const strip = within(panel).getByRole('tablist')
+    // The box precedes the strip in the DOM, i.e. the tabs are below it.
+    expect(details.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const labels = [...details.querySelectorAll('dt')].map((dt) => dt.textContent)
+    expect(labels).toEqual(['Assigned to', 'Due date', 'Added', 'Description'])
+  })
+
+  test('the comment is in the Activity tab, not in the fields box', async () => {
+    const { panel } = await open()
+    const activity = within(panel).getByRole('tabpanel', { name: 'Activity' })
+    expect(activity.textContent).toContain('Sent by email on the 6th.')
+    expect(boxOf(panel, 'Edit details').textContent).not.toContain('Sent by email')
+  })
+
+  test('Log and Tools say what is missing rather than showing nothing', async () => {
+    const { user, panel } = await open()
+    await user.click(within(panel).getByRole('tab', { name: 'Log' }))
+    expect(within(panel).getByRole('tabpanel', { name: 'Log' }).textContent).toContain(
+      'not recorded yet',
+    )
+    await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
+    expect(within(panel).getByRole('tabpanel', { name: 'Tools' }).textContent).toContain('No tools yet')
+  })
+
+  test('both boxes are bordered, carry a pencil, and render nothing submittable while reading', async () => {
+    const { panel } = await open()
+    for (const name of ['Edit details', 'Edit completion']) {
+      const box = boxOf(panel, name)
+      expect(box.className).toContain('border')
+      expect(box.querySelectorAll('input, select, textarea').length).toBe(0)
+    }
+  })
+
+  test('the details pencil makes the assignee, due date and description editable — but not Added', async () => {
+    const { user, panel } = await open()
+    const box = boxOf(panel, 'Edit details')
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    expect(within(box).getByRole('combobox', { name: 'Assigned to' })).toBeTruthy()
+    expect(within(box).getByLabelText('Due date').getAttribute('type')).toBe('date')
+    expect(within(box).getByLabelText('Description').tagName).toBe('TEXTAREA')
+    // Added is created_at: a record of when the row was made, not a property of
+    // the task. It stays a value in both modes.
+    expect(within(box).queryByLabelText('Added')).toBeNull()
+    expect(within(box).getByText('Added')).toBeTruthy()
+  })
+
+  test('saving the details box sends only its own fields — never the comment', async () => {
+    const { user, panel } = await open()
+    const box = boxOf(panel, 'Edit details')
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    await user.selectOptions(within(box).getByRole('combobox', { name: 'Assigned to' }), 's2')
+    await user.clear(within(box).getByLabelText('Description'))
+    await user.type(within(box).getByLabelText('Description'), 'Rewritten.')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
+
+    const sent = vi.mocked(actions.saveWorkflowTaskDetails).mock.calls.at(-1)![1]
+    expect(sent.get('task_id')).toBe('t7')
+    expect(sent.get('workflow_id')).toBe('w1')
+    expect(sent.get('assigned_to_staff_id')).toBe('s2')
+    expect(sent.get('due_at')).toBe('2026-10-01')
+    expect(sent.get('description')).toBe('Rewritten.')
+    /* The load-bearing one. Both boxes call the SAME patch function, and key
+       presence decides what it writes — so a box that submitted a field it does
+       not show would clear the other box's column. */
+    expect(sent.has('comment')).toBe(false)
+    // Back to reading, so the box does not sit open over refreshed values.
+    expect(await within(panel).findByRole('button', { name: 'Edit details' })).toBeTruthy()
+  })
+
+  test('saving the completion box sends only the comment — never the description', async () => {
+    const { user, panel } = await open()
+    const box = boxOf(panel, 'Edit completion')
+    await user.click(within(box).getByRole('button', { name: 'Edit completion' }))
+    await user.clear(within(box).getByLabelText('Comment'))
+    await user.type(within(box).getByLabelText('Comment'), 'Client confirmed by phone.')
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
+
+    const sent = vi.mocked(actions.saveWorkflowTaskDetails).mock.calls.at(-1)![1]
+    expect(sent.get('comment')).toBe('Client confirmed by phone.')
+    expect(sent.has('description')).toBe(false)
+    expect(sent.has('due_at')).toBe(false)
+    expect(sent.has('assigned_to_staff_id')).toBe(false)
+    // Completed is stamped by the status function, so it is not submittable.
+    expect(sent.has('completed_at')).toBe(false)
+  })
+
+  test('an empty field IS sent, because empty means clear', async () => {
+    const { user, panel } = await open()
+    const box = boxOf(panel, 'Edit details')
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    await user.clear(within(box).getByLabelText('Description'))
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
+
+    const sent = vi.mocked(actions.saveWorkflowTaskDetails).mock.calls.at(-1)![1]
+    expect(sent.has('description')).toBe(true)
+    expect(sent.get('description')).toBe('')
+  })
+
+  test('a refused save keeps the box open, with the reason', async () => {
+    vi.mocked(actions.saveWorkflowTaskDetails).mockResolvedValueOnce({ error: 'Not yours to edit' })
+    const { user, panel } = await open()
+    const box = boxOf(panel, 'Edit details')
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    await user.click(within(box).getByRole('button', { name: 'Save' }))
+
+    expect((await within(box).findByRole('alert')).textContent).toContain('Not yours to edit')
+    expect(within(box).getByRole('combobox', { name: 'Assigned to' })).toBeTruthy()
+  })
+
+  test('an assignee who has left the directory stays selectable', async () => {
+    const { user, panel } = await open(
+      task({ id: 't7', subject: 'Departed', assigned_to_staff_id: 'gone', assigned_to_name: 'Old Hand' }),
+    )
+    const box = boxOf(panel, 'Edit details')
+    await user.click(within(box).getByRole('button', { name: 'Edit details' }))
+    const select = within(box).getByRole<HTMLSelectElement>('combobox', { name: 'Assigned to' })
+    // Without the extra option the select would fall back to Unassigned and the
+    // next save would quietly reassign the task to nobody.
+    expect(select.value).toBe('gone')
+    expect([...select.options].map((o) => o.textContent)).toContain('Old Hand')
+  })
+
+  test('a finished task is not marked overdue in the panel either', async () => {
+    const { panel } = await open(
+      task({ id: 't7', subject: 'Late but done', due_at: '2020-01-15', status: 'done' }),
+    )
+    const due = [...panel.querySelectorAll('dt')].find((dt) => dt.textContent === 'Due date')!
+      .nextElementSibling!
+    expect(due.textContent).toBe('Due 15 Jan 2020')
+    expect(due.textContent).not.toContain('Overdue')
+  })
+
+  test('the priority is shown in the panel but changed from the row', async () => {
+    const { panel } = await open()
+    expect(panel.textContent).toContain('High')
+    // One control for one value: the row's picker. A second here would be a
+    // second thing to keep in step.
+    expect(within(panel).queryByRole('button', { name: /Change priority/ })).toBeNull()
   })
 })
