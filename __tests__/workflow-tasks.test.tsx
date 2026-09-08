@@ -446,11 +446,11 @@ describe('the task panel', () => {
   const boxOf = (panel: HTMLElement, name: string) =>
     within(panel).getByRole('button', { name }).closest('form')! as HTMLElement
 
-  test('three tabs — Activity, Log, Tools — with Activity showing first', async () => {
+  test('three tabs — Activity, History, Tools — with Activity showing first', async () => {
     const { panel } = await open()
     expect(within(panel).getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Activity',
-      'Log',
+      'History',
       'Tools',
     ])
     expect(within(panel).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
@@ -536,10 +536,10 @@ describe('the task panel', () => {
     expect(panel.textContent).not.toContain('Sent by email on the 6th.')
   })
 
-  test('Log and Tools say what is missing rather than showing nothing', async () => {
+  test('History and Tools say what is missing rather than showing nothing', async () => {
     const { user, panel } = await open()
-    await user.click(within(panel).getByRole('tab', { name: 'Log' }))
-    expect(within(panel).getByRole('tabpanel', { name: 'Log' }).textContent).toContain(
+    await user.click(within(panel).getByRole('tab', { name: 'History' }))
+    expect(within(panel).getByRole('tabpanel', { name: 'History' }).textContent).toContain(
       'not recorded yet',
     )
     await user.click(within(panel).getByRole('tab', { name: 'Tools' }))

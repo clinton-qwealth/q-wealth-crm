@@ -649,8 +649,8 @@ function TaskPanel({
             ),
           },
           {
-            id: 'log',
-            label: 'Log',
+            id: 'history',
+            label: 'History',
             panel: (
               <div className="px-5 pb-6">
                 <Unbuilt title="Changes to this task are not recorded yet">

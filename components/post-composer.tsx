@@ -356,7 +356,7 @@ export function PostComposer({
         underline: e?.isActive('underline') ?? false,
         strike: e?.isActive('strike') ?? false,
         code: e?.isActive('code') ?? false,
-        heading: (POST_HEADING_LEVELS.find((l) => e?.isActive('heading', { level: l })) ?? 0) as 0 | 1 | 2 | 3,
+        heading: (POST_HEADING_LEVELS.find((l) => e?.isActive('heading', { level: l })) ?? 0) as 0 | 1,
         bullets: e?.isActive('bulletList') ?? false,
         numbers: e?.isActive('orderedList') ?? false,
         quote: e?.isActive('blockquote') ?? false,
@@ -441,14 +441,20 @@ export function PostComposer({
             <span className="font-mono text-[11px]">{'<>'}</span>
           </Tool>
           <Divider />
+{/* Named from the set, not hard-coded: with one level the button is
+              "Heading", because "Heading 1" would imply a Heading 2 exists. Add
+              a level back to POST_HEADING_LEVELS and the numbers return on
+              their own. */}
           {POST_HEADING_LEVELS.map((level) => (
             <Tool
               key={level}
-              label={`Heading ${level}`}
+              label={POST_HEADING_LEVELS.length > 1 ? `Heading ${level}` : 'Heading'}
               on={state.heading === level}
               onClick={() => run((c) => c.toggleHeading({ level }).run())}
             >
-              <span className="text-[11px] font-semibold">H{level}</span>
+              <span className="text-[11px] font-semibold">
+                {POST_HEADING_LEVELS.length > 1 ? `H${level}` : 'H'}
+              </span>
             </Tool>
           ))}
           <Divider />
@@ -611,7 +617,7 @@ const IDLE = {
   underline: false,
   strike: false,
   code: false,
-  heading: 0 as 0 | 1 | 2 | 3,
+  heading: 0 as 0 | 1,
   bullets: false,
   numbers: false,
   quote: false,
