@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { recordTaskAction } from '@/app/(shell)/groups/actions'
+import { AddressField } from './address-field'
 import { MessageEditor } from './message-editor'
-import type { PostDoc } from '@/lib/workflow-board'
+import { isEmailAddress, joinAddresses, type PostDoc } from '@/lib/workflow-board'
 
 const INPUT =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -55,7 +56,11 @@ export function EmailTool({
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const editorRef = useRef<Editor | null>(null)
-  const [to, setTo] = useState(recipient?.email ?? '')
+  /* A LIST, and the text still being typed alongside it. Both live here rather
+     than inside the field, because Send has to be able to count an address
+     that was typed and never finished — see `send()` and AddressField. */
+  const [to, setTo] = useState<string[]>(recipient?.email ? [recipient.email] : [])
+  const [toDraft, setToDraft] = useState('')
   const [subject, setSubject] = useState(taskSubject)
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
@@ -78,11 +83,27 @@ export function EmailTool({
   async function send() {
     if (sending) return
     setProblem(null)
-    const trimmed = to.trim()
-    if (!trimmed) {
+
+    /* Whatever is still being typed counts. Somebody who types an address and
+       goes straight for Send has finished it, and losing it because it never
+       became a pill would be this field failing at the only job it has. It is
+       NAMED rather than dropped when it is not an address — the alternative is
+       recording an email to fewer people than the writer thinks. */
+    const pending = toDraft.trim()
+    if (pending && !isEmailAddress(pending)) {
+      setProblem(`“${pending}” does not look like an email address.`)
+      return
+    }
+    const list = pending && !to.includes(pending) ? [...to, pending] : to
+    if (!list.length) {
       setProblem('An email needs a recipient.')
       return
     }
+    /* Committed before the call, so a REFUSED record leaves the box in the
+       state the writer sees rather than with a pill's worth of text back in
+       the input. */
+    setTo(list)
+    setToDraft('')
 
     setSending(true)
     try {
@@ -96,7 +117,7 @@ export function EmailTool({
         workflowId,
         taskId,
         'email',
-        trimmed,
+        joinAddresses(list),
         sender,
         subject,
         body,
@@ -129,34 +150,16 @@ export function EmailTool({
           push Send below the fold — and Send is the point of the dialog, so it
           is the one thing that must never need scrolling to. */}
       <div className="flex max-h-[calc(100vh-4rem)] flex-col">
-        {/* Title left, template right, on ONE row. The picker moved up here
-            from the top of the fields on 9 September: it is chosen rarely and
-            before anything else, so it was costing the content box a row of
-            height every time somebody wrote a message without using one. */}
-        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-100 px-5 py-4">
-          <div className="min-w-0 flex-1">
-            <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
-              Email
-            </h2>
-            <p className="mt-0.5 text-xs text-neutral-500">
-              Composed against this task.{' '}
-              <span className="font-medium text-neutral-700">Nothing is sent yet.</span>
-            </p>
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <label className={LABEL} htmlFor="email-template">
-              Template
-            </label>
-            <select
-              id="email-template"
-              disabled
-              aria-label="Template — not built yet"
-              title="Not built yet"
-              className="w-40 cursor-not-allowed rounded-md border border-dashed border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-400"
-            >
-              <option>No templates yet</option>
-            </select>
-          </div>
+        {/* The title alone. The template picker was here for part of 9 September
+            and has moved to the footer — see the note on that row. */}
+        <div className="shrink-0 border-b border-neutral-100 px-5 py-4">
+          <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
+            Email
+          </h2>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Composed against this task.{' '}
+            <span className="font-medium text-neutral-700">Nothing is sent yet.</span>
+          </p>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
@@ -172,24 +175,30 @@ export function EmailTool({
           {/* The hint is DESCRIBED BY, not part of the name. Wrapping label
               text and hint in one <label> made the field's accessible name
               "To Jane Testsmith, the primary contact for…" — a description
-              being read out as a label. */}
+              being read out as a label.
+
+              MORE THAN ONE RECIPIENT is allowed, and the hint says so, because
+              a field showing a single pill gives no sign that a second address
+              would be accepted. Every address is recorded on the one row: a
+              record says where the thing went, which is one fact about one
+              action. */}
           <div className="flex flex-col gap-1.5">
             <label className={LABEL} htmlFor="email-to">
               To
             </label>
-            <input
+            <AddressField
               id="email-to"
-              type="email"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
+              addresses={to}
+              draft={toDraft}
+              onChange={setTo}
+              onDraftChange={setToDraft}
+              describedBy="email-to-hint"
               placeholder="nobody@example.com"
-              aria-describedby="email-to-hint"
-              className={INPUT}
             />
             {recipient ? (
               <span id="email-to-hint" className="text-[11px] text-neutral-400">
                 {recipient.name ? `${recipient.name}, the ` : 'The '}primary contact for this
-                workflow’s client group.
+                workflow’s client group. Type another address and press Enter to add it.
               </span>
             ) : (
               /* Named rather than left blank: a group with no primary contact,
@@ -220,7 +229,21 @@ export function EmailTool({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 px-5 py-3">
+        {/* The template picker sits at the BOTTOM RIGHT, beside Cancel and Send.
+            It was in the header for part of 9 September, which put it opposite
+            the title where it read as part of the dialog's identity rather than
+            as something to choose. Down here it is what it is: one control on
+            the row of controls, and the content box keeps the height it gained
+            when the picker left the fields.
+
+            Wrapping rather than shrinking. Derived, not measured — there is no
+            browser pass over this yet: a 608px dialog leaves 566px inside the
+            footer's padding, and the note, the picker, the rule and the two
+            buttons want about 525px of it. So it fits with roughly 40px spare,
+            and a refusal message longer than the note drops the controls to a
+            second line rather than squeezing them. The footer is `shrink-0`,
+            so it takes the extra height off the scrolling fields. */}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-neutral-100 px-5 py-3">
           {problem ? (
             <p role="alert" className="mr-auto text-xs text-red-600">
               {problem}
@@ -228,6 +251,23 @@ export function EmailTool({
           ) : (
             <p className="mr-auto text-[11px] text-neutral-400">Send records; it does not deliver.</p>
           )}
+          <div className="flex shrink-0 items-center gap-2">
+            <label className={LABEL} htmlFor="email-template">
+              Template
+            </label>
+            <select
+              id="email-template"
+              disabled
+              aria-label="Template — not built yet"
+              title="Not built yet"
+              className="w-36 cursor-not-allowed rounded-md border border-dashed border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-400"
+            >
+              <option>No templates yet</option>
+            </select>
+          </div>
+          {/* A choice on the left of it, actions on the right. Without the rule
+              the picker reads as a third button. */}
+          <span aria-hidden="true" className="h-5 w-px shrink-0 bg-neutral-200" />
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}

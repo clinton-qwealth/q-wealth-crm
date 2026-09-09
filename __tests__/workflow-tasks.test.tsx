@@ -1,6 +1,6 @@
 import type { TaskAction, WorkflowTask } from '@/lib/workflow-board'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
@@ -745,11 +745,15 @@ describe('the task panel', () => {
       return { user, dialog: screen.getByRole('dialog', { name: 'Email' }) }
     }
 
-    test('To prefills with the group’s primary contact; From is the signed-in user and not editable', async () => {
+    test('To prefills with the group’s primary contact, as a pill; From is the signed-in user and not editable', async () => {
       const { dialog } = await openEmail()
-      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^To$/ }).value).toBe(
-        'jane@testsmith.example',
-      )
+      /* The prefill arrives ALREADY FINISHED, so it is a pill rather than text
+         in the input — the field's own statement of what it understood. */
+      expect(
+        within(dialog).getByRole('button', { name: 'Remove jane@testsmith.example' }),
+      ).toBeTruthy()
+      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^To$/ }).value).toBe('')
+
       // From is TEXT, not a field: an email that could claim to come from a
       // colleague is what the rest of this app refuses by construction.
       expect(dialog.textContent).toContain('clinton@qwealth.com.au')
@@ -757,32 +761,43 @@ describe('the task panel', () => {
     })
 
     /**
-     * The layout the content box was given room by. The template picker shares
-     * the header's row rather than sitting at the top of the fields, because it
-     * is chosen rarely and was costing the content a row of height on every
-     * message written without one.
+     * The template picker sits at the BOTTOM RIGHT — on the footer row with
+     * Cancel and Send, and before them in reading order. It was in the header
+     * for part of 9 September, opposite the title, where it read as part of the
+     * dialog's identity rather than as something to choose.
+     *
+     * jsdom has no layout, so these assert the mechanism rather than pixels:
+     * which row the picker is in, where it sits in that row, and that the row
+     * pushes its controls to the right while the note takes the slack. Every
+     * one of those is a thing that was wrong at some point.
      */
-    test('the template picker sits in the header row, not among the fields', async () => {
+    test('the template picker sits at the bottom right, on the row with Send', async () => {
       const { dialog } = await openEmail()
-      const heading = within(dialog).getByRole('heading', { level: 2, name: 'Email' })
       const template = within(dialog).getByRole('combobox', { name: /Template/ })
-      // Same row: the heading's row is the picker's nearest common container.
-      const headerRow = heading.parentElement!.parentElement!
-      expect(headerRow.contains(template)).toBe(true)
-      // And it is above the To field, which is where the fields begin.
-      const to = within(dialog).getByRole('textbox', { name: /^To$/ })
-      expect(headerRow.contains(to)).toBe(false)
+      const send = within(dialog).getByRole('button', { name: 'Send' })
+      const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
 
-      /* PINNED TO THE RIGHT EDGE, not merely somewhere in the row. jsdom has
-         no layout, so this asserts the mechanism: the row splits its children
-         apart and the picker's cluster takes the leftover margin. Without
-         both, the picker sits next to the title instead of opposite it — which
-         is what it did, twice, before this assertion existed. */
-      expect(headerRow.className).toContain('justify-between')
+      // The footer row is the picker's and Send's nearest common container.
+      const footer = send.parentElement!
+      expect(footer.contains(template)).toBe(true)
+      expect(footer.contains(cancel)).toBe(true)
+
+      // BEFORE the buttons in the row, not after them: a choice, then actions.
       const cluster = template.closest('div')!
-      expect(cluster.className).toContain('ml-auto')
-      // And the title block gives up the slack rather than filling the row.
-      expect(heading.parentElement!.className).toContain('flex-1')
+      const order = Array.from(footer.children)
+      expect(order.indexOf(cluster)).toBeGreaterThan(-1)
+      expect(order.indexOf(cluster)).toBeLessThan(order.indexOf(cancel))
+      expect(order.indexOf(cancel)).toBeLessThan(order.indexOf(send))
+
+      // Pushed to the right, with the note giving up the leftover margin.
+      expect(footer.className).toContain('justify-end')
+      expect(footer.querySelector('.mr-auto')).toBeTruthy()
+
+      // And it has LEFT the header and did not land among the fields.
+      const heading = within(dialog).getByRole('heading', { level: 2, name: 'Email' })
+      expect(heading.parentElement!.contains(template)).toBe(false)
+      const to = within(dialog).getByRole('textbox', { name: /^To$/ })
+      expect(to.closest('.overflow-y-auto')!.contains(template)).toBe(false)
     })
 
     /**
@@ -824,9 +839,11 @@ describe('the task panel', () => {
 
     test('Send records the action with the addresses as they stood, and closes', async () => {
       const { user, dialog } = await openEmail()
-      const to = within(dialog).getByRole('textbox', { name: /^To$/ })
-      await user.clear(to)
-      await user.type(to, 'accountant@example.com')
+      await user.click(within(dialog).getByRole('button', { name: 'Remove jane@testsmith.example' }))
+      /* Typed and NOT finished — no Enter, no comma. Send has to count it
+         anyway; an address the writer typed and then sent must not be dropped
+         because it never became a pill. */
+      await user.type(within(dialog).getByRole('textbox', { name: /^To$/ }), 'accountant@example.com')
       await user.click(within(dialog).getByRole('button', { name: 'Send' }))
 
       // What was RECORDED is what the field said on Send, not the prefill.
@@ -856,10 +873,206 @@ describe('the task panel', () => {
 
     test('a blank recipient is refused here, before any call', async () => {
       const { user, dialog } = await openEmail()
-      await user.clear(within(dialog).getByRole('textbox', { name: /^To$/ }))
+      await user.click(within(dialog).getByRole('button', { name: 'Remove jane@testsmith.example' }))
       await user.click(within(dialog).getByRole('button', { name: 'Send' }))
       expect((await within(dialog).findByRole('alert')).textContent).toContain('needs a recipient')
       expect(actions.recordTaskAction).not.toHaveBeenCalled()
+    })
+
+    /**
+     * The recipient pills, added 9 September. The field is what tells the
+     * writer what it understood, one address at a time, so these assert the
+     * moment an address becomes a pill and every way of getting there.
+     */
+    describe('the To field’s pills', () => {
+      const toField = async () => {
+        const { user, dialog } = await openEmail()
+        await user.click(within(dialog).getByRole('button', { name: 'Remove jane@testsmith.example' }))
+        return { user, dialog, to: within(dialog).getByRole('textbox', { name: /^To$/ }) }
+      }
+
+      test('a finished address becomes a blue pill and the input clears', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'first@example.com{Enter}')
+
+        const pill = within(dialog)
+          .getByRole('button', { name: 'Remove first@example.com' })
+          .parentElement!
+        expect(pill.textContent).toContain('first@example.com')
+        /* Blue, deliberately — not brand orange, which reads as something to
+           click, and not amber, which is the app's warning tone. */
+        expect(pill.className).toMatch(/bg-blue-\d/)
+        expect(pill.className).toContain('rounded-full')
+        // The input is empty and ready for the next one.
+        expect((to as HTMLInputElement).value).toBe('')
+      })
+
+      /**
+       * NO TRAILING ENTER, deliberately. Typing the whole run and then pressing
+       * Enter passes whether or not a space finishes an address, because the
+       * commit splits on whitespace anyway — which is how the first version of
+       * this test managed to pass with the space handler removed entirely. The
+       * assertion is that the FIRST address is already a pill while the second
+       * is still being typed.
+       */
+      test('a second address needs no comma — a space finishes the first', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'one@example.com two@example.com')
+
+        expect(within(dialog).getByRole('button', { name: 'Remove one@example.com' })).toBeTruthy()
+        // The space finished an address instead of landing in the field.
+        expect((to as HTMLInputElement).value).toBe('two@example.com')
+        expect(within(dialog).queryByRole('button', { name: 'Remove two@example.com' })).toBeNull()
+      })
+
+      test('a typed comma or semicolon finishes one too, and never lands in the field', async () => {
+        const { user, dialog, to } = await toField()
+
+        await user.type(to, 'a@example.com,b@example.com')
+        expect(within(dialog).getByRole('button', { name: 'Remove a@example.com' })).toBeTruthy()
+        expect((to as HTMLInputElement).value).toBe('b@example.com')
+
+        await user.type(to, ';c@example.com')
+        expect(within(dialog).getByRole('button', { name: 'Remove b@example.com' })).toBeTruthy()
+        expect((to as HTMLInputElement).value).toBe('c@example.com')
+      })
+
+      test('a pasted list becomes pills in one go', async () => {
+        const { user, dialog, to } = await toField()
+        await user.click(to)
+        await user.paste('jo@example.com, sam@example.com; ali@example.com')
+        for (const a of ['jo@example.com', 'sam@example.com', 'ali@example.com']) {
+          expect(within(dialog).getByRole('button', { name: `Remove ${a}` })).toBeTruthy()
+        }
+      })
+
+      /**
+       * Leaving the field is the EVERYDAY way an address gets finished, and it
+       * is one path — blur — not two. Tab was handled separately at first,
+       * which masked the blur handler completely: removing the blur commit left
+       * every test green because Tab was doing the work. Both ways of leaving
+       * are asserted here, and both now go through the same handler.
+       */
+      test('leaving the field finishes the address being typed', async () => {
+        const { user, dialog, to } = await toField()
+
+        // Tabbing away.
+        await user.type(to, 'tabbed@example.com')
+        await user.tab()
+        expect(within(dialog).getByRole('button', { name: 'Remove tabbed@example.com' })).toBeTruthy()
+
+        // And clicking into another field, which sends no Tab key at all.
+        await user.type(to, 'clicked@example.com')
+        await user.click(within(dialog).getByRole('textbox', { name: /^Subject$/ }))
+        expect(within(dialog).getByRole('button', { name: 'Remove clicked@example.com' })).toBeTruthy()
+        expect((to as HTMLInputElement).value).toBe('')
+      })
+
+      /**
+       * The one outcome this field must never produce: silently dropping what
+       * somebody typed. Text that is not an address STAYS in the input, and the
+       * field says why rather than leaving the writer to notice a missing pill.
+       */
+      test('text that is not an address is kept, not pilled, and is named', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'not-an-address{Enter}')
+        expect((to as HTMLInputElement).value).toBe('not-an-address')
+        expect(within(dialog).queryByRole('button', { name: /^Remove not-an-address$/ })).toBeNull()
+        expect(dialog.textContent).toContain('does not look like an email address')
+        expect(to.getAttribute('aria-invalid')).toBe('true')
+      })
+
+      /**
+       * Send counts an address that is still being typed WITHOUT relying on the
+       * click moving focus first.
+       *
+       * In a real browser, clicking Send blurs the input and the blur commits
+       * the draft, so this path is a second line of defence rather than the
+       * everyday one — which is exactly why it needs its own test: driven
+       * through `user.click` the blur does the work and the code here is never
+       * reached, so the first version of this assertion passed with the whole
+       * thing deleted. `fireEvent.click` dispatches the click alone, with no
+       * focus change, so what is under test is the send path itself.
+       */
+      test('Send counts an address still being typed, even with no blur first', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'typed@example.com')
+        expect((to as HTMLInputElement).value).toBe('typed@example.com')
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
+
+        await waitFor(() =>
+          expect(actions.recordTaskAction).toHaveBeenCalledWith(
+            'w1',
+            't7',
+            'email',
+            'typed@example.com',
+            'clinton@qwealth.com.au',
+            'Confirm the rollover',
+            expect.anything(),
+          ),
+        )
+      })
+
+      test('a half-typed address is refused by Send by name, rather than dropped', async () => {
+        const { user, dialog } = await openEmail()
+        const to = within(dialog).getByRole('textbox', { name: /^To$/ })
+        await user.type(to, 'jane@')
+        await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+        expect((await within(dialog).findByRole('alert')).textContent).toContain('jane@')
+        expect(actions.recordTaskAction).not.toHaveBeenCalled()
+      })
+
+      test('the same address twice is not added twice', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'dup@example.com{Enter}dup@example.com{Enter}')
+        expect(within(dialog).getAllByRole('button', { name: 'Remove dup@example.com' })).toHaveLength(1)
+        expect(dialog.textContent).toContain('already there')
+      })
+
+      test('Backspace on an empty input takes the last pill off', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'keep@example.com{Enter}drop@example.com{Enter}')
+        await user.type(to, '{Backspace}')
+        expect(within(dialog).getByRole('button', { name: 'Remove keep@example.com' })).toBeTruthy()
+        expect(within(dialog).queryByRole('button', { name: 'Remove drop@example.com' })).toBeNull()
+      })
+
+      /**
+       * Removing a pill mid-typing must cost neither the pill list nor the
+       * words in the input. The remove button prevents the default on mousedown
+       * so focus never leaves the field, which is why the draft survives.
+       */
+      test('removing a pill while typing keeps what is being typed', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'keep@example.com{Enter}gone@example.com{Enter}')
+        await user.type(to, 'typing@example.com')
+        await user.click(within(dialog).getByRole('button', { name: 'Remove gone@example.com' }))
+
+        expect((to as HTMLInputElement).value).toBe('typing@example.com')
+        expect(within(dialog).getByRole('button', { name: 'Remove keep@example.com' })).toBeTruthy()
+        expect(within(dialog).queryByRole('button', { name: 'Remove gone@example.com' })).toBeNull()
+        // And it is still the focused field, so typing continues.
+        expect(document.activeElement).toBe(to)
+      })
+
+      /** Removing a pill takes that address off the record, not just off screen. */
+      test('several recipients are recorded on one row, comma-separated and in order', async () => {
+        const { user, dialog, to } = await toField()
+        await user.type(to, 'first@example.com second@example.com third@example.com{Enter}')
+        await user.click(within(dialog).getByRole('button', { name: 'Remove second@example.com' }))
+        await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+
+        expect(actions.recordTaskAction).toHaveBeenCalledWith(
+          'w1',
+          't7',
+          'email',
+          'first@example.com, third@example.com',
+          'clinton@qwealth.com.au',
+          'Confirm the rollover',
+          expect.anything(),
+        )
+      })
     })
   })
 

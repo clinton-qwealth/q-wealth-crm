@@ -420,6 +420,63 @@ export function isTaskActionKind(value: unknown): value is TaskActionKind {
 }
 
 /**
+ * What separates one address from the next when a person types or pastes a run
+ * of them.
+ *
+ * A comma, a semicolon and any whitespace, because all three are what mail
+ * clients emit when a list is copied out of them and all three are things a
+ * person reaches for. **None of them can appear inside an address**, which is
+ * what makes splitting on them safe rather than a guess.
+ */
+export const ADDRESS_SEPARATORS = /[\s,;]+/
+
+/**
+ * The SHAPE of an email address — a convenience, not validation.
+ *
+ * Deliberately loose about the local part and strict about the two things that
+ * actually matter for a token field: exactly one `@`, and a domain of at least
+ * two dot-separated labels. Every character that separates one address from the
+ * next is excluded, so a string this accepts can never be two addresses stuck
+ * together.
+ *
+ * **The database does not check this**, and should not: `recipient` is a `text`
+ * column holding what was used at the time, and a record of a badly-typed
+ * address is still a true record of what the adviser did. Nothing here is a
+ * security boundary — it is the difference between a blue pill and text still
+ * being typed, which is a question about the interface.
+ */
+export const EMAIL_ADDRESS =
+  /^[^\s@,;:<>()[\]\\"]+@[^\s@,;:<>()[\]\\".]+(?:\.[^\s@,;:<>()[\]\\".]+)+$/
+
+export function isEmailAddress(value: unknown): value is string {
+  return typeof value === 'string' && EMAIL_ADDRESS.test(value)
+}
+
+/**
+ * Break a typed or pasted run into candidate addresses, in the order given.
+ *
+ * Does not judge them — `isEmailAddress` does that, separately, because the
+ * caller needs to keep the ones that failed rather than drop them. Losing what
+ * somebody pasted is the one outcome a recipient field must never produce.
+ */
+export function splitAddresses(value: string): string[] {
+  return value.split(ADDRESS_SEPARATORS).filter(Boolean)
+}
+
+/**
+ * How a list of recipients is RECORDED: comma-space, in the order they were
+ * added.
+ *
+ * One column holds it, because a record says where the thing went and that is
+ * one fact about one action. Splitting recipients into their own table would be
+ * modelling an address book, which is not what this is — and `record_task_action`
+ * only requires the column to be non-blank.
+ */
+export function joinAddresses(addresses: readonly string[]): string {
+  return addresses.join(', ')
+}
+
+/**
  * One recorded action from a task's Tools tab, as the History tab reads it.
  *
  * `recipient` and `sender` are what was USED, not a live lookup — a record has
