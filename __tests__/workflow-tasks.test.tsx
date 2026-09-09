@@ -13,7 +13,7 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
 
 const actions = await import('@/app/(shell)/groups/actions')
 const { WorkflowTasks } = await import('@/components/workflow-tasks')
-const { formatCalendarDate, todayISO } = await import('@/lib/note-date')
+const { formatCalendarDate, formatNoteDateTime, todayISO } = await import('@/lib/note-date')
 const { default: React } = await import('react')
 
 const task = (o: Partial<WorkflowTask>): WorkflowTask => ({
@@ -742,7 +742,7 @@ describe('the task panel', () => {
       const { user, panel } = await open()
       await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
       await user.click(within(panel).getByRole('button', { name: 'Email' }))
-      return { user, dialog: screen.getByRole('dialog', { name: 'Email' }) }
+      return { user, dialog: screen.getByRole('dialog', { name: 'Draft Email' }) }
     }
 
     test('To prefills with the group’s primary contact, as a pill; From is the signed-in user and not editable', async () => {
@@ -754,6 +754,13 @@ describe('the task panel', () => {
       ).toBeTruthy()
       expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^To$/ }).value).toBe('')
 
+      /* The hint names WHO was prefilled and stops there. It briefly also
+         explained how to add a second address; the pills and the "Add another"
+         placeholder do that job, so the sentence went. */
+      const hint = dialog.querySelector('#email-to-hint')!
+      expect(hint.textContent).toContain('primary contact for this workflow’s client group')
+      expect(hint.textContent).not.toMatch(/press Enter|add it/i)
+
       // From is TEXT, not a field: an email that could claim to come from a
       // colleague is what the rest of this app refuses by construction.
       expect(dialog.textContent).toContain('clinton@qwealth.com.au')
@@ -761,17 +768,18 @@ describe('the task panel', () => {
     })
 
     /**
-     * The template picker sits at the BOTTOM RIGHT — on the footer row with
-     * Cancel and Send, and before them in reading order. It was in the header
-     * for part of 9 September, opposite the title, where it read as part of the
-     * dialog's identity rather than as something to choose.
+     * The template picker sits at the BOTTOM LEFT, with Cancel and Send at the
+     * bottom right. It has been among the fields, in the header opposite the
+     * title, and beside Send; this is the arrangement it was looking for.
      *
-     * jsdom has no layout, so these assert the mechanism rather than pixels:
-     * which row the picker is in, where it sits in that row, and that the row
-     * pushes its controls to the right while the note takes the slack. Every
-     * one of those is a thing that was wrong at some point.
+     * jsdom has no layout, so these assert the MECHANISM rather than pixels,
+     * and they name the specific element that does the work. An earlier version
+     * only asked whether something in the row carried `mr-auto` — which a note
+     * on the left satisfied, so the assertion survived the picker moving from
+     * one end of the row to the other. It is the picker's own cluster that must
+     * carry it.
      */
-    test('the template picker sits at the bottom right, on the row with Send', async () => {
+    test('the template picker sits at the bottom left, opposite Cancel and Send', async () => {
       const { dialog } = await openEmail()
       const template = within(dialog).getByRole('combobox', { name: /Template/ })
       const send = within(dialog).getByRole('button', { name: 'Send' })
@@ -782,19 +790,18 @@ describe('the task panel', () => {
       expect(footer.contains(template)).toBe(true)
       expect(footer.contains(cancel)).toBe(true)
 
-      // BEFORE the buttons in the row, not after them: a choice, then actions.
+      // FIRST in the row, and pinned there: its own cluster takes the margin
+      // that pushes everything else to the right.
       const cluster = template.closest('div')!
       const order = Array.from(footer.children)
-      expect(order.indexOf(cluster)).toBeGreaterThan(-1)
+      expect(order.indexOf(cluster)).toBe(0)
       expect(order.indexOf(cluster)).toBeLessThan(order.indexOf(cancel))
       expect(order.indexOf(cancel)).toBeLessThan(order.indexOf(send))
-
-      // Pushed to the right, with the note giving up the leftover margin.
+      expect(cluster.className).toContain('mr-auto')
       expect(footer.className).toContain('justify-end')
-      expect(footer.querySelector('.mr-auto')).toBeTruthy()
 
-      // And it has LEFT the header and did not land among the fields.
-      const heading = within(dialog).getByRole('heading', { level: 2, name: 'Email' })
+      // And it is in neither the header nor the fields.
+      const heading = within(dialog).getByRole('heading', { level: 2, name: 'Draft Email' })
       expect(heading.parentElement!.contains(template)).toBe(false)
       const to = within(dialog).getByRole('textbox', { name: /^To$/ })
       expect(to.closest('.overflow-y-auto')!.contains(template)).toBe(false)
@@ -830,11 +837,28 @@ describe('the task panel', () => {
       expect(template.getAttribute('aria-label')).toContain('not built yet')
     })
 
-    /** The one claim that must not drift: Send does not deliver, and says so. */
-    test('the modal says nothing is sent', async () => {
+    /**
+     * The one claim that must not drift: nothing is delivered, and the dialog
+     * says so.
+     *
+     * It used to say it TWICE — a line of subtext under the title and a note in
+     * the footer — and both were removed on 9 September, the subtext for room
+     * and the note to give the template picker the bottom left. So the word
+     * DRAFT in the title is now the whole warning, which is why this test
+     * pins the title itself rather than any sentence in the body. If sending
+     * ever becomes real, this is the assertion that has to be changed
+     * deliberately.
+     */
+    test('the dialog is titled a DRAFT, which is the only thing saying nothing is sent', async () => {
       const { dialog } = await openEmail()
-      expect(dialog.textContent).toContain('Nothing is sent yet')
-      expect(dialog.textContent).toContain('Send records; it does not deliver')
+      expect(
+        within(dialog).getByRole('heading', { level: 2, name: 'Draft Email' }).textContent,
+      ).toBe('Draft Email')
+      // The dialog's accessible name is the title, so the warning is in it.
+      expect(dialog.getAttribute('aria-labelledby')).toBe('email-tool-title')
+      expect(dialog.textContent).toMatch(/\bDraft\b/)
+      // And it does not claim delivery anywhere.
+      expect(dialog.textContent).not.toMatch(/\bSent\b/)
     })
 
     test('Send records the action with the addresses as they stood, and closes', async () => {
@@ -856,7 +880,7 @@ describe('the task panel', () => {
         'Confirm the rollover',
         expect.anything(),
       )
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Email' })).toBeNull())
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Draft Email' })).toBeNull())
     })
 
     /** The composer's standing contract, extended here: a refusal keeps the words. */
@@ -865,7 +889,7 @@ describe('the task panel', () => {
       const { user, dialog } = await openEmail()
       await user.click(within(dialog).getByRole('button', { name: 'Send' }))
       expect((await within(dialog).findByRole('alert')).textContent).toContain('Not yours to record')
-      expect(screen.getByRole('dialog', { name: 'Email' })).toBeTruthy()
+      expect(screen.getByRole('dialog', { name: 'Draft Email' })).toBeTruthy()
       expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^Subject$/ }).value).toBe(
         'Confirm the rollover',
       )
@@ -1082,11 +1106,12 @@ describe('the task panel', () => {
    * the half that is missing.
    */
   describe('the History tab', () => {
-    const history = async () => {
+    const historyWithUser = async () => {
       const { user, panel } = await open()
       await user.click(within(panel).getByRole('tab', { name: 'History' }))
-      return within(panel).getByRole('tabpanel', { name: 'History' })
+      return { user, panel: within(panel).getByRole('tabpanel', { name: 'History' }) }
     }
+    const history = async () => (await historyWithUser()).panel
 
     test('with nothing recorded it says so, and still names what is missing', async () => {
       ACTIONS = []
@@ -1096,14 +1121,81 @@ describe('the task panel', () => {
       expect(panel.textContent).toContain('Field changes are not recorded yet')
     })
 
-    test('a recorded action shows who, when, and where it went — and says RECORDED, not sent', async () => {
+    /**
+     * The summary is three facts — kind, subject, moment — and the addresses
+     * and the message are behind the gate. So this asserts what a CLOSED entry
+     * shows, and the gate's own test asserts the rest.
+     */
+    test('a recorded action shows its kind, subject and moment — and says RECORDED, not sent', async () => {
       ACTIONS = [action()]
       const panel = await history()
+      expect(panel.textContent).toContain('Email')
       expect(panel.textContent).toContain('Rollover paperwork')
       expect(panel.textContent).toContain('Recorded by Clinton Hatcher')
-      expect(panel.textContent).toContain('jane@testsmith.example')
+      expect(panel.textContent).toContain(formatNoteDateTime('2026-09-09T04:32:00Z'))
       // The claim that must not drift: nothing was delivered.
       expect(panel.textContent).not.toMatch(/\bSent\b/)
+    })
+
+    /**
+     * The gate, added 9 September. An email body is a paragraph or more, so an
+     * entry left open means one action fills the panel and the history stops
+     * being a history.
+     */
+    test('an entry opens CLOSED, and the addresses are not on screen until it is opened', async () => {
+      ACTIONS = [action()]
+      const { user, panel } = await historyWithUser()
+
+      const gate = within(panel).getByRole('button', { expanded: false })
+      expect(panel.textContent).not.toContain('jane@testsmith.example')
+
+      await user.click(gate)
+      expect(within(panel).getByRole('button', { expanded: true })).toBeTruthy()
+      expect(panel.textContent).toContain('jane@testsmith.example')
+      expect(panel.textContent).toContain('clinton@qwealth.com.au')
+
+      // And it closes again, so the list can be put back the way it was.
+      await user.click(within(panel).getByRole('button', { expanded: true }))
+      expect(panel.textContent).not.toContain('jane@testsmith.example')
+    })
+
+    /**
+     * The whole summary row is the gate, not a chevron beside it — a 16px
+     * target in a list of entries is a control people miss.
+     */
+    test('the gate is the summary row itself, carrying the kind, subject and moment', async () => {
+      ACTIONS = [action()]
+      const { panel } = await historyWithUser()
+      const gate = within(panel).getByRole('button', { expanded: false })
+      expect(gate.textContent).toContain('Email')
+      expect(gate.textContent).toContain('Rollover paperwork')
+      expect(gate.textContent).toContain(formatNoteDateTime('2026-09-09T04:32:00Z'))
+    })
+
+    /**
+     * The kind is a pill with a glyph, and the moment is opposite it. jsdom has
+     * no layout, so this asserts the row that splits them and the glyph's
+     * presence inside the pill.
+     */
+    test('the kind is a pill with a glyph, with the date opposite it', async () => {
+      ACTIONS = [action()]
+      const { panel } = await historyWithUser()
+      const gate = within(panel).getByRole('button', { expanded: false })
+
+      const pill = Array.from(gate.querySelectorAll('span')).find((el) =>
+        el.className.includes('rounded-full'),
+      )!
+      expect(pill.textContent).toContain('Email')
+      expect(pill.querySelector('svg')).toBeTruthy()
+
+      // Same row as the date, pushed to opposite ends.
+      const row = pill.parentElement!
+      expect(row.className).toContain('justify-between')
+      expect(row.textContent).toContain(formatNoteDateTime('2026-09-09T04:32:00Z'))
+
+      // The subject is BELOW that row, not in it.
+      expect(row.textContent).not.toContain('Rollover paperwork')
+      expect(gate.textContent).toContain('Rollover paperwork')
     })
 
     test('only this task’s actions appear', async () => {

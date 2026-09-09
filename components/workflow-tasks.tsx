@@ -30,6 +30,7 @@ import { useServerState } from './use-server-state'
 import { PriorityGlyph, PriorityPicker } from './priority-picker'
 import {
   CalendarIcon,
+  ChevronDownIcon,
   DocumentPlusIcon,
   EnvelopeIcon,
   HourglassIcon,
@@ -936,7 +937,9 @@ function ToolTile({ tool }: { tool: Tool }) {
  * empty state says plainly which half is still missing, rather than implying
  * nothing is recorded at all.
  *
- * Newest first, like the feed: history is scanned from the top.
+ * Newest first, like the feed: history is scanned from the top. Every entry
+ * opens CLOSED, so the tab is a list of what happened rather than a stack of
+ * messages — see ActionEntry.
  */
 function TaskHistory({ actions }: { actions: TaskAction[] }) {
   return (
@@ -944,7 +947,7 @@ function TaskHistory({ actions }: { actions: TaskAction[] }) {
       {actions.length ? (
         <ol aria-label="Recorded actions" className="flex flex-col divide-y divide-neutral-200/80">
           {actions.map((action) => (
-            <li key={action.id} className="py-3 first:pt-0">
+            <li key={action.id} className="py-2.5 first:pt-0">
               <ActionEntry action={action} />
             </li>
           ))}
@@ -970,48 +973,115 @@ function TaskHistory({ actions }: { actions: TaskAction[] }) {
 const ACTION_LABEL: Record<TaskActionKind, string> = { email: 'Email' }
 
 /**
- * One recorded action.
+ * A glyph per kind, so the pill is recognisable before it is read.
+ *
+ * The SAME glyph the Tools tab launches the action with — an Email in the
+ * history and the Email tile that produced it must not be two different marks,
+ * or the history stops reading as a record of what was done here.
+ */
+const ACTION_GLYPH: Record<TaskActionKind, (props: { className?: string }) => ReactNode> = {
+  email: EnvelopeIcon,
+}
+
+/**
+ * One recorded action, CLOSED by default.
  *
  * **It says "recorded", never "sent".** Nothing is delivered yet, and a history
  * entry claiming an email went out would be the same lie the record was
  * deliberately kept out of the client's file to avoid.
+ *
+ * **The shape is the summary, and the summary is three facts**: what kind of
+ * thing it was, what it was about, and when. Kind as a pill with its glyph,
+ * subject under it, the moment on the right — so a column of entries lines up
+ * on all three and can be scanned down rather than read.
+ *
+ * **The addresses and the message are behind a gate.** An email body is a
+ * paragraph or more, and left open it means one entry fills the panel and the
+ * history stops being a history. Closed, ten entries fit; the gate is the whole
+ * summary row, so the target is the entry rather than a chevron. The detail is
+ * not rendered at all while closed, which is why `aria-controls` is only set
+ * when there is something for it to point at.
  */
 function ActionEntry({ action }: { action: TaskAction }) {
+  const [open, setOpen] = useState(false)
+  const detailId = `task-action-${action.id}-detail`
+  const Glyph = ACTION_GLYPH[action.kind]
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-baseline gap-x-2">
-        <Pill tone="neutral">{ACTION_LABEL[action.kind] ?? action.kind}</Pill>
-        {action.subject ? (
-          <span className="text-sm font-medium text-neutral-900">{action.subject}</span>
-        ) : (
-          <span className="text-sm text-neutral-400">No subject</span>
-        )}
-      </div>
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls={open ? detailId : undefined}
+        className="group flex w-full items-start gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        <ChevronDownIcon
+          className={`mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:text-neutral-600 ${
+            open ? '' : '-rotate-90'
+          }`}
+        />
+        <span className="min-w-0 flex-1">
+          {/* Kind on the left, moment on the right, on one row. */}
+          <span className="flex items-center justify-between gap-2">
+            <Pill tone="neutral">
+              {Glyph ? <Glyph className="-ml-0.5 mr-1 h-3 w-3" /> : null}
+              {ACTION_LABEL[action.kind] ?? action.kind}
+            </Pill>
+            <span className="shrink-0 text-[11px] text-neutral-400">
+              {formatNoteDateTime(action.occurred_at)}
+            </span>
+          </span>
 
-      <p className="text-xs text-neutral-500">
-        {/* Recorded, not sent — see the component note. */}
-        Recorded by {action.actor_name ?? 'someone no longer on staff'} ·{' '}
-        {formatNoteDateTime(action.occurred_at)}
-      </p>
+          {/* Truncated, not clamped: a subject line is a title, and a column of
+              entries only lines up if each takes exactly one row. The whole
+              subject is in the detail below once the entry is open. */}
+          <span
+            className={`mt-1 block truncate text-sm font-medium ${
+              action.subject ? 'text-neutral-900' : 'font-normal text-neutral-400'
+            }`}
+          >
+            {action.subject || 'No subject'}
+          </span>
 
-      {action.recipient ? (
-        <p className="text-xs text-neutral-500">
-          To <span className="text-neutral-700">{action.recipient}</span>
-          {action.sender ? (
-            <>
-              {' '}
-              from <span className="text-neutral-700">{action.sender}</span>
-            </>
+          <span className="mt-0.5 block text-xs text-neutral-500">
+            {/* Recorded, not sent — see the component note. */}
+            Recorded by {action.actor_name ?? 'someone no longer on staff'}
+          </span>
+        </span>
+      </button>
+
+      {open ? (
+        <div id={detailId} className="mt-2 flex flex-col gap-1 pl-6">
+          {action.subject ? (
+            <p className="text-xs text-neutral-500">
+              Subject <span className="text-neutral-700">{action.subject}</span>
+            </p>
           ) : null}
-        </p>
-      ) : null}
 
-      {/* The message as it was written. The same renderer the feed uses, which
-          draws only what it knows — and an email body is a narrower list than
-          a post, so there is nothing here it has not already been taught. */}
-      {action.body ? (
-        <div className="mt-1 rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2">
-          <PostBody doc={action.body} mentioned={[]} />
+          {action.recipient ? (
+            <p className="text-xs text-neutral-500">
+              To <span className="text-neutral-700">{action.recipient}</span>
+              {action.sender ? (
+                <>
+                  {' '}
+                  from <span className="text-neutral-700">{action.sender}</span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
+
+          {/* The message as it was written. The same renderer the feed uses,
+              which draws only what it knows — and an email body is a narrower
+              list than a post, so there is nothing here it has not already
+              been taught. */}
+          {action.body ? (
+            <div className="mt-1 rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2">
+              <PostBody doc={action.body} mentioned={[]} />
+            </div>
+          ) : (
+            <p className="text-xs text-neutral-400">No message was recorded.</p>
+          )}
         </div>
       ) : null}
     </div>

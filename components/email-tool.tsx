@@ -15,8 +15,9 @@ const LABEL = 'text-xs font-medium text-neutral-600'
  * Compose an email from a task.
  *
  * **NOTHING IS SENT.** Send records what was composed against the task and
- * closes; the message goes nowhere. That is why the button says what it does
- * under it, and why the recorded row is a task action rather than a file note
+ * closes; the message goes nowhere. That is why the title says DRAFT — the one
+ * remaining place this dialog says so — and why the recorded row is a task
+ * action rather than a file note
  * in the client's record — a note saying the client was emailed, when no
  * message left the building, is a compliance problem and not a feature. The
  * reasoning is in the migration and on the _Task Panel_ page.
@@ -150,16 +151,17 @@ export function EmailTool({
           push Send below the fold — and Send is the point of the dialog, so it
           is the one thing that must never need scrolling to. */}
       <div className="flex max-h-[calc(100vh-4rem)] flex-col">
-        {/* The title alone. The template picker was here for part of 9 September
-            and has moved to the footer — see the note on that row. */}
+        {/* THE TITLE CARRIES THE CLAIM. A line of subtext said "Composed against
+            this task. Nothing is sent yet." and the footer said "Send records;
+            it does not deliver."; both are gone, and the word DRAFT in the
+            title is now the only thing saying so. That is deliberate but it is
+            also the whole warning, so the title is not a place to economise:
+            if this ever starts delivering, the word has to go in the same
+            change. */}
         <div className="shrink-0 border-b border-neutral-100 px-5 py-4">
           <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
-            Email
+            Draft Email
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            Composed against this task.{' '}
-            <span className="font-medium text-neutral-700">Nothing is sent yet.</span>
-          </p>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
@@ -177,11 +179,11 @@ export function EmailTool({
               "To Jane Testsmith, the primary contact for…" — a description
               being read out as a label.
 
-              MORE THAN ONE RECIPIENT is allowed, and the hint says so, because
-              a field showing a single pill gives no sign that a second address
-              would be accepted. Every address is recorded on the one row: a
-              record says where the thing went, which is one fact about one
-              action. */}
+              MORE THAN ONE RECIPIENT is allowed, and the hint no longer says
+              so — the pills and the "Add another" placeholder are what tell the
+              writer, once one address is in. Every address is recorded on the
+              one row: a record says where the thing went, which is one fact
+              about one action. */}
           <div className="flex flex-col gap-1.5">
             <label className={LABEL} htmlFor="email-to">
               To
@@ -198,7 +200,7 @@ export function EmailTool({
             {recipient ? (
               <span id="email-to-hint" className="text-[11px] text-neutral-400">
                 {recipient.name ? `${recipient.name}, the ` : 'The '}primary contact for this
-                workflow’s client group. Type another address and press Enter to add it.
+                workflow’s client group.
               </span>
             ) : (
               /* Named rather than left blank: a group with no primary contact,
@@ -229,29 +231,23 @@ export function EmailTool({
           </div>
         </div>
 
-        {/* The template picker sits at the BOTTOM RIGHT, beside Cancel and Send.
-            It was in the header for part of 9 September, which put it opposite
-            the title where it read as part of the dialog's identity rather than
-            as something to choose. Down here it is what it is: one control on
-            the row of controls, and the content box keeps the height it gained
-            when the picker left the fields.
+        {/* The template picker sits at the BOTTOM LEFT and the actions at the
+            bottom right, which is the arrangement this row has been looking for:
+            what the message is made from on one side, what to do with it on the
+            other. It has been in the fields, in the header opposite the title,
+            and beside Send; only here is it neither part of the dialog's
+            identity nor a third button.
 
-            Wrapping rather than shrinking. Derived, not measured — there is no
-            browser pass over this yet: a 608px dialog leaves 566px inside the
-            footer's padding, and the note, the picker, the rule and the two
-            buttons want about 525px of it. So it fits with roughly 40px spare,
-            and a refusal message longer than the note drops the controls to a
-            second line rather than squeezing them. The footer is `shrink-0`,
-            so it takes the extra height off the scrolling fields. */}
+            `mr-auto` on the picker is what splits the row, so a refusal message
+            lands between the two clusters rather than displacing either. It
+            replaced a standing note, which is why the row can spare the width.
+            Derived, not measured — there is no browser pass over this yet: a
+            608px dialog leaves 566px inside the padding and the four controls
+            want about 310px of it, so a long refusal has roughly 250px before
+            the row wraps, and `shrink-0` means wrapping costs the fields
+            height rather than squeezing Send. */}
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-neutral-100 px-5 py-3">
-          {problem ? (
-            <p role="alert" className="mr-auto text-xs text-red-600">
-              {problem}
-            </p>
-          ) : (
-            <p className="mr-auto text-[11px] text-neutral-400">Send records; it does not deliver.</p>
-          )}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="mr-auto flex shrink-0 items-center gap-2">
             <label className={LABEL} htmlFor="email-template">
               Template
             </label>
@@ -265,9 +261,11 @@ export function EmailTool({
               <option>No templates yet</option>
             </select>
           </div>
-          {/* A choice on the left of it, actions on the right. Without the rule
-              the picker reads as a third button. */}
-          <span aria-hidden="true" className="h-5 w-px shrink-0 bg-neutral-200" />
+          {problem ? (
+            <p role="alert" className="min-w-0 text-xs text-red-600">
+              {problem}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => dialogRef.current?.close()}
