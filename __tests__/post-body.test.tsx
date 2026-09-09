@@ -157,4 +157,56 @@ describe('PostBody', () => {
     const { container } = render(<PostBody doc={doc([{ type: 'paragraph' }])} />)
     expect(container.querySelector('p br')).toBeTruthy()
   })
+
+  /**
+   * A message's font and colour, which the History tab draws through this same
+   * renderer. This is the ONE mark whose values a writer chose rather than we
+   * did, and it is about to land in a `style` attribute — so it is checked
+   * here as well as at the gate, and anything unrecognised is DROPPED rather
+   * than drawn. The text always survives; only the styling is refused.
+   */
+  describe('a message’s textStyle mark', () => {
+    const styled = (attrs: Record<string, unknown>) =>
+      render(
+        <PostBody
+          doc={doc([
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Styled', marks: [{ type: 'textStyle', attrs } as never] }],
+            },
+          ])}
+          mentioned={[]}
+        />,
+      ).container
+
+    test('an offered font and a valid hex are drawn', () => {
+      const c = styled({ fontFamily: 'Georgia, serif', color: '#1a4d8f' })
+      const span = c.querySelector('span[style]') as HTMLElement
+      expect(span).toBeTruthy()
+      expect(span.style.fontFamily).toContain('Georgia')
+      expect(span.style.color).toBeTruthy()
+      expect(c.textContent).toContain('Styled')
+    })
+
+    test('a font nobody offered is dropped, and the text still renders', () => {
+      const c = styled({ fontFamily: 'Comic Sans MS, cursive' })
+      expect(c.querySelector('span[style]')).toBeNull()
+      expect(c.textContent).toContain('Styled')
+    })
+
+    /** The reason this check exists at all: the value reaches a style attribute. */
+    test('a colour that is not six hex digits is dropped — including an injection attempt', () => {
+      for (const bad of ['rgb(255,0,0)', '#f00', 'currentColor', 'red;background:url(http://evil/x)']) {
+        const c = styled({ color: bad })
+        expect(c.querySelector('span[style]')).toBeNull()
+        expect(c.textContent).toContain('Styled')
+      }
+    })
+
+    test('a mark with nothing worth drawing adds no wrapper at all', () => {
+      const c = styled({})
+      expect(c.querySelector('span[style]')).toBeNull()
+    })
+  })
+
 })

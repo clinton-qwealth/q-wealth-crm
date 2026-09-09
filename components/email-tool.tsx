@@ -133,8 +133,8 @@ export function EmailTool({
             from the top of the fields on 9 September: it is chosen rarely and
             before anything else, so it was costing the content box a row of
             height every time somebody wrote a message without using one. */}
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-100 px-5 py-4">
-          <div className="min-w-0">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-100 px-5 py-4">
+          <div className="min-w-0 flex-1">
             <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
               Email
             </h2>
@@ -143,7 +143,7 @@ export function EmailTool({
               <span className="font-medium text-neutral-700">Nothing is sent yet.</span>
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <label className={LABEL} htmlFor="email-template">
               Template
             </label>

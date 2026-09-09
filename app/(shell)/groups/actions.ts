@@ -7,6 +7,8 @@ import {
   POST_MEDIA_SIZE_LIMIT,
   EMAIL_MARK_TYPES,
   EMAIL_NODE_TYPES,
+  isEmailColour,
+  isEmailFont,
   isPostDoc,
   isTaskActionKind,
   type PostDoc,
@@ -1064,8 +1066,8 @@ export async function recordTaskAction(
 
   if (body !== null && body !== undefined) {
     if (!isPostDoc(body)) return { error: 'A message must be a document.' }
-    const stray = strayEmailNode(body)
-    if (stray) return { error: `A message may not contain a ${stray}.` }
+    const problem = emailBodyProblem(body)
+    if (problem) return { error: problem }
   }
 
   const supabase = await createSupabaseServerClient()
@@ -1085,28 +1087,44 @@ export async function recordTaskAction(
 }
 
 /**
- * The first node type in a document that an email body may not carry, or null.
+ * What is wrong with an email body, as a sentence — or null if nothing is.
+ *
+ * Checked here as well as in the database, for the reason the link row checks
+ * a scheme before posting: a refusal the writer can read beats a Postgres
+ * error relayed through a modal. The DATABASE is still the gate; this only
+ * decides who gets to phrase the message.
  *
  * Walks the whole tree rather than the top level: a mention lives inside a
- * paragraph, and an image inside nothing in particular.
+ * paragraph, and a `textStyle` mark inside a run of text.
  */
-function strayEmailNode(doc: PostDoc): string | null {
-  const allowed = new Set<string>([...EMAIL_NODE_TYPES])
+function emailBodyProblem(doc: PostDoc): string | null {
+  const nodes = new Set<string>([...EMAIL_NODE_TYPES])
   const marks = new Set<string>([...EMAIL_MARK_TYPES])
-  let stray: string | null = null
+  let problem: string | null = null
 
   const walk = (node: unknown) => {
-    if (stray || !node || typeof node !== 'object') return
+    if (problem || !node || typeof node !== 'object') return
     const n = node as { type?: unknown; content?: unknown; marks?: unknown }
-    if (typeof n.type === 'string' && !allowed.has(n.type)) {
-      stray = n.type
+    if (typeof n.type === 'string' && !nodes.has(n.type)) {
+      problem = `A message may not contain a ${n.type}.`
       return
     }
     if (Array.isArray(n.marks)) {
       for (const mark of n.marks) {
-        const m = mark as { type?: unknown }
-        if (typeof m.type === 'string' && !marks.has(m.type)) {
-          stray = m.type
+        const m = mark as { type?: unknown; attrs?: { fontFamily?: unknown; color?: unknown } }
+        if (typeof m.type !== 'string' || !marks.has(m.type)) {
+          problem = `A message may not contain a ${String(m.type)}.`
+          return
+        }
+        /* The two values a writer chooses rather than we do. A font off the
+           list and a colour that is not six hex digits are both refused
+           rather than stripped: neither came from this application. */
+        if (m.attrs?.fontFamily !== undefined && !isEmailFont(m.attrs.fontFamily)) {
+          problem = 'That is not a font a message may use.'
+          return
+        }
+        if (m.attrs?.color !== undefined && !isEmailColour(m.attrs.color)) {
+          problem = 'A colour must be six hex digits, like #1a4d8f.'
           return
         }
       }
@@ -1115,5 +1133,5 @@ function strayEmailNode(doc: PostDoc): string | null {
   }
 
   walk(doc)
-  return stray
+  return problem
 }

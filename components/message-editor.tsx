@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { EMAIL_HEADING_LEVELS } from '@/lib/workflow-board'
+import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
+import { EMAIL_FONTS, EMAIL_HEADING_LEVELS } from '@/lib/workflow-board'
 import { Divider, LinkGlyph, LinkRow, Tool, messageHeading } from './rich-text'
 
 /**
@@ -57,6 +58,13 @@ export function MessageEditor({
         link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
       }),
       messageHeading(EMAIL_HEADING_LEVELS).configure({ levels: [...EMAIL_HEADING_LEVELS] }),
+      /* One mark, `textStyle`, carrying both attributes — which is why adding
+         a font selector and a colour picker was one migration rather than two.
+         Color and FontFamily are commands over that mark, not marks of their
+         own. */
+      TextStyle,
+      FontFamily,
+      Color,
     ],
     editorProps: {
       attributes: {
@@ -87,6 +95,11 @@ export function MessageEditor({
         quote: e?.isActive('blockquote') ?? false,
         codeBlock: e?.isActive('codeBlock') ?? false,
         link: e?.isActive('link') ?? false,
+        /* The stack and the hex as they stand at the caret, so the two
+           controls show what the selection actually is rather than what was
+           last picked. */
+        font: (e?.getAttributes('textStyle').fontFamily as string | undefined) ?? '',
+        colour: (e?.getAttributes('textStyle').color as string | undefined) ?? '',
       }
     },
   }) ?? IDLE
@@ -156,6 +169,61 @@ export function MessageEditor({
         <Tool label="Link" on={state.link || linkOpen} onClick={() => setLinkOpen((o) => !o)}>
           <LinkGlyph />
         </Tool>
+        <Divider />
+
+        {/* A CLOSED list, because a font the recipient's mail client lacks
+            falls back to something nobody chose. Each option is shown IN its
+            own face, so the list is a sample rather than a set of names. */}
+        <label className="sr-only" htmlFor="qw-message-font">
+          Font
+        </label>
+        <select
+          id="qw-message-font"
+          value={state.font}
+          /* Mousedown would fight the native select; a change is not a command
+             that needs the selection kept, because the browser restores it. */
+          onChange={(e) => {
+            const stack = e.target.value
+            if (!editor) return
+            if (stack) editor.chain().focus().setFontFamily(stack).run()
+            else editor.chain().focus().unsetFontFamily().run()
+          }}
+          className="h-7 max-w-[7.5rem] rounded border-0 bg-transparent px-1 text-xs text-neutral-600 outline-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          {EMAIL_FONTS.map((f) => (
+            <option key={f.label} value={f.stack ?? ''} style={f.stack ? { fontFamily: f.stack } : undefined}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+
+        {/* FREE, and the one colour this schema stores rather than keys — see
+            the constant. A native input, so the value is always #rrggbb and
+            the gate's check is a shape rather than a list. */}
+        <label className="sr-only" htmlFor="qw-message-colour">
+          Text colour
+        </label>
+        <span className="flex items-center gap-1">
+          <input
+            id="qw-message-colour"
+            type="color"
+            value={state.colour || '#171717'}
+            onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+            title="Text colour"
+            className="h-6 w-6 cursor-pointer rounded border border-neutral-300 bg-white p-0.5"
+          />
+          {/* Only offered once there is something to clear, so the toolbar does
+              not carry a permanently dead control. */}
+          {state.colour ? (
+            <Tool
+              label="Clear text colour"
+              on={false}
+              onClick={() => editor?.chain().focus().unsetColor().run()}
+            >
+              <span aria-hidden className="text-[11px]">✕</span>
+            </Tool>
+          ) : null}
+        </span>
       </div>
 
       {linkOpen && editor ? <LinkRow editor={editor} onDone={() => setLinkOpen(false)} /> : null}
@@ -186,4 +254,6 @@ const IDLE = {
   quote: false,
   codeBlock: false,
   link: false,
+  font: '',
+  colour: '',
 }

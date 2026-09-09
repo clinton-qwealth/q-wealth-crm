@@ -338,7 +338,67 @@ export const EMAIL_NODE_TYPES = [
   'doc', 'paragraph', 'text', 'hardBreak', 'bulletList', 'orderedList', 'listItem',
   'heading', 'blockquote', 'codeBlock', 'horizontalRule',
 ] as const
-export const EMAIL_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'underline'] as const
+export const EMAIL_MARK_TYPES = [
+  'bold', 'italic', 'strike', 'code', 'link', 'underline', 'textStyle',
+] as const
+
+/**
+ * The fonts a message may be written in — a CLOSED set, unlike its colour.
+ *
+ * Six stacks plus the default. Closed for two reasons that are about email
+ * rather than about tidiness: a font the recipient's mail client does not have
+ * silently falls back to something nobody chose, and these six are the ones
+ * that render the same almost everywhere. `record_task_action()` checks a
+ * stored `fontFamily` against exactly this list.
+ *
+ * **No quotes in any stack.** `font-family: Courier New, monospace` is valid
+ * CSS unquoted, and keeping it that way means the database's `in (...)` check
+ * is a plain string comparison rather than an escaping problem — the sort of
+ * thing that drifts between two places the moment one of them needs a quote.
+ *
+ * The stack itself is stored, not a key, so the editor can show the writer the
+ * font they picked. The renderer still checks membership before emitting it.
+ */
+export const EMAIL_FONTS = [
+  { label: 'Default', stack: null },
+  { label: 'Arial', stack: 'Arial, Helvetica, sans-serif' },
+  { label: 'Georgia', stack: 'Georgia, serif' },
+  { label: 'Times New Roman', stack: 'Times New Roman, serif' },
+  { label: 'Courier New', stack: 'Courier New, monospace' },
+  { label: 'Verdana', stack: 'Verdana, sans-serif' },
+  { label: 'Tahoma', stack: 'Tahoma, sans-serif' },
+] as const
+
+export const EMAIL_FONT_STACKS: readonly string[] = EMAIL_FONTS.flatMap((f) =>
+  f.stack ? [f.stack as string] : [],
+)
+
+/**
+ * A message's colour is FREE, and the one place this schema stores a colour
+ * rather than a key.
+ *
+ * Everywhere else the rule is the opposite — a callout's tone is `warning`, not
+ * an amber, precisely so the tint stays the client's decision and every stored
+ * row follows when it changes. A message is the exception on purpose: it is
+ * prose sent to somebody outside the firm, so how it looks is a decision the
+ * writer is making about that message and not a state this app renders.
+ *
+ * The cost is accepted rather than hidden: a colour in a message can never be
+ * restyled, because it was never ours to restyle.
+ *
+ * Six hex digits only — no `rgb()`, no named colours, no `currentColor`. The
+ * value reaches a `style` attribute in the History tab, so the gate checks the
+ * shape and the renderer checks it again.
+ */
+export const HEX_COLOUR = /^#[0-9a-f]{6}$/i
+
+export function isEmailColour(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOUR.test(value)
+}
+
+export function isEmailFont(value: unknown): value is string {
+  return typeof value === 'string' && EMAIL_FONT_STACKS.includes(value)
+}
 
 /**
  * One heading size in a message, as a post has one.
@@ -402,7 +462,18 @@ export function isCalloutTone(value: unknown): value is CalloutTone {
   return typeof value === 'string' && POST_CALLOUT_TONES.some((t) => t.tone === value)
 }
 
-export type PostMark = { type: (typeof POST_MARK_TYPES)[number]; attrs?: { href?: string } }
+/**
+ * A mark on a run of text.
+ *
+ * The union covers a post's marks AND a message's, because ONE renderer draws
+ * both — `PostBody` is handed an email body in the History tab. `textStyle` is
+ * a message's only, and the renderer checks its two attributes against the
+ * closed font list and the hex shape before it draws either.
+ */
+export type PostMark = {
+  type: (typeof POST_MARK_TYPES)[number] | (typeof EMAIL_MARK_TYPES)[number]
+  attrs?: { href?: string; fontFamily?: string; color?: string }
+}
 export type PostNode = {
   type: string
   text?: string

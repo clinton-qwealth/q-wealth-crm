@@ -3,6 +3,8 @@ import {
   POST_ENTITY_KINDS,
   entityHref,
   isCalloutTone,
+  isEmailColour,
+  isEmailFont,
   isEntityKind,
   postMediaUrl,
   type CalloutTone,
@@ -361,6 +363,20 @@ function applyMarks(text: string, marks: PostMark[]): ReactNode {
       case 'code':
         out = <code>{out}</code>
         break
+      /* A message's font and colour. This is the ONE mark carrying values
+         chosen by a writer rather than keys chosen by us, so both are checked
+         AGAIN here — the database has already refused anything else, and this
+         value is about to reach a `style` attribute, which is exactly where
+         defence in depth earns its keep. An unknown font or a malformed
+         colour is dropped, not drawn: the text still renders, unstyled. */
+      case 'textStyle': {
+        const style: { fontFamily?: string; color?: string } = {}
+        if (isEmailFont(mark.attrs?.fontFamily)) style.fontFamily = mark.attrs.fontFamily
+        if (isEmailColour(mark.attrs?.color)) style.color = mark.attrs.color
+        // No attributes worth drawing means no wrapper at all.
+        if (Object.keys(style).length) out = <span style={style}>{out}</span>
+        break
+      }
       case 'link': {
         const href = mark.attrs?.href ?? ''
         // Defence in depth: the database already refuses these, and the

@@ -772,6 +772,17 @@ describe('the task panel', () => {
       // And it is above the To field, which is where the fields begin.
       const to = within(dialog).getByRole('textbox', { name: /^To$/ })
       expect(headerRow.contains(to)).toBe(false)
+
+      /* PINNED TO THE RIGHT EDGE, not merely somewhere in the row. jsdom has
+         no layout, so this asserts the mechanism: the row splits its children
+         apart and the picker's cluster takes the leftover margin. Without
+         both, the picker sits next to the title instead of opposite it — which
+         is what it did, twice, before this assertion existed. */
+      expect(headerRow.className).toContain('justify-between')
+      const cluster = template.closest('div')!
+      expect(cluster.className).toContain('ml-auto')
+      // And the title block gives up the slack rather than filling the row.
+      expect(heading.parentElement!.className).toContain('flex-1')
     })
 
     /**
