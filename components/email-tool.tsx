@@ -124,22 +124,26 @@ export function EmailTool({
       }}
       className="qw-modal m-auto w-[min(38rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
     >
-      <div className="flex flex-col">
-        <div className="border-b border-neutral-100 px-5 py-4">
-          <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
-            Email
-          </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
-            Composed against this task. <span className="font-medium text-neutral-700">Nothing is
-            sent yet</span> — pressing Send records what you wrote in the task’s History.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-4 px-5 py-4">
-          {/* The template picker sits at the top, where it would be reached
-              first — before anything is typed, since choosing one replaces
-              what is in the box. Inactive until templates exist. */}
-          <div className="flex flex-col gap-1.5">
+      {/* Capped at the window, with only the FIELDS scrolling. The content box
+          grew to ten lines, which on a short laptop window would otherwise
+          push Send below the fold — and Send is the point of the dialog, so it
+          is the one thing that must never need scrolling to. */}
+      <div className="flex max-h-[calc(100vh-4rem)] flex-col">
+        {/* Title left, template right, on ONE row. The picker moved up here
+            from the top of the fields on 9 September: it is chosen rarely and
+            before anything else, so it was costing the content box a row of
+            height every time somebody wrote a message without using one. */}
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-neutral-100 px-5 py-4">
+          <div className="min-w-0">
+            <h2 id="email-tool-title" className="text-base font-semibold tracking-tight text-neutral-900">
+              Email
+            </h2>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              Composed against this task.{' '}
+              <span className="font-medium text-neutral-700">Nothing is sent yet.</span>
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <label className={LABEL} htmlFor="email-template">
               Template
             </label>
@@ -148,12 +152,14 @@ export function EmailTool({
               disabled
               aria-label="Template — not built yet"
               title="Not built yet"
-              className={`${INPUT} cursor-not-allowed border-dashed text-neutral-400`}
+              className="w-40 cursor-not-allowed rounded-md border border-dashed border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-400"
             >
               <option>No templates yet</option>
             </select>
           </div>
+        </div>
 
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
           {/* From is text, not an input. An email that could claim to come from
               a colleague is what the rest of this app refuses by construction. */}
           <div className="flex flex-col gap-1.5">
@@ -210,11 +216,11 @@ export function EmailTool({
 
           <div className="flex flex-col gap-1.5">
             <span className={LABEL}>Content</span>
-            <MessageEditor ariaLabel="Message" onReady={(e) => (editorRef.current = e)} />
+            <MessageEditor size="tall" ariaLabel="Message" onReady={(e) => (editorRef.current = e)} />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-neutral-100 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 px-5 py-3">
           {problem ? (
             <p role="alert" className="mr-auto text-xs text-red-600">
               {problem}

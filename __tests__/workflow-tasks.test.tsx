@@ -756,6 +756,44 @@ describe('the task panel', () => {
       expect(within(dialog).queryByRole('textbox', { name: /^From$/ })).toBeNull()
     })
 
+    /**
+     * The layout the content box was given room by. The template picker shares
+     * the header's row rather than sitting at the top of the fields, because it
+     * is chosen rarely and was costing the content a row of height on every
+     * message written without one.
+     */
+    test('the template picker sits in the header row, not among the fields', async () => {
+      const { dialog } = await openEmail()
+      const heading = within(dialog).getByRole('heading', { level: 2, name: 'Email' })
+      const template = within(dialog).getByRole('combobox', { name: /Template/ })
+      // Same row: the heading's row is the picker's nearest common container.
+      const headerRow = heading.parentElement!.parentElement!
+      expect(headerRow.contains(template)).toBe(true)
+      // And it is above the To field, which is where the fields begin.
+      const to = within(dialog).getByRole('textbox', { name: /^To$/ })
+      expect(headerRow.contains(to)).toBe(false)
+    })
+
+    /**
+     * The content box is where the writer spends their time, so it opens at
+     * roughly ten lines rather than the four a comment box gets. Asserted
+     * through the size the editor was asked for, since jsdom has no layout.
+     */
+    test('the content box opens tall, and Send cannot be scrolled away from', async () => {
+      const { dialog } = await openEmail()
+      // The editor element is found by its prose class, as the composer's own
+      // tests do — ProseMirror's contenteditable carries no textbox role here.
+      const body = dialog.querySelector('.qw-post') as HTMLElement
+      expect(body).toBeTruthy()
+      expect(body.className).toContain('min-h-[15rem]')
+      expect(body.className).not.toContain('min-h-[7rem]')
+
+      // Only the fields scroll; the footer holding Send is pinned.
+      const send = within(dialog).getByRole('button', { name: 'Send' })
+      expect(send.parentElement!.className).toContain('shrink-0')
+      expect(body.closest('.overflow-y-auto')).toBeTruthy()
+    })
+
     test('the subject seeds from the task, and the template picker is inactive', async () => {
       const { dialog } = await openEmail()
       expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^Subject$/ }).value).toBe(

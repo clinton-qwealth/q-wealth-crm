@@ -30,10 +30,21 @@ import { Divider, LinkGlyph, LinkRow, Tool, messageHeading } from './rich-text'
 export function MessageEditor({
   onReady,
   ariaLabel = 'Message',
+  size = 'compact',
 }: {
   /** For tests, which cannot type into ProseMirror the way a person does. */
   onReady?: (editor: Editor) => void
   ariaLabel?: string
+  /**
+   * How much body to show at rest. `tall` is for an email, where the content
+   * is what the writer is actually there to do and a box the depth of a
+   * comment makes a two-paragraph message feel like it is being squeezed
+   * through a slot.
+   *
+   * Discrete rather than a number, because Tailwind scans source text: a
+   * constructed `min-h-[${n}rem]` would never be generated.
+   */
+  size?: 'compact' | 'tall'
 }) {
   const [linkOpen, setLinkOpen] = useState(false)
 
@@ -52,7 +63,7 @@ export function MessageEditor({
         /* The same prose class the feed uses, so a message reads the way a
            post does — one stylesheet, and a heading is already painted at h4
            there rather than competing with the page's own outline. */
-        class: 'qw-post min-h-[7rem] px-3 py-2 text-sm leading-relaxed text-neutral-900 outline-none',
+        class: `qw-post ${MIN_HEIGHT[size]} px-3 py-2 text-sm leading-relaxed text-neutral-900 outline-none`,
         'aria-label': ariaLabel,
       },
     },
@@ -152,6 +163,14 @@ export function MessageEditor({
       <EditorContent editor={editor} />
     </div>
   )
+}
+
+/* At 14px on `leading-relaxed` a line is about 22.75px, and the box carries
+   8px of padding top and bottom — so 7rem is roughly four lines and 15rem is
+   roughly ten. `tall` is the taller of the two by five and a half lines. */
+const MIN_HEIGHT: Record<'compact' | 'tall', string> = {
+  compact: 'min-h-[7rem]',
+  tall: 'min-h-[15rem]',
 }
 
 /* What the toolbar shows before the editor exists. */
