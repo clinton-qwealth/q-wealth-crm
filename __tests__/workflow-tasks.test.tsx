@@ -1122,41 +1122,64 @@ describe('the task panel', () => {
     })
 
     /**
-     * The summary is three facts — kind, subject, moment — and the addresses
-     * and the message are behind the gate. So this asserts what a CLOSED entry
-     * shows, and the gate's own test asserts the rest.
+     * The summary is four facts — kind, subject, moment, and who did it to
+     * whom. The sender and the message are behind the gate.
+     *
+     * **This test used to assert the entry never said "sent".** It said
+     * "Recorded by <name>", because nothing is delivered and a history claiming
+     * an email went out is the lie the record was kept out of the client's file
+     * to avoid. The wording was changed on instruction on 9 September, so the
+     * assertion is inverted rather than deleted: the sentence is pinned here and
+     * the reasoning is on ACTION_SENTENCE. The claim is confined to this line —
+     * no `notes` row asserts it, which is what keeps it out of the client's
+     * permanent record.
      */
-    test('a recorded action shows its kind, subject and moment — and says RECORDED, not sent', async () => {
+    test('a recorded action shows its kind, subject, moment and what was done', async () => {
       ACTIONS = [action()]
       const panel = await history()
       expect(panel.textContent).toContain('Email')
       expect(panel.textContent).toContain('Rollover paperwork')
-      expect(panel.textContent).toContain('Recorded by Clinton Hatcher')
       expect(panel.textContent).toContain(formatNoteDateTime('2026-09-09T04:32:00Z'))
-      // The claim that must not drift: nothing was delivered.
-      expect(panel.textContent).not.toMatch(/\bSent\b/)
+      expect(panel.textContent).toContain('You sent an email to jane@testsmith.example')
+      expect(panel.textContent).not.toContain('Recorded by')
+    })
+
+    /**
+     * "You" only when it WAS you. An action a colleague recorded, read back as
+     * "You sent an email", would be plainly false to whoever is looking — and
+     * the actor id is on the row, so there is no reason to get it wrong.
+     */
+    test('a colleague’s action names them instead of saying "You"', async () => {
+      ACTIONS = [action({ actor_staff_id: 's9', actor_name: 'Dana Fields' })]
+      const panel = await history()
+      expect(panel.textContent).toContain('Dana Fields sent an email to jane@testsmith.example')
+      expect(panel.textContent).not.toContain('You sent')
     })
 
     /**
      * The gate, added 9 September. An email body is a paragraph or more, so an
      * entry left open means one action fills the panel and the history stops
      * being a history.
+     *
+     * The RECIPIENT is in the summary now, so what the gate holds is the sender
+     * and the message.
      */
-    test('an entry opens CLOSED, and the addresses are not on screen until it is opened', async () => {
+    test('an entry opens CLOSED, and the message is not on screen until it is opened', async () => {
       ACTIONS = [action()]
       const { user, panel } = await historyWithUser()
 
       const gate = within(panel).getByRole('button', { expanded: false })
-      expect(panel.textContent).not.toContain('jane@testsmith.example')
+      expect(panel.textContent).not.toContain('clinton@qwealth.com.au')
+      expect(panel.textContent).not.toContain('No message was recorded')
 
       await user.click(gate)
       expect(within(panel).getByRole('button', { expanded: true })).toBeTruthy()
-      expect(panel.textContent).toContain('jane@testsmith.example')
       expect(panel.textContent).toContain('clinton@qwealth.com.au')
+      expect(panel.textContent).toContain('No message was recorded')
 
       // And it closes again, so the list can be put back the way it was.
       await user.click(within(panel).getByRole('button', { expanded: true }))
-      expect(panel.textContent).not.toContain('jane@testsmith.example')
+      expect(panel.textContent).not.toContain('clinton@qwealth.com.au')
     })
 
     /**
@@ -1206,7 +1229,9 @@ describe('the task panel', () => {
     })
 
     test('an action from a departed colleague still names somebody', async () => {
-      ACTIONS = [action({ actor_name: null })]
+      /* A DIFFERENT actor, or the viewer check would render "You" and the case
+         under test would never be reached. */
+      ACTIONS = [action({ actor_staff_id: 's9', actor_name: null })]
       const panel = await history()
       expect(panel.textContent).toContain('no longer on staff')
     })

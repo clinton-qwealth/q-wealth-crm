@@ -735,7 +735,10 @@ function TaskPanel({
             label: 'History',
             panel: (
               <div className="px-5 pb-6">
-                <TaskHistory actions={actions.filter((a) => a.task_id === task.id)} />
+                <TaskHistory
+                  actions={actions.filter((a) => a.task_id === task.id)}
+                  viewerId={viewer.id}
+                />
               </div>
             ),
           },
@@ -941,14 +944,14 @@ function ToolTile({ tool }: { tool: Tool }) {
  * opens CLOSED, so the tab is a list of what happened rather than a stack of
  * messages — see ActionEntry.
  */
-function TaskHistory({ actions }: { actions: TaskAction[] }) {
+function TaskHistory({ actions, viewerId }: { actions: TaskAction[]; viewerId: string }) {
   return (
     <div className="flex flex-col gap-4">
       {actions.length ? (
         <ol aria-label="Recorded actions" className="flex flex-col divide-y divide-neutral-200/80">
           {actions.map((action) => (
             <li key={action.id} className="py-2.5 first:pt-0">
-              <ActionEntry action={action} />
+              <ActionEntry action={action} viewerId={viewerId} />
             </li>
           ))}
         </ol>
@@ -973,6 +976,26 @@ function TaskHistory({ actions }: { actions: TaskAction[] }) {
 const ACTION_LABEL: Record<TaskActionKind, string> = { email: 'Email' }
 
 /**
+ * What each kind of action READS as under the subject.
+ *
+ * A phrase per kind rather than one hardcoded sentence, because the second kind
+ * is SMS and "sent an email" would then be wrong on every text message. The
+ * preposition is separate so an action with no recipient still forms a
+ * sentence rather than trailing off with a dangling "to".
+ *
+ * **These say "sent", and nothing is sent.** That wording was asked for on
+ * 9 September and it is a deliberate departure from the rule the rest of this
+ * feature was built on — the record is kept out of the client's file precisely
+ * so the file cannot claim a client was contacted when they were not. This line
+ * is internal to the task, not part of the client's record, which is the reason
+ * the departure is confined to here. If the wording matters again, this map and
+ * the test that pins it are the two places to change.
+ */
+const ACTION_SENTENCE: Record<TaskActionKind, { verb: string; preposition: string }> = {
+  email: { verb: 'sent an email', preposition: 'to' },
+}
+
+/**
  * A glyph per kind, so the pill is recognisable before it is read.
  *
  * The SAME glyph the Tools tab launches the action with — an Email in the
@@ -986,14 +1009,20 @@ const ACTION_GLYPH: Record<TaskActionKind, (props: { className?: string }) => Re
 /**
  * One recorded action, CLOSED by default.
  *
- * **It says "recorded", never "sent".** Nothing is delivered yet, and a history
- * entry claiming an email went out would be the same lie the record was
- * deliberately kept out of the client's file to avoid.
+ * **The shape is the summary, and the summary is four facts**: what kind of
+ * thing it was, what it was about, when, and who did it to whom. Kind as a pill
+ * with its glyph, subject under it, the moment on the right — so a column of
+ * entries lines up on all three and can be scanned down rather than read — and
+ * then the sentence.
  *
- * **The shape is the summary, and the summary is three facts**: what kind of
- * thing it was, what it was about, and when. Kind as a pill with its glyph,
- * subject under it, the moment on the right — so a column of entries lines up
- * on all three and can be scanned down rather than read.
+ * **"You", but only when it was you.** The actor is compared with the signed-in
+ * staff member, because an action recorded by a colleague read back as "You
+ * sent an email" would be plainly false to whoever is looking at it. Everyone
+ * else is named, and someone who has since left is described rather than named,
+ * as the feed does.
+ *
+ * **The sentence says "sent" although nothing is.** See ACTION_SENTENCE for
+ * what that costs and why it is confined to this line.
  *
  * **The addresses and the message are behind a gate.** An email body is a
  * paragraph or more, and left open it means one entry fills the panel and the
@@ -1002,10 +1031,15 @@ const ACTION_GLYPH: Record<TaskActionKind, (props: { className?: string }) => Re
  * not rendered at all while closed, which is why `aria-controls` is only set
  * when there is something for it to point at.
  */
-function ActionEntry({ action }: { action: TaskAction }) {
+function ActionEntry({ action, viewerId }: { action: TaskAction; viewerId: string }) {
   const [open, setOpen] = useState(false)
   const detailId = `task-action-${action.id}-detail`
   const Glyph = ACTION_GLYPH[action.kind]
+  const sentence = ACTION_SENTENCE[action.kind]
+  const who =
+    action.actor_staff_id === viewerId
+      ? 'You'
+      : (action.actor_name ?? 'Someone no longer on staff')
 
   return (
     <div>
@@ -1044,9 +1078,18 @@ function ActionEntry({ action }: { action: TaskAction }) {
             {action.subject || 'No subject'}
           </span>
 
-          <span className="mt-0.5 block text-xs text-neutral-500">
-            {/* Recorded, not sent — see the component note. */}
-            Recorded by {action.actor_name ?? 'someone no longer on staff'}
+          {/* Truncated for the same reason as the subject: one row per entry,
+              or a column of them stops lining up. A recipient list can be
+              several addresses long. */}
+          <span className="mt-0.5 block truncate text-xs text-neutral-500">
+            {who} {sentence ? sentence.verb : `recorded a ${action.kind}`}
+            {action.recipient && sentence ? (
+              <>
+                {' '}
+                {sentence.preposition}{' '}
+                <span className="text-neutral-700">{action.recipient}</span>
+              </>
+            ) : null}
           </span>
         </span>
       </button>
@@ -1059,15 +1102,11 @@ function ActionEntry({ action }: { action: TaskAction }) {
             </p>
           ) : null}
 
-          {action.recipient ? (
+          {/* Only the SENDER. The recipient moved into the summary sentence on
+              9 September, and repeating it two lines below was noise. */}
+          {action.sender ? (
             <p className="text-xs text-neutral-500">
-              To <span className="text-neutral-700">{action.recipient}</span>
-              {action.sender ? (
-                <>
-                  {' '}
-                  from <span className="text-neutral-700">{action.sender}</span>
-                </>
-              ) : null}
+              From <span className="text-neutral-700">{action.sender}</span>
             </p>
           ) : null}
 
