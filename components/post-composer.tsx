@@ -411,10 +411,11 @@ export function PostComposer({
       {/* THE TOOLBAR IS ABOVE THE EDITOR, ON A ROW OF ITS OWN.
 
           It sat in the footer beside Post, and wrapped at every panel width:
-          seventeen controls need about 546px and the footer had 483 beside
-          the button — so the "row" was two rows more often than not. Its own
-          row has the full 539px, and at fourteen controls (~455px) it fits
-          with room at the panel's default width.
+          seventeen controls need about 540px and the footer had about 485
+          beside the button — so the "row" was two rows more often than not.
+          Its own row has the full 547px, and at fourteen controls (~440px) it
+          fits with room at the panel's default width. Derived from the classes
+          at a 565px reading column, not measured in a browser.
 
           Fourteen, not seventeen. Undo and Redo are ⌘Z and ⇧⌘Z — the
           keyboard's, and the editor still honours both — and a horizontal

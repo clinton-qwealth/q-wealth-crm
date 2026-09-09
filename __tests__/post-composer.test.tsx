@@ -320,6 +320,33 @@ describe('the post composer', () => {
   })
 
   /**
+   * The button went; the RULE did not. Removing a control is not narrowing the
+   * whitelist — a pasted or typed rule is still a valid post — so this asserts
+   * the way in that replaced the button rather than trusting StarterKit's own
+   * input rule to stay where it is.
+   */
+  test('a horizontal rule is still reachable by typing --- , with no button for it', async () => {
+    const { editor } = await mount()
+    expect(screen.queryByRole('button', { name: 'Horizontal rule' })).toBeNull()
+
+    /* The third dash, delivered the way typing delivers it. `insertContent`
+       does NOT fire input rules — they hang off ProseMirror's handleTextInput,
+       which only real text entry reaches — and jsdom's contenteditable is not
+       good enough to type into. So the handler is called directly: the same
+       entry point, without depending on the DOM. */
+    editor.commands.setContent('<p>--</p>')
+    editor.commands.focus('end')
+    const view = editor.view
+    const at = view.state.selection.from
+    // The fifth argument is the default insertion the handler may fall back on.
+    view.someProp('handleTextInput', (f) =>
+      f(view, at, at, '-', () => view.state.tr.insertText('-', at, at)),
+    )
+
+    expect(editor.getJSON().content!.some((n) => n.type === 'horizontalRule')).toBe(true)
+  })
+
+  /**
    * The link row applies the same http(s) rule the database enforces, so a
    * bad scheme is a sentence in the row rather than a refusal after posting.
    * A bare domain is given https://, because that is what the writer meant.

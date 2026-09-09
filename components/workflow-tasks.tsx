@@ -24,7 +24,17 @@ import { Tabs } from './tabs'
 import { ActivityFeed } from './activity-feed'
 import { useServerState } from './use-server-state'
 import { PriorityGlyph, PriorityPicker } from './priority-picker'
-import { CalendarIcon, PlusIcon } from './icons'
+import {
+  CalendarIcon,
+  DocumentPlusIcon,
+  EnvelopeIcon,
+  HourglassIcon,
+  PathwayIcon,
+  PlusIcon,
+  SignatureIcon,
+  SmsIcon,
+  StarIcon,
+} from './icons'
 
 const INPUT =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -716,17 +726,129 @@ function TaskPanel({
             label: 'Tools',
             panel: (
               <div className="px-5 pb-6">
-                <Unbuilt title="No tools yet">
-                  Actions belonging to one task rather than to the list would sit here.
-                  Nothing is built, and nothing has been decided about what belongs — so
-                  this says so rather than showing a guess.
-                </Unbuilt>
+                <TaskTools />
               </div>
             ),
           },
         ]}
       />
     </div>
+  )
+}
+
+/**
+ * The Tools tab: what a person can DO from this task, in two sections.
+ *
+ * **Every tile is inactive**, and that is the point of building it now — the
+ * set can be argued about before any of it is wired, which is cheaper than
+ * arguing after. Each becomes live as its action is built.
+ *
+ * **A tile is a square with a glyph, and a label beneath it.** The whole cell
+ * is the button rather than just the square: one click target, one accessible
+ * name, and a disabled state that covers the label too. A glyph-only square
+ * would have been closer to the request, but "How long will my money last" is
+ * not a thing anyone recognises from an hourglass — and a tooltip is not a
+ * label, because it needs a pointer to find.
+ *
+ * **Dashed, not dimmed.** The house already uses a dashed border for a
+ * placeholder that names what it stands in for: the workflow-template chip
+ * above the task list, the blank region beside a group's workflow cards, the
+ * `Unbuilt` box below. Dimming seven tiles to 40% would read as broken;
+ * dashed reads as planned. When one is wired it takes a solid border, so
+ * going live is visible rather than silent.
+ */
+type Tool = {
+  id: string
+  name: string
+  /** What the app does, for a name that does not say. Shown under the name. */
+  detail?: string
+  Glyph: (props: { className?: string }) => ReactNode
+}
+
+/* Things done TO the client or the file — a verb each. Email and SMS reuse the
+   file-note glyphs, because an email is an email wherever it is met. */
+const TASK_ACTIONS: Tool[] = [
+  { id: 'email', name: 'Email', Glyph: EnvelopeIcon },
+  { id: 'sms', name: 'SMS', Glyph: SmsIcon },
+  { id: 'docusign', name: 'DocuSign', detail: 'Send to sign', Glyph: SignatureIcon },
+  { id: 'generate-document', name: 'Generate document', Glyph: DocumentPlusIcon },
+]
+
+/* Separate tools opened from a task, not actions taken on it — which is why
+   they are their own section rather than four more Actions. Each carries what
+   it models, because the names do not say on their own. */
+const TASK_APPS: Tool[] = [
+  { id: 'pathway-to-wealth', name: 'Pathway to Wealth', detail: 'Wealth modelling', Glyph: PathwayIcon },
+  { id: 'money-last', name: 'How long will my money last', detail: 'Projection modelling', Glyph: HourglassIcon },
+  { id: 'star-calculator', name: 'STAR Calculator', detail: 'Investment modelling', Glyph: StarIcon },
+]
+
+function TaskTools() {
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs leading-relaxed text-neutral-500">
+        What can be done from this task.{' '}
+        <span className="font-medium text-neutral-700">Every tile is inactive</span> — they are
+        here so the set can be judged before anything is wired, and each becomes live as its
+        action is built.
+      </p>
+      <ToolSection title="Actions" tools={TASK_ACTIONS} />
+      <ToolSection title="Apps" tools={TASK_APPS} />
+    </div>
+  )
+}
+
+/**
+ * `h3`, and the same small-caps treatment as a `FieldBox` title — the panel's
+ * own heading is the `h2`, so these sit one level under it and read as the
+ * same kind of divider the Details box uses.
+ */
+function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
+      {/* Two across on a narrow panel, four when there is room. At the panel's
+          default 565px a cell is about 132px, which holds a 64px tile and a
+          two-line name without either crowding the other. */}
+      <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
+        {tools.map((tool) => (
+          <li key={tool.id}>
+            <ToolTile tool={tool} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function ToolTile({ tool }: { tool: Tool }) {
+  const { name, detail, Glyph } = tool
+  return (
+    <button
+      type="button"
+      /* A real `disabled`, not `aria-disabled`: it leaves the tab order, so a
+         keyboard user is not walked through seven controls that do nothing. */
+      disabled
+      /* The reason belongs in the name, because "dimmed" on its own does not
+         say whether this is broken, forbidden, or simply not built yet. */
+      aria-label={`${name}${detail ? ` — ${detail}` : ''} — not built yet`}
+      title="Not built yet"
+      className="flex w-full cursor-not-allowed flex-col items-center gap-2 text-center"
+    >
+      <span className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400">
+        <Glyph className="h-6 w-6" />
+      </span>
+      <span className="flex flex-col gap-0.5">
+        {/* Clamped, not truncated: the longest of these is a sentence, and a
+            name you cannot read is the one thing a launcher must not do. */}
+        <span className="line-clamp-2 text-xs font-medium leading-snug text-neutral-600">
+          {name}
+        </span>
+        {detail ? (
+          <span className="line-clamp-1 text-[11px] leading-snug text-neutral-400">{detail}</span>
+        ) : null}
+      </span>
+    </button>
   )
 }
 

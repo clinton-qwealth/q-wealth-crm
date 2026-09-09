@@ -584,14 +584,87 @@ describe('the task panel', () => {
     expect(panel.textContent).not.toContain('Sent by email on the 6th.')
   })
 
-  test('History and Tools say what is missing rather than showing nothing', async () => {
+  test('History says what is missing rather than showing nothing', async () => {
     const { user, panel } = await open()
     await user.click(within(panel).getByRole('tab', { name: 'History' }))
     expect(within(panel).getByRole('tabpanel', { name: 'History' }).textContent).toContain(
       'not recorded yet',
     )
-    await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
-    expect(within(panel).getByRole('tabpanel', { name: 'Tools' }).textContent).toContain('No tools yet')
+  })
+
+  /**
+   * The Tools tab, built 9 September. Every tile is deliberately inactive, so
+   * the assertions are about the SET and about the honesty of the disabled
+   * state — not about behaviour, because there is none yet.
+   */
+  describe('the Tools tab', () => {
+    const tools = async () => {
+      const { user, panel } = await open()
+      await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
+      return within(panel).getByRole('tabpanel', { name: 'Tools' })
+    }
+
+    test('two sections, Actions then Apps, each an h3 under the panel’s h2', async () => {
+      const panel = await tools()
+      const headings = within(panel)
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent)
+      expect(headings).toEqual(['Actions', 'Apps'])
+    })
+
+    test('the seven tools, in order, each a square tile with a glyph', async () => {
+      const panel = await tools()
+      const names = within(panel)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label'))
+      expect(names).toEqual([
+        'Email — not built yet',
+        'SMS — not built yet',
+        'DocuSign — Send to sign — not built yet',
+        'Generate document — not built yet',
+        'Pathway to Wealth — Wealth modelling — not built yet',
+        'How long will my money last — Projection modelling — not built yet',
+        'STAR Calculator — Investment modelling — not built yet',
+      ])
+      // A square: the same height and width class on the tile face, with a glyph in it.
+      for (const button of within(panel).getAllByRole('button')) {
+        const face = button.firstElementChild!
+        expect(face.className).toContain('h-16')
+        expect(face.className).toContain('w-16')
+        expect(face.querySelector('svg')).toBeTruthy()
+      }
+    })
+
+    /**
+     * A real `disabled`, not `aria-disabled` — so the seven leave the tab
+     * order rather than being seven stops that do nothing. The mutation to
+     * catch is somebody making them look inactive while still clickable.
+     */
+    test('every tile is genuinely disabled, and says why in its name', async () => {
+      const panel = await tools()
+      const buttons = within(panel).getAllByRole('button')
+      expect(buttons).toHaveLength(7)
+      for (const b of buttons) {
+        expect((b as HTMLButtonElement).disabled).toBe(true)
+        expect(b.getAttribute('aria-label')).toContain('not built yet')
+      }
+      expect(panel.textContent).toContain('Every tile is inactive')
+    })
+
+    /** Dashed reads as planned; dimmed reads as broken. See the component note. */
+    test('a tile is dashed rather than dimmed', async () => {
+      const panel = await tools()
+      const face = within(panel).getAllByRole('button')[0].firstElementChild!
+      expect(face.className).toContain('border-dashed')
+      expect(face.className).not.toMatch(/opacity-(40|50)/)
+    })
+
+    /** An app's name does not say what it does, so the descriptor is rendered, not only announced. */
+    test('an app shows what it models beneath its name', async () => {
+      const panel = await tools()
+      expect(within(panel).getByText('Projection modelling')).toBeTruthy()
+      expect(within(panel).getByText('How long will my money last')).toBeTruthy()
+    })
   })
 
   test('the Details box is bordered, carries a pencil, and renders nothing submittable while reading', async () => {

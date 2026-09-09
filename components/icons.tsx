@@ -237,6 +237,65 @@ export function EnvelopeIcon({ className = 'h-4 w-4' }: { className?: string }) 
   )
 }
 
+/* ---- The task panel's Tools tab ------------------------------------------
+   Five glyphs for the actions and apps a task will offer. All on the STROKE
+   convention above, so they sit at the same weight as the ledger's tiles —
+   a tool tile is 64px where a ledger tile is 36px, and a glyph that thickened
+   with its container would look like a different family. Email and SMS reuse
+   EnvelopeIcon and SmsIcon rather than gaining near-copies. */
+
+/** A signature over a baseline: sending a document to be signed. */
+export function SignatureIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M2.75 13.5c2.25 0 2.5-7 4.75-7 1.75 0 1.25 5.5 3 5.5 1.25 0 1.5-2 2.75-2 1 0 1.5 1 3 1" />
+      <path d="M2.75 16.75h14.5" />
+    </svg>
+  )
+}
+
+/** DocumentIcon's page, with a plus where its lines would be: make a document. */
+export function DocumentPlusIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M5 2.5h7l3.5 3.5V17a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5Z" />
+      <path d="M12 2.5V6h3.5" />
+      <path d="M10 9.5v5M7.5 12h5" />
+    </svg>
+  )
+}
+
+/** A curve from one marked point to another: a modelled path from now to then. */
+export function PathwayIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M4 16c2.5-.5 4-2.5 5-5.5s2.5-5 5-5.5" />
+      <circle cx="3.25" cy="16.25" r="1.35" />
+      <circle cx="15.25" cy="4.75" r="1.35" />
+    </svg>
+  )
+}
+
+/** An hourglass: how long something lasts. */
+export function HourglassIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M6 2.5h8M6 17.5h8" />
+      <path d="M6.75 2.5v2.1c0 1.2 3.25 3.3 3.25 5.4s-3.25 4.2-3.25 5.4v2.1" />
+      <path d="M13.25 2.5v2.1c0 1.2-3.25 3.3-3.25 5.4s3.25 4.2 3.25 5.4v2.1" />
+    </svg>
+  )
+}
+
+/** A star, for the STAR calculator — the name is the glyph. */
+export function StarIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M10 2.6 12.29 7.24 17.4 7.99 13.7 11.6 14.57 16.69 10 14.29 5.43 16.69 6.3 11.6 2.6 7.99 7.71 7.24Z" />
+    </svg>
+  )
+}
+
 /** A ticked box: a task note. */
 export function TaskIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
