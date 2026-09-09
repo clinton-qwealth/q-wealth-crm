@@ -651,6 +651,29 @@ describe('the task panel', () => {
       expect(panel.textContent).toContain('Every tile is inactive')
     })
 
+    /**
+     * Packed from the left, not spread across the column. jsdom has no layout
+     * engine, so this asserts the mechanism rather than the pixels: a wrapping
+     * flex row of fixed-width items, and a tile that aligns to the start of
+     * its item — which together put the first tile on the panel's own left
+     * edge. A grid of equal cells is what this replaced, and it centred every
+     * tile in its own share of the row.
+     */
+    test('the tiles pack from the left rather than spreading across the width', async () => {
+      const panel = await tools()
+      const list = within(panel).getAllByRole('list')[0]
+      expect(list.className).toContain('flex-wrap')
+      expect(list.className).not.toContain('grid')
+      // Fixed-width items, so four fit the column and the slack falls on the right.
+      for (const item of list.querySelectorAll('li')) {
+        expect(item.className).toMatch(/\bw-\d/)
+      }
+      // And the tile sits at the start of its item, not centred in it.
+      const button = within(panel).getAllByRole('button')[0]
+      expect(button.className).toContain('items-start')
+      expect(button.className).not.toContain('items-center')
+    })
+
     /** Dashed reads as planned; dimmed reads as broken. See the component note. */
     test('a tile is dashed rather than dimmed', async () => {
       const panel = await tools()

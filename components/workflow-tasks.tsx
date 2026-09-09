@@ -807,12 +807,20 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
-      {/* Two across on a narrow panel, four when there is room. At the panel's
-          default 565px a cell is about 132px, which holds a 64px tile and a
-          two-line name without either crowding the other. */}
-      <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
+      {/* PACKED FROM THE LEFT, not spread across the width. A grid would
+          divide the whole column into equal cells, which at 565px made each
+          132px and left the tiles floating in the middle of their own share of
+          the row — evenly spaced, but aligned to nothing. Fixed-width items
+          that wrap put the first tile on the panel's own left edge, level with
+          the heading above it and the Details box border, and leave the slack
+          at the right where it reads as room rather than as gaps.
+
+          112px an item: four fit the 565px column with ~70px to spare, three
+          fit a narrow panel, two fit a phone — so wrapping does the
+          responsive work and no breakpoint is needed. */}
+      <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-5">
         {tools.map((tool) => (
-          <li key={tool.id}>
+          <li key={tool.id} className="w-28">
             <ToolTile tool={tool} />
           </li>
         ))}
@@ -833,7 +841,7 @@ function ToolTile({ tool }: { tool: Tool }) {
          say whether this is broken, forbidden, or simply not built yet. */
       aria-label={`${name}${detail ? ` — ${detail}` : ''} — not built yet`}
       title="Not built yet"
-      className="flex w-full cursor-not-allowed flex-col items-center gap-2 text-center"
+      className="flex w-full cursor-not-allowed flex-col items-start gap-2 text-left"
     >
       <span className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400">
         <Glyph className="h-6 w-6" />
@@ -845,7 +853,7 @@ function ToolTile({ tool }: { tool: Tool }) {
           {name}
         </span>
         {detail ? (
-          <span className="line-clamp-1 text-[11px] leading-snug text-neutral-400">{detail}</span>
+          <span className="line-clamp-2 text-[11px] leading-snug text-neutral-400">{detail}</span>
         ) : null}
       </span>
     </button>
