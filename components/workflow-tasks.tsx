@@ -14,14 +14,18 @@ import {
   type Priority,
   type TaskStatus,
   type EntityChoice,
+  type TaskAction,
+  type TaskActionKind,
   type WorkflowPost,
   type WorkflowTask,
 } from '@/lib/workflow-board'
-import { dueState, formatCalendarDate, formatNoteDate, type DueState } from '@/lib/note-date'
+import { dueState, formatCalendarDate, formatNoteDate, formatNoteDateTime, type DueState } from '@/lib/note-date'
 import { Pill, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
 import { Tabs } from './tabs'
 import { ActivityFeed } from './activity-feed'
+import { EmailTool } from './email-tool'
+import { PostBody } from './post-body'
 import { useServerState } from './use-server-state'
 import { PriorityGlyph, PriorityPicker } from './priority-picker'
 import {
@@ -64,7 +68,7 @@ const TASK_STATUS_TONE: Record<TaskStatus, PillTone> = {
 
 type Staff = { id: string; name: string }
 /** The signed-in staff member, for the optimistic entry a post makes before the server answers. */
-type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
+type Viewer = { id: string; name: string; email: string; canRemoveAnyImage: boolean }
 
 /**
  * The centre column of the workflow detail page: the work itself, as a list of
@@ -85,6 +89,8 @@ export function WorkflowTasks({
   groupName,
   tasks: initial,
   posts,
+  actions,
+  recipient,
   staff,
   entities,
   viewer,
@@ -96,6 +102,10 @@ export function WorkflowTasks({
   tasks: WorkflowTask[]
   /** Every post on the workflow; the panel shows a task's own. */
   posts: WorkflowPost[]
+  /** Every recorded action on the workflow; the panel's History shows a task's own. */
+  actions: TaskAction[]
+  /** Who an email from this workflow prefills to, or null when nobody is on file. */
+  recipient: { email: string; name: string | null } | null
   staff: Staff[]
   /** What `#` may name in a post. Passed through to the feed in the task panel. */
   entities?: EntityChoice[]
@@ -346,6 +356,8 @@ export function WorkflowTasks({
             groupName={groupName}
             onToggleStatus={() => toggle(selected)}
             posts={posts}
+            actions={actions}
+            recipient={recipient}
             staff={staff}
             entities={entities}
             viewer={viewer}
@@ -439,6 +451,8 @@ function TaskPanel({
   workflowName,
   groupName,
   posts,
+  actions,
+  recipient,
   staff,
   entities,
   viewer,
@@ -450,6 +464,10 @@ function TaskPanel({
   workflowName: string
   groupName: string
   posts: WorkflowPost[]
+  /** Every recorded action on the workflow; the History tab filters to this task. */
+  actions: TaskAction[]
+  /** Who an email prefills to: the group's primary contact, or null. */
+  recipient: { email: string; name: string | null } | null
   staff: Staff[]
   entities?: EntityChoice[]
   viewer: Viewer
@@ -459,6 +477,10 @@ function TaskPanel({
 }) {
   const priority = PRIORITIES.find((p) => p.id === task.priority)!
   const finished = task.status === 'done' || task.status === 'cancelled'
+  /* The Email tool exists only while it is open, so the dialog mounts fresh
+     each time and comes up with the task's own subject rather than whatever
+     was typed and abandoned last time. */
+  const [emailOpen, setEmailOpen] = useState(false)
 
   /* Named on both boxes, and rendered only while editing — a box being read
      carries nothing a submit could send. The workflow's id rides along so the
@@ -712,13 +734,7 @@ function TaskPanel({
             label: 'History',
             panel: (
               <div className="px-5 pb-6">
-                <Unbuilt title="Changes to this task are not recorded yet">
-                  The audit trail covers twenty tables and names whoever made every
-                  change, but <code className="text-neutral-600">workflow_tasks</code> is
-                  not one of them — it was created after the trail was set up. Attaching
-                  the trigger is one line per table, and is logged as a decision rather
-                  than done in passing.
-                </Unbuilt>
+                <TaskHistory actions={actions.filter((a) => a.task_id === task.id)} />
               </div>
             ),
           },
@@ -727,12 +743,24 @@ function TaskPanel({
             label: 'Tools',
             panel: (
               <div className="px-5 pb-6">
-                <TaskTools />
+                <TaskTools onEmail={() => setEmailOpen(true)} />
               </div>
             ),
           },
         ]}
       />
+
+      {emailOpen ? (
+        <EmailTool
+          workflowId={workflowId}
+          taskId={task.id}
+          taskSubject={task.subject}
+          recipient={recipient}
+          sender={viewer.email}
+          senderName={viewer.name}
+          onClose={() => setEmailOpen(false)}
+        />
+      ) : null}
     </div>
   )
 }
@@ -764,6 +792,8 @@ type Tool = {
   /** What the app does, for a name that does not say. Shown under the name. */
   detail?: string
   Glyph: (props: { className?: string }) => ReactNode
+  /** Absent means the tile is inactive — nothing is wired to it yet. */
+  onOpen?: () => void
 }
 
 /* Things done TO the client or the file — a verb each. Email and SMS reuse the
@@ -785,16 +815,24 @@ const TASK_APPS: Tool[] = [
   { id: 'star-calculator', name: 'STAR Calculator', detail: 'Investment modelling', Glyph: StarIcon },
 ]
 
-function TaskTools() {
+function TaskTools({ onEmail }: { onEmail: () => void }) {
+  /* Email is live; the other seven are not. The set is written once above and
+     the one wired action is attached here, so a tile becomes active by gaining
+     a handler rather than by being moved into a different list. */
+  const actions = TASK_ACTIONS.map((t) => (t.id === 'email' ? { ...t, onOpen: onEmail } : t))
+  const live = actions.filter((t) => t.onOpen).length
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs leading-relaxed text-neutral-500">
         What can be done from this task.{' '}
-        <span className="font-medium text-neutral-700">Every tile is inactive</span> — they are
-        here so the set can be judged before anything is wired, and each becomes live as its
-        action is built.
+        <span className="font-medium text-neutral-700">
+          {live === 1 ? 'One tile is live; the rest are inactive' : `${live} tiles are live`}
+        </span>{' '}
+        — the inactive ones are here so the set can be judged before anything is wired, and each
+        becomes live as its action is built.
       </p>
-      <ToolSection title="Actions" tools={TASK_ACTIONS} />
+      <ToolSection title="Actions" tools={actions} />
       <ToolSection title="Apps" tools={TASK_APPS} />
     </div>
   )
@@ -839,26 +877,46 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
 }
 
 function ToolTile({ tool }: { tool: Tool }) {
-  const { name, detail, Glyph } = tool
+  const { name, detail, Glyph, onOpen } = tool
+  const live = Boolean(onOpen)
   return (
     <button
       type="button"
-      /* A real `disabled`, not `aria-disabled`: it leaves the tab order, so a
-         keyboard user is not walked through seven controls that do nothing. */
-      disabled
+      /* A real `disabled` on an unwired tile, not `aria-disabled`: it leaves
+         the tab order, so a keyboard user is not walked through controls that
+         do nothing. */
+      disabled={!live}
       /* The reason belongs in the name, because "dimmed" on its own does not
          say whether this is broken, forbidden, or simply not built yet. */
-      aria-label={`${name}${detail ? ` — ${detail}` : ''} — not built yet`}
-      title="Not built yet"
-      className="flex w-full cursor-not-allowed flex-col items-center gap-2 text-center"
+      aria-label={live ? name : `${name}${detail ? ` — ${detail}` : ''} — not built yet`}
+      title={live ? name : 'Not built yet'}
+      onClick={onOpen}
+      className={`flex w-full flex-col items-center gap-2 text-center ${
+        live ? 'group cursor-pointer' : 'cursor-not-allowed'
+      }`}
     >
-      <span className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400">
+      {/* SOLID for a live tile, dashed for one that is not. Dashed is this
+          app's placeholder mark — the template-name chip, the blank beside a
+          group's workflow cards — so a tile going live is visible rather than
+          silent, which is the whole reason the inactive ones were drawn that
+          way in the first place. */}
+      <span
+        className={`flex h-16 w-16 items-center justify-center rounded-xl border transition-colors ${
+          live
+            ? 'border-neutral-300 bg-white text-neutral-600 group-hover:border-brand-300 group-hover:bg-brand-50 group-hover:text-brand-700'
+            : 'border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400'
+        }`}
+      >
         <Glyph className="h-6 w-6" />
       </span>
       <span className="flex flex-col gap-0.5">
         {/* Clamped, not truncated: the longest of these is a sentence, and a
             name you cannot read is the one thing a launcher must not do. */}
-        <span className="line-clamp-2 text-xs font-medium leading-snug text-neutral-600">
+        <span
+          className={`line-clamp-2 text-xs font-medium leading-snug ${
+            live ? 'text-neutral-800' : 'text-neutral-600'
+          }`}
+        >
           {name}
         </span>
         {detail ? (
@@ -866,6 +924,97 @@ function ToolTile({ tool }: { tool: Tool }) {
         ) : null}
       </span>
     </button>
+  )
+}
+
+/**
+ * The History tab: what has happened to this task.
+ *
+ * It said "changes to this task are not recorded yet" from the day it was
+ * built, because `workflow_tasks` carries no audit trigger. It now has a real
+ * source for HALF the answer — the actions taken from the Tools tab — and the
+ * empty state says plainly which half is still missing, rather than implying
+ * nothing is recorded at all.
+ *
+ * Newest first, like the feed: history is scanned from the top.
+ */
+function TaskHistory({ actions }: { actions: TaskAction[] }) {
+  return (
+    <div className="flex flex-col gap-4">
+      {actions.length ? (
+        <ol aria-label="Recorded actions" className="flex flex-col divide-y divide-neutral-200/80">
+          {actions.map((action) => (
+            <li key={action.id} className="py-3 first:pt-0">
+              <ActionEntry action={action} />
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-xs leading-relaxed text-neutral-400">
+          Nothing recorded yet. An action taken from the Tools tab appears here.
+        </p>
+      )}
+
+      {/* The other half, still missing, and named rather than implied. */}
+      <Unbuilt title="Field changes are not recorded yet">
+        The audit trail covers twenty tables and names whoever made every change, but{' '}
+        <code className="text-neutral-600">workflow_tasks</code> is not one of them — it was
+        created after the trail was set up. So an assignee, a due date or a status changing
+        leaves no trace here yet. Attaching the trigger is one line per table, and is logged as
+        a decision rather than done in passing.
+      </Unbuilt>
+    </div>
+  )
+}
+
+const ACTION_LABEL: Record<TaskActionKind, string> = { email: 'Email' }
+
+/**
+ * One recorded action.
+ *
+ * **It says "recorded", never "sent".** Nothing is delivered yet, and a history
+ * entry claiming an email went out would be the same lie the record was
+ * deliberately kept out of the client's file to avoid.
+ */
+function ActionEntry({ action }: { action: TaskAction }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <Pill tone="neutral">{ACTION_LABEL[action.kind] ?? action.kind}</Pill>
+        {action.subject ? (
+          <span className="text-sm font-medium text-neutral-900">{action.subject}</span>
+        ) : (
+          <span className="text-sm text-neutral-400">No subject</span>
+        )}
+      </div>
+
+      <p className="text-xs text-neutral-500">
+        {/* Recorded, not sent — see the component note. */}
+        Recorded by {action.actor_name ?? 'someone no longer on staff'} ·{' '}
+        {formatNoteDateTime(action.occurred_at)}
+      </p>
+
+      {action.recipient ? (
+        <p className="text-xs text-neutral-500">
+          To <span className="text-neutral-700">{action.recipient}</span>
+          {action.sender ? (
+            <>
+              {' '}
+              from <span className="text-neutral-700">{action.sender}</span>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
+      {/* The message as it was written. The same renderer the feed uses, which
+          draws only what it knows — and an email body is a narrower list than
+          a post, so there is nothing here it has not already been taught. */}
+      {action.body ? (
+        <div className="mt-1 rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2">
+          <PostBody doc={action.body} mentioned={[]} />
+        </div>
+      ) : null}
+    </div>
   )
 }
 

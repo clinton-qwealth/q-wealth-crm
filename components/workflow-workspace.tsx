@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { EntityChoice, WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
+import type { EntityChoice, TaskAction, WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
 import { Card, Placeholder } from './ui'
 import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
@@ -36,6 +36,8 @@ export function WorkflowWorkspace({
   staff,
   tasks,
   posts,
+  actions,
+  recipient,
   entities,
   viewer,
 }: {
@@ -45,10 +47,14 @@ export function WorkflowWorkspace({
   tasks: WorkflowTask[]
   /** Every post on the workflow, newest first. */
   posts: WorkflowPost[]
+  /** Every recorded action on the workflow, newest first. */
+  actions: TaskAction[]
+  /** Who an email from this workflow prefills to, or null when nobody is on file. */
+  recipient: { email: string; name: string | null } | null
   /** What `#` may name: this workflow's group, its members, its sibling workflows. */
   entities?: EntityChoice[]
   /** The signed-in staff member — the author of anything posted from here. */
-  viewer: { id: string; name: string; canRemoveAnyImage: boolean }
+  viewer: { id: string; name: string; email: string; canRemoveAnyImage: boolean }
 }) {
   return (
     <>
@@ -98,6 +104,8 @@ export function WorkflowWorkspace({
           groupName={w.group_name}
           tasks={tasks}
           posts={posts}
+          actions={actions}
+          recipient={recipient}
           staff={staff}
           entities={entities}
           viewer={viewer}

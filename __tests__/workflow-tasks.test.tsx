@@ -1,6 +1,6 @@
-import type { WorkflowTask } from '@/lib/workflow-board'
-import { describe, expect, test, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import type { TaskAction, WorkflowTask } from '@/lib/workflow-board'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
@@ -8,6 +8,7 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskPriority: vi.fn(async () => ({ ok: true as const })),
   saveWorkflowTaskDetails: vi.fn(async () => ({ ok: true as const })),
+  recordTaskAction: vi.fn(async () => ({ ok: true as const })),
 }))
 
 const actions = await import('@/app/(shell)/groups/actions')
@@ -68,7 +69,25 @@ const STAFF = [
   { id: 's1', name: 'Sarah Chen' },
   { id: 's2', name: 'Clinton Hatcher' },
 ]
-const VIEWER = { id: 's2', name: 'Clinton Hatcher', canRemoveAnyImage: false }
+const VIEWER = { id: 's2', name: 'Clinton Hatcher', email: 'clinton@qwealth.com.au', canRemoveAnyImage: false }
+/* No recorded actions by default: History's empty state is the ordinary case. */
+let ACTIONS: TaskAction[] = []
+const RECIPIENT = { email: 'jane@testsmith.example', name: 'Jane Testsmith' }
+const action = (o: Partial<TaskAction> = {}): TaskAction => ({
+  id: 'a1',
+  workflow_id: 'w1',
+  task_id: 't7',
+  kind: 'email',
+  actor_staff_id: 's2',
+  actor_name: 'Clinton Hatcher',
+  recipient: 'jane@testsmith.example',
+  sender: 'clinton@qwealth.com.au',
+  subject: 'Rollover paperwork',
+  body: null,
+  body_text: '',
+  occurred_at: '2026-09-09T04:32:00Z',
+  ...o,
+})
 const show = (tasks: WorkflowTask[]) =>
   render(
     <WorkflowTasks
@@ -77,6 +96,8 @@ const show = (tasks: WorkflowTask[]) =>
       groupName="Testsmith Household"
       tasks={tasks}
       posts={[]}
+      actions={ACTIONS}
+      recipient={RECIPIENT}
       staff={STAFF}
       viewer={VIEWER}
     />,
@@ -259,6 +280,8 @@ describe('the workflow’s tasks', () => {
         groupName="Testsmith Household"
         tasks={[open]}
         posts={[]}
+        actions={ACTIONS}
+        recipient={RECIPIENT}
         staff={STAFF}
         viewer={VIEWER}
       />,
@@ -273,6 +296,8 @@ describe('the workflow’s tasks', () => {
         groupName="Testsmith Household"
         tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
         posts={[]}
+        actions={ACTIONS}
+        recipient={RECIPIENT}
         staff={STAFF}
         viewer={VIEWER}
       />,
@@ -618,7 +643,8 @@ describe('the task panel', () => {
         .getAllByRole('button')
         .map((b) => b.getAttribute('aria-label'))
       expect(names).toEqual([
-        'Email — not built yet',
+        // Email is wired; the rest say so in their own names.
+        'Email',
         'SMS — not built yet',
         'DocuSign — Send to sign — not built yet',
         'Generate document — not built yet',
@@ -641,15 +667,21 @@ describe('the task panel', () => {
      * order rather than being seven stops that do nothing. The mutation to
      * catch is somebody making them look inactive while still clickable.
      */
-    test('every tile is genuinely disabled, and says why in its name', async () => {
+    test('Email is live; the other seven are genuinely disabled and say why', async () => {
       const panel = await tools()
-      const buttons = within(panel).getAllByRole('button')
+      const buttons = within(panel).getAllByRole<HTMLButtonElement>('button')
       expect(buttons).toHaveLength(8)
-      for (const b of buttons) {
-        expect((b as HTMLButtonElement).disabled).toBe(true)
+
+      const [email, ...rest] = buttons
+      expect(email.disabled).toBe(false)
+      expect(email.getAttribute('aria-label')).toBe('Email')
+
+      for (const b of rest) {
+        expect(b.disabled).toBe(true)
         expect(b.getAttribute('aria-label')).toContain('not built yet')
       }
-      expect(panel.textContent).toContain('Every tile is inactive')
+      // The count is derived from which tiles have a handler, not written twice.
+      expect(panel.textContent).toContain('One tile is live; the rest are inactive')
     })
 
     /**
@@ -678,15 +710,155 @@ describe('the task panel', () => {
       expect(button.className).toContain('text-center')
     })
 
-    /** Dashed reads as planned; dimmed reads as broken. See the component note. */
-    test('a tile is dashed rather than dimmed', async () => {
+    /**
+     * Dashed reads as planned; dimmed reads as broken. A tile going LIVE takes
+     * a solid border, so the promotion is visible rather than silent — which
+     * is the whole reason the inactive ones were drawn dashed to begin with.
+     */
+    test('an inactive tile is dashed rather than dimmed; a live one is solid', async () => {
       const panel = await tools()
-      const face = within(panel).getAllByRole('button')[0].firstElementChild!
-      expect(face.className).toContain('border-dashed')
-      expect(face.className).not.toMatch(/opacity-(40|50)/)
+      const [email, sms] = within(panel).getAllByRole('button')
+
+      const live = email.firstElementChild!
+      expect(live.className).not.toContain('border-dashed')
+
+      const inactive = sms.firstElementChild!
+      expect(inactive.className).toContain('border-dashed')
+      expect(inactive.className).not.toMatch(/opacity-(40|50)/)
     })
 
-    /** An app's name does not say what it does, so the descriptor is rendered, not only announced. */
+    /**
+   * The Email tool, built 9 September. Nothing is sent — Send records what was
+   * composed — so the assertions are about the fields, the prefills, and the
+   * fact that the record is what reaches the server.
+   */
+  describe('the Email tool', () => {
+    /* Calls only — the implementations set in the module mock above stay. Without
+       this, "no call was made" would pass or fail depending on which tests ran
+       before it. */
+    beforeEach(() => vi.clearAllMocks())
+
+    const openEmail = async () => {
+      const { user, panel } = await open()
+      await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
+      await user.click(within(panel).getByRole('button', { name: 'Email' }))
+      return { user, dialog: screen.getByRole('dialog', { name: 'Email' }) }
+    }
+
+    test('To prefills with the group’s primary contact; From is the signed-in user and not editable', async () => {
+      const { dialog } = await openEmail()
+      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^To$/ }).value).toBe(
+        'jane@testsmith.example',
+      )
+      // From is TEXT, not a field: an email that could claim to come from a
+      // colleague is what the rest of this app refuses by construction.
+      expect(dialog.textContent).toContain('clinton@qwealth.com.au')
+      expect(within(dialog).queryByRole('textbox', { name: /^From$/ })).toBeNull()
+    })
+
+    test('the subject seeds from the task, and the template picker is inactive', async () => {
+      const { dialog } = await openEmail()
+      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^Subject$/ }).value).toBe(
+        'Confirm the rollover',
+      )
+      const template = within(dialog).getByRole<HTMLSelectElement>('combobox', { name: /Template/ })
+      expect(template.disabled).toBe(true)
+      expect(template.getAttribute('aria-label')).toContain('not built yet')
+    })
+
+    /** The one claim that must not drift: Send does not deliver, and says so. */
+    test('the modal says nothing is sent', async () => {
+      const { dialog } = await openEmail()
+      expect(dialog.textContent).toContain('Nothing is sent yet')
+      expect(dialog.textContent).toContain('Send records; it does not deliver')
+    })
+
+    test('Send records the action with the addresses as they stood, and closes', async () => {
+      const { user, dialog } = await openEmail()
+      const to = within(dialog).getByRole('textbox', { name: /^To$/ })
+      await user.clear(to)
+      await user.type(to, 'accountant@example.com')
+      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+
+      // What was RECORDED is what the field said on Send, not the prefill.
+      expect(actions.recordTaskAction).toHaveBeenCalledWith(
+        'w1',
+        't7',
+        'email',
+        'accountant@example.com',
+        'clinton@qwealth.com.au',
+        'Confirm the rollover',
+        expect.anything(),
+      )
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Email' })).toBeNull())
+    })
+
+    /** The composer's standing contract, extended here: a refusal keeps the words. */
+    test('a refused record keeps the modal open, with what was typed still in it', async () => {
+      vi.mocked(actions.recordTaskAction).mockResolvedValueOnce({ error: 'Not yours to record' })
+      const { user, dialog } = await openEmail()
+      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+      expect((await within(dialog).findByRole('alert')).textContent).toContain('Not yours to record')
+      expect(screen.getByRole('dialog', { name: 'Email' })).toBeTruthy()
+      expect(within(dialog).getByRole<HTMLInputElement>('textbox', { name: /^Subject$/ }).value).toBe(
+        'Confirm the rollover',
+      )
+    })
+
+    test('a blank recipient is refused here, before any call', async () => {
+      const { user, dialog } = await openEmail()
+      await user.clear(within(dialog).getByRole('textbox', { name: /^To$/ }))
+      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+      expect((await within(dialog).findByRole('alert')).textContent).toContain('needs a recipient')
+      expect(actions.recordTaskAction).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * The History tab, which said "not recorded yet" from the day it was built.
+   * It now has a real source for the half that is an ACTION, and still names
+   * the half that is missing.
+   */
+  describe('the History tab', () => {
+    const history = async () => {
+      const { user, panel } = await open()
+      await user.click(within(panel).getByRole('tab', { name: 'History' }))
+      return within(panel).getByRole('tabpanel', { name: 'History' })
+    }
+
+    test('with nothing recorded it says so, and still names what is missing', async () => {
+      ACTIONS = []
+      const panel = await history()
+      expect(panel.textContent).toContain('Nothing recorded yet')
+      // The audit-trigger gap is a separate fact and stays stated.
+      expect(panel.textContent).toContain('Field changes are not recorded yet')
+    })
+
+    test('a recorded action shows who, when, and where it went — and says RECORDED, not sent', async () => {
+      ACTIONS = [action()]
+      const panel = await history()
+      expect(panel.textContent).toContain('Rollover paperwork')
+      expect(panel.textContent).toContain('Recorded by Clinton Hatcher')
+      expect(panel.textContent).toContain('jane@testsmith.example')
+      // The claim that must not drift: nothing was delivered.
+      expect(panel.textContent).not.toMatch(/\bSent\b/)
+    })
+
+    test('only this task’s actions appear', async () => {
+      ACTIONS = [action({ id: 'a1', subject: 'Mine' }), action({ id: 'a2', task_id: 'other', subject: 'Someone else’s' })]
+      const panel = await history()
+      expect(panel.textContent).toContain('Mine')
+      expect(panel.textContent).not.toContain('Someone else’s')
+    })
+
+    test('an action from a departed colleague still names somebody', async () => {
+      ACTIONS = [action({ actor_name: null })]
+      const panel = await history()
+      expect(panel.textContent).toContain('no longer on staff')
+    })
+  })
+
+  /** An app's name does not say what it does, so the descriptor is rendered, not only announced. */
     test('an app shows what it models beneath its name', async () => {
       const panel = await tools()
       expect(within(panel).getByText('Projection modelling')).toBeTruthy()

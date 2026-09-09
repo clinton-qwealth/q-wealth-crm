@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type {
-  WorkflowPost, BoardCard, EntityChoice, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
+  WorkflowPost, BoardCard, EntityChoice, TaskAction, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
 /**
  * Every workflow the caller can see, across every group — the view is
@@ -198,4 +198,90 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
     throw new Error(`The workflow's posts could not be read: ${error.message}`)
   }
   return (data ?? []) as WorkflowPost[]
+}
+
+/**
+ * A workflow's recorded task actions — what people did from a Tools tab.
+ *
+ * Every action on the WORKFLOW, so the task panel filters to its own task
+ * exactly as it does with posts. One query per page rather than one per task,
+ * and the workflow timeline gets them for free when it is built.
+ *
+ * Throws on a failed read, for the reason spelled out on `getWorkflowPosts`
+ * above: a history that silently reads empty is a screen saying "nothing has
+ * happened to this task", which is a lie a record must never tell.
+ */
+export async function getWorkflowTaskActions(workflowId: string): Promise<TaskAction[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_task_actions_summary')
+    .select('id, workflow_id, task_id, kind, actor_staff_id, actor_name, recipient, sender, subject, body, body_text, occurred_at')
+    .eq('workflow_id', workflowId)
+    .order('occurred_at', { ascending: false })
+    .order('id', { ascending: false })
+
+  if (error) {
+    throw new Error(`The workflow's recorded actions could not be read: ${error.message}`)
+  }
+  return (data ?? []) as TaskAction[]
+}
+
+/**
+ * Who an email from this workflow goes to by default: the email address of its
+ * client group's PRIMARY CONTACT.
+ *
+ * The same shape as the group page's `getGroupContacts`, which resolves a phone
+ * number the same way — group → `primary_contact_party_id` → `contact_points`,
+ * with the contact's own stated preference winning. Kept separate rather than
+ * shared because that one lives in a page module and returns a phone; folding
+ * them together would mean one function that fetches both for callers wanting
+ * either.
+ *
+ * Returns null rather than throwing when there is nobody to write to: a group
+ * with no primary contact, or a contact with no email, is an ordinary state,
+ * and the modal says so rather than failing to open.
+ */
+export async function getWorkflowRecipient(
+  workflowId: string,
+): Promise<{ email: string; name: string | null } | null> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data: workflow } = await supabase
+    .from('workflows')
+    .select('group_id')
+    .eq('id', workflowId)
+    .maybeSingle()
+  if (!workflow?.group_id) return null
+
+  const { data: group } = await supabase
+    .from('client_groups')
+    .select('primary_contact_party_id, parties(display_name)')
+    .eq('id', workflow.group_id)
+    .maybeSingle()
+
+  const partyId = group?.primary_contact_party_id
+  if (!partyId) return null
+
+  // The embed is to-one, so PostgREST returns an object; tolerate an array in
+  // case relationship detection changes — the same guard the group page uses.
+  const rawParty = (group as Record<string, unknown>).parties
+  const party = (Array.isArray(rawParty) ? rawParty[0] : rawParty) as
+    | { display_name?: string }
+    | null
+    | undefined
+
+  const { data: emails } = await supabase
+    .from('contact_points')
+    .select('value, is_preferred')
+    .eq('party_id', partyId)
+    .eq('kind', 'email')
+
+  if (!emails?.length) return null
+
+  // Their own stated preference wins; otherwise the first on file.
+  const best = emails.find((e) => e.is_preferred) ?? emails[0]
+  const email = (best?.value as string | null) ?? null
+  if (!email) return null
+
+  return { email, name: party?.display_name ?? null }
 }

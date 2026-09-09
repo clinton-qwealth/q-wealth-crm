@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from 'react'
 import {
   EditorContent,
@@ -18,10 +17,10 @@ import {
   type NodeViewProps,
 } from '@tiptap/react'
 import type { Editor } from '@tiptap/react'
+import { Divider, LinkGlyph, LinkRow, Tool, messageHeading } from './rich-text'
 import { Extension, Node, mergeAttributes, type ChainedCommands } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
 import StarterKit from '@tiptap/starter-kit'
-import Heading from '@tiptap/extension-heading'
 import Mention from '@tiptap/extension-mention'
 import Suggestion, { type SuggestionOptions, type SuggestionProps } from '@tiptap/suggestion'
 import {
@@ -187,7 +186,7 @@ export function PostComposer({
         heading: false,
         link: { openOnClick: false, autolink: true, defaultProtocol: 'https' },
       }),
-      PostHeading.configure({ levels: [...POST_HEADING_LEVELS] }),
+      messageHeading(POST_HEADING_LEVELS).configure({ levels: [...POST_HEADING_LEVELS] }),
       Mention.configure({
         HTMLAttributes: { class: 'rounded bg-brand-50 px-1 font-medium text-brand-700' },
         renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
@@ -640,144 +639,6 @@ const IDLE = {
   link: false,
 }
 
-function Divider() {
-  return <span aria-hidden className="mx-0.5 h-4 w-px bg-neutral-200" />
-}
-
-function Tool({
-  label,
-  on,
-  disabled = false,
-  onClick,
-  children,
-}: {
-  label: string
-  on: boolean
-  disabled?: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={on}
-      aria-disabled={disabled || undefined}
-      title={label}
-      // Mousedown, not click: a click would blur the editor first and lose
-      // the selection the command applies to.
-      onMouseDown={(e) => {
-        e.preventDefault()
-        if (!disabled) onClick()
-      }}
-      onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && !disabled) {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      className={`flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
-        on ? 'bg-neutral-200 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
-      } ${disabled ? 'cursor-default opacity-40 hover:bg-transparent hover:text-neutral-600' : ''}`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function LinkGlyph() {
-  return (
-    <svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-      <path d="M6.5 9.5l3-3" />
-      <path d="M7 4.5l1.2-1.2a2.6 2.6 0 013.7 3.7L10.7 8.2" />
-      <path d="M9 11.5l-1.2 1.2a2.6 2.6 0 01-3.7-3.7L5.3 7.8" />
-    </svg>
-  )
-}
-
-/* ---- the link row ---------------------------------------------------- */
-
-const SAFE_HREF = /^https?:\/\//i
-
-/**
- * A URL is typed here, not prompted for. The row opens under the toolbar with
- * the selection's current link, if any, and applies on Enter or Apply. The
- * same http(s) rule the database enforces is checked here first, so a bad
- * scheme is a sentence in the row rather than a refusal after posting.
- */
-function LinkRow({ editor, onDone }: { editor: Editor; onDone: () => void }) {
-  const current = (editor.getAttributes('link').href as string | undefined) ?? ''
-  const [href, setHref] = useState(current)
-  const [problem, setProblem] = useState<string | null>(null)
-
-  function apply() {
-    let value = href.trim()
-    if (value && !/^[a-z][a-z0-9+.-]*:/i.test(value)) value = `https://${value}`
-    if (!SAFE_HREF.test(value)) {
-      setProblem('A link must start with http:// or https://')
-      return
-    }
-    const chain = editor.chain().focus()
-    if (editor.state.selection.empty && !editor.isActive('link')) {
-      // Nothing selected: the address becomes the text, linked.
-      chain.insertContent({ type: 'text', text: value, marks: [{ type: 'link', attrs: { href: value } }] }).run()
-    } else {
-      chain.extendMarkRange('link').setLink({ href: value }).run()
-    }
-    onDone()
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 px-2 py-1.5">
-      <label className="sr-only" htmlFor="qw-post-link">
-        Link address
-      </label>
-      <input
-        id="qw-post-link"
-        type="url"
-        autoFocus
-        value={href}
-        onChange={(e) => {
-          setHref(e.target.value)
-          setProblem(null)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            apply()
-          }
-          if (e.key === 'Escape') onDone()
-        }}
-        placeholder="https://"
-        className="h-7 min-w-0 flex-1 rounded-md border border-neutral-300 px-2 text-xs text-neutral-900 outline-none focus:border-brand-300 focus:ring-2 focus:ring-brand/15"
-      />
-      <button type="button" onClick={apply} className="h-7 rounded-md bg-neutral-900 px-2.5 text-xs font-medium text-white hover:bg-neutral-800">
-        Apply
-      </button>
-      {current ? (
-        <button
-          type="button"
-          onClick={() => {
-            editor.chain().focus().extendMarkRange('link').unsetLink().run()
-            onDone()
-          }}
-          className="h-7 rounded-md px-2 text-xs text-neutral-600 hover:bg-neutral-100"
-        >
-          Remove link
-        </button>
-      ) : null}
-      <button type="button" onClick={onDone} className="h-7 rounded-md px-2 text-xs text-neutral-600 hover:bg-neutral-100">
-        Cancel
-      </button>
-      {problem ? (
-        <span role="alert" className="basis-full text-xs text-red-600">
-          {problem}
-        </span>
-      ) : null}
-    </div>
-  )
-}
-
 /* ---- the @ and : menus ----------------------------------------------- */
 
 type Popup =
@@ -843,19 +704,6 @@ function suggestionRender<T extends Staff | Emoji | EntityChoice>(
  * the level is still 1, 2 or 3 — only the tag the editor paints. Both tags
  * parse back, so a heading copied within the editor stays a heading.
  */
-const PostHeading = Heading.extend({
-  parseHTML() {
-    return POST_HEADING_LEVELS.flatMap((level) => [
-      { tag: `h${level}`, attrs: { level } },
-      { tag: `h${level + 3}`, attrs: { level } },
-    ])
-  },
-  renderHTML({ node, HTMLAttributes }) {
-    const level = (POST_HEADING_LEVELS as readonly number[]).includes(node.attrs.level) ? node.attrs.level : 1
-    return [`h${level + 3}`, mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
-  },
-})
-
 /* ---- the things a post can point at ----------------------------------- */
 
 /**

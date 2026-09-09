@@ -317,6 +317,73 @@ export const POST_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'und
 export const POST_HEADING_LEVELS = [1] as const
 
 /**
+ * What an EMAIL body may contain — a narrower list than a post's.
+ *
+ * A post may name a colleague, a client, or bytes it has claimed. An email may
+ * name none of those, and the reasons are specific rather than tidiness:
+ *
+ *  - a `mention` resolves to a staff member's CURRENT name at read time, which
+ *    would silently rewrite a message that has already gone out;
+ *  - an `entity` chip publishes a client's label into the record's plain text,
+ *    which is the disclosure the chip rules exist to prevent;
+ *  - an `image` or `attachment` claims a `workflow_post_media` row, and that
+ *    claim belongs to posts — an email has its own attachments, one day, and
+ *    they will not be post media.
+ *
+ * `record_task_action()` enforces exactly this list. As always the DATABASE is
+ * the gate and the editor is configured to match, never the other way round;
+ * a test asserts the two agree, both ways.
+ */
+export const EMAIL_NODE_TYPES = [
+  'doc', 'paragraph', 'text', 'hardBreak', 'bulletList', 'orderedList', 'listItem',
+  'heading', 'blockquote', 'codeBlock', 'horizontalRule',
+] as const
+export const EMAIL_MARK_TYPES = ['bold', 'italic', 'strike', 'code', 'link', 'underline'] as const
+
+/**
+ * One heading size in a message, as a post has one.
+ *
+ * Written separately from POST_HEADING_LEVELS even though both are [1] today:
+ * the two rules are independent — a message is prose sent to a client, a post
+ * is a note to a colleague — and collapsing them would mean narrowing one
+ * silently narrowed the other. `record_task_action()` enforces this one.
+ */
+export const EMAIL_HEADING_LEVELS = [1] as const
+
+/** What a task's Tools tab can record. One today; the check constraint holds the same set. */
+export const TASK_ACTION_KINDS = ['email'] as const
+export type TaskActionKind = (typeof TASK_ACTION_KINDS)[number]
+
+/** A closed set, checked before any call — so a bad kind is a sentence, not a constraint name. */
+export function isTaskActionKind(value: unknown): value is TaskActionKind {
+  return typeof value === 'string' && (TASK_ACTION_KINDS as readonly string[]).includes(value)
+}
+
+/**
+ * One recorded action from a task's Tools tab, as the History tab reads it.
+ *
+ * `recipient` and `sender` are what was USED, not a live lookup — a record has
+ * to say where the thing actually went, so a client changing their address
+ * later must not rewrite it.
+ */
+export type TaskAction = {
+  id: string
+  workflow_id: string
+  task_id: string
+  kind: TaskActionKind
+  actor_staff_id: string
+  /** Resolved through staff_directory, so a departed colleague still has a name. */
+  actor_name: string | null
+  recipient: string | null
+  sender: string | null
+  subject: string | null
+  body: PostDoc | null
+  body_text: string
+  /** An instant. Rendered in the reader's timezone. */
+  occurred_at: string
+}
+
+/**
  * A callout's tone, as a KEY rather than a colour.
  *
  * The same reasoning as the reaction keys. A colour in the document would be a

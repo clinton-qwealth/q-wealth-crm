@@ -5,7 +5,11 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import {
   POST_MEDIA_BUCKET,
   POST_MEDIA_SIZE_LIMIT,
+  EMAIL_MARK_TYPES,
+  EMAIL_NODE_TYPES,
   isPostDoc,
+  isTaskActionKind,
+  type PostDoc,
   isPostMediaType,
   isReactionKey,
   postDocText,
@@ -1022,4 +1026,94 @@ export async function redactPostMedia(workflowId: string, mediaId: string): Prom
 
   revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }
+}
+
+/**
+ * Record an action taken from a task's Tools tab. Today: an email.
+ *
+ * **Nothing is sent.** This writes what the person did, and the naming is
+ * deliberate throughout — `recordTaskAction`, not `sendEmail` — because a
+ * function called send that does not send is the kind of thing somebody later
+ * builds a compliance claim on.
+ *
+ * It also deliberately does NOT write a `notes` row of type `email_record`.
+ * That is where an email to a client belongs, and it is where it will go once
+ * sending is real; putting it there now would put a line in the client's
+ * permanent file saying they were contacted when they were not. The reasoning
+ * is in the migration.
+ *
+ * The body is validated here as a document on the EMAIL list — narrower than a
+ * post's — so a mention or a picture is a sentence rather than a refusal from
+ * the database. The database checks the same list again, because it is the gate.
+ */
+export async function recordTaskAction(
+  workflowId: string,
+  taskId: string,
+  kind: unknown,
+  recipient: unknown,
+  sender: unknown,
+  subject: unknown,
+  body: unknown,
+): Promise<NoteState> {
+  if (!workflowId) return { error: 'No workflow selected.' }
+  if (!taskId) return { error: 'No task selected.' }
+  if (!isTaskActionKind(kind)) return { error: 'Not an action this task can record.' }
+
+  const to = typeof recipient === 'string' ? recipient.trim() : ''
+  if (!to) return { error: 'An email needs a recipient.' }
+
+  if (body !== null && body !== undefined) {
+    if (!isPostDoc(body)) return { error: 'A message must be a document.' }
+    const stray = strayEmailNode(body)
+    if (stray) return { error: `A message may not contain a ${stray}.` }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('record_task_action', {
+    p_workflow_id: workflowId,
+    p_task_id: taskId,
+    p_kind: kind,
+    p_recipient: to,
+    p_sender: typeof sender === 'string' ? sender.trim() : null,
+    p_subject: typeof subject === 'string' ? subject.trim() : null,
+    p_body: body ?? null,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
+ * The first node type in a document that an email body may not carry, or null.
+ *
+ * Walks the whole tree rather than the top level: a mention lives inside a
+ * paragraph, and an image inside nothing in particular.
+ */
+function strayEmailNode(doc: PostDoc): string | null {
+  const allowed = new Set<string>([...EMAIL_NODE_TYPES])
+  const marks = new Set<string>([...EMAIL_MARK_TYPES])
+  let stray: string | null = null
+
+  const walk = (node: unknown) => {
+    if (stray || !node || typeof node !== 'object') return
+    const n = node as { type?: unknown; content?: unknown; marks?: unknown }
+    if (typeof n.type === 'string' && !allowed.has(n.type)) {
+      stray = n.type
+      return
+    }
+    if (Array.isArray(n.marks)) {
+      for (const mark of n.marks) {
+        const m = mark as { type?: unknown }
+        if (typeof m.type === 'string' && !marks.has(m.type)) {
+          stray = m.type
+          return
+        }
+      }
+    }
+    if (Array.isArray(n.content)) for (const child of n.content) walk(child)
+  }
+
+  walk(doc)
+  return stray
 }

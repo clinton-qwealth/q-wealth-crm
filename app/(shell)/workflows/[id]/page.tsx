@@ -5,6 +5,8 @@ import {
   getWorkflow,
   getWorkflowEntityChoices,
   getWorkflowPosts,
+  getWorkflowRecipient,
+  getWorkflowTaskActions,
   getWorkflowTasks,
 } from '@/lib/workflows'
 import { WorkflowWorkspace } from '@/components/workflow-workspace'
@@ -26,14 +28,19 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   const { id } = await params
   /* One wave: the row, the staff list, the tasks and the posts need nothing
      from each other, so asking for them together costs one round trip rather
-     than four. */
-  const [workflow, staffChoices, tasks, posts, entityChoices] = await Promise.all([
-    getWorkflow(id),
-    getStaffChoices(),
-    getWorkflowTasks(id),
-    getWorkflowPosts(id),
-    getWorkflowEntityChoices(id),
-  ])
+     than seven. The recipient lookup is the one that is not a single query —
+     workflow, then group, then contact points — but it still joins this wave
+     rather than adding one of its own. */
+  const [workflow, staffChoices, tasks, posts, entityChoices, actions, recipient] =
+    await Promise.all([
+      getWorkflow(id),
+      getStaffChoices(),
+      getWorkflowTasks(id),
+      getWorkflowPosts(id),
+      getWorkflowEntityChoices(id),
+      getWorkflowTaskActions(id),
+      getWorkflowRecipient(id),
+    ])
   if (!workflow) notFound()
 
   return (
@@ -42,6 +49,8 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       staff={staffChoices}
       tasks={tasks}
       posts={posts}
+      actions={actions}
+      recipient={recipient}
       entities={entityChoices}
       /* `manage_staff` is what current_staff_has('admin') reads, so this is
          the same question the database asks when it decides who may take an
@@ -50,6 +59,10 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       viewer={{
         id: staff.id,
         name: staff.full_name,
+        /* The address an email is sent FROM. Their own profile email, never
+           typed: an email that could claim to come from a colleague is what
+           the rest of this app refuses by construction. */
+        email: staff.email,
         canRemoveAnyImage: staff.access_profiles.manage_staff,
       }}
     />
