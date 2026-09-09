@@ -363,8 +363,6 @@ export function PostComposer({
         codeBlock: e?.isActive('codeBlock') ?? false,
         callout: e?.isActive('callout') ?? false,
         link: e?.isActive('link') ?? false,
-        canUndo: e?.can().undo() ?? false,
-        canRedo: e?.can().redo() ?? false,
       }
     },
   }) ?? IDLE
@@ -405,26 +403,29 @@ export function PostComposer({
   }
 
   return (
-    <div className="rounded-md border border-neutral-300 bg-white transition-colors focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand/15">
-      <div ref={frameRef} className="relative">
-        {/* The editor is a client-only thing; until it mounts, the box is a
-            box. Once it has, an empty document shows the placeholder. */}
-        {editor && state.pristine ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-2 text-sm text-neutral-400"
-          >
-            Write an update. @ a colleague, # a client, : an emoji.
-          </span>
-        ) : null}
-        <EditorContent editor={editor} />
-        {popup && popup.rect && frameRef.current ? (
-          <SuggestionMenu popup={popup} frame={frameRef.current.getBoundingClientRect()} />
-        ) : null}
-      </div>
+    /* `rounded-lg border-neutral-200`, the same shell as the Details box it sits
+       under. The two are adjacent bordered boxes in one column, and a different
+       radius and border weight on the second read as an error rather than as a
+       distinction — the focus ring is what says "this one is an input". */
+    <div className="rounded-lg border border-neutral-200 bg-white transition-colors focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand/15">
+      {/* THE TOOLBAR IS ABOVE THE EDITOR, ON A ROW OF ITS OWN.
 
-      <div className="flex items-start justify-between gap-2 border-t border-neutral-100 px-2 py-1.5">
-        <div className="flex flex-wrap items-center gap-0.5" role="toolbar" aria-label="Formatting">
+          It sat in the footer beside Post, and wrapped at every panel width:
+          seventeen controls need about 546px and the footer had 483 beside
+          the button — so the "row" was two rows more often than not. Its own
+          row has the full 539px, and at fourteen controls (~455px) it fits
+          with room at the panel's default width.
+
+          Fourteen, not seventeen. Undo and Redo are ⌘Z and ⇧⌘Z — the
+          keyboard's, and the editor still honours both — and a horizontal
+          rule in a two-paragraph update is rare enough that `---` typed on a
+          line covers it. The schema is unchanged: a post may still HOLD a
+          rule; it just has no button. */}
+      <div
+        role="toolbar"
+        aria-label="Formatting"
+        className="flex flex-wrap items-center gap-0.5 border-b border-neutral-100 px-2 py-1.5"
+      >
           <Tool label="Bold" on={state.bold} onClick={() => run((c) => c.toggleBold().run())}>
             <span className="font-bold">B</span>
           </Tool>
@@ -470,9 +471,6 @@ export function PostComposer({
           <Tool label="Code block" on={state.codeBlock} onClick={() => run((c) => c.toggleCodeBlock().run())}>
             <span className="font-mono text-[11px]">{'{ }'}</span>
           </Tool>
-          <Tool label="Horizontal rule" on={false} onClick={() => run((c) => c.setHorizontalRule().run())}>
-            <span aria-hidden>—</span>
-          </Tool>
           {/* Wraps the selection rather than inserting an empty box, so
               turning a paragraph you have just written into a warning is one
               click. `toggleWrap` also unwraps, which is what the pressed state
@@ -507,25 +505,51 @@ export function PostComposer({
           <Tool label="Link" on={state.link || linkOpen} onClick={() => setLinkOpen((o) => !o)}>
             <LinkGlyph />
           </Tool>
-          <Divider />
-          <Tool label="Undo" on={false} disabled={!state.canUndo} onClick={() => run((c) => c.undo().run())}>
-            <span aria-hidden>↶</span>
-          </Tool>
-          <Tool label="Redo" on={false} disabled={!state.canRedo} onClick={() => run((c) => c.redo().run())}>
-            <span aria-hidden>↷</span>
-          </Tool>
-        </div>
+      </div>
+
+      {/* Directly under the toolbar whose button opened it, above the words. */}
+      {linkOpen && editor ? <LinkRow editor={editor} onDone={() => setLinkOpen(false)} /> : null}
+
+      <div ref={frameRef} className="relative">
+        {/* The editor is a client-only thing; until it mounts, the box is a
+            box. Once it has, an empty document shows the placeholder. */}
+        {editor && state.pristine ? (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-2 text-sm text-neutral-400"
+          >
+            Write an update. @ a colleague, # a client, : an emoji.
+          </span>
+        ) : null}
+        <EditorContent editor={editor} />
+        {popup && popup.rect && frameRef.current ? (
+          <SuggestionMenu popup={popup} frame={frameRef.current.getBoundingClientRect()} />
+        ) : null}
+      </div>
+
+      {/* The footer is what is HAPPENING and the one thing to do about it:
+          upload progress or a refusal on the left, Post on the right. Post
+          takes `ml-auto` so it stays at the right edge when there is nothing
+          to say. */}
+      <div className="flex items-center gap-3 border-t border-neutral-100 px-3 py-1.5">
+        {sending > 0 ? (
+          <p role="status" className="min-w-0 text-xs text-neutral-500">
+            {sending === 1 ? 'Adding a file…' : `Adding ${sending} files…`}
+          </p>
+        ) : problem ? (
+          <p role="alert" className="min-w-0 text-xs text-red-600">
+            {problem}
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={post}
           disabled={!editor || state.empty || posting || sending > 0}
-          className="shrink-0 rounded-md bg-brand px-3 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+          className="ml-auto shrink-0 rounded-md bg-brand px-3 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
         >
           {posting ? 'Posting…' : 'Post'}
         </button>
       </div>
-
-      {linkOpen && editor ? <LinkRow editor={editor} onDone={() => setLinkOpen(false)} /> : null}
 
       {/* Outside the toolbar so they are not in the toolbar's tab ring, and
           `accept` narrowed to what a post may carry so neither chooser offers
@@ -558,17 +582,6 @@ export function PostComposer({
           if (files.length) void addFiles(files)
         }}
       />
-
-      {sending > 0 ? (
-        <p role="status" className="border-t border-neutral-100 px-3 py-1.5 text-xs text-neutral-500">
-          {sending === 1 ? 'Adding a file…' : `Adding ${sending} files…`}
-        </p>
-      ) : null}
-      {problem ? (
-        <p role="alert" className="border-t border-neutral-100 px-3 py-1.5 text-xs text-red-600">
-          {problem}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -624,8 +637,6 @@ const IDLE = {
   codeBlock: false,
   callout: false,
   link: false,
-  canUndo: false,
-  canRedo: false,
 }
 
 function Divider() {
@@ -716,7 +727,7 @@ function LinkRow({ editor, onDone }: { editor: Editor; onDone: () => void }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-2 border-b border-neutral-100 px-2 py-1.5">
       <label className="sr-only" htmlFor="qw-post-link">
         Link address
       </label>

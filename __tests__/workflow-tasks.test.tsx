@@ -73,6 +73,7 @@ const show = (tasks: WorkflowTask[]) =>
   render(
     <WorkflowTasks
       workflowId="w1"
+      workflowName="Annual review 2026"
       groupName="Testsmith Household"
       tasks={tasks}
       posts={[]}
@@ -166,10 +167,16 @@ describe('the workflow’s tasks', () => {
     expect(screen.getByRole('button', { name: /^Priority: Urgent\./ })).toBeTruthy()
   })
 
-  test('the task’s type is a pill after the assignee', () => {
+  /**
+   * There is one task type. A pill reading "Checkbox" on every row told no row
+   * from another, so it went on 9 September — from the row and from the panel.
+   * The enum stays in the data for the second kind to arrive.
+   */
+  test('the row’s footer names the assignee, and does not display the one task type', () => {
     show([open])
     const footer = screen.getByText('Assigned to Sarah Chen').parentElement!
-    expect(footer.textContent).toBe('Assigned to Sarah ChenCheckbox')
+    expect(footer.textContent).toBe('Assigned to Sarah Chen')
+    expect(screen.queryByText('Checkbox')).toBeNull()
     // Set off from the description above it, rather than running into it —
     // 12px, widened from 8 on 8 September.
     expect(footer.className).toContain('mt-3')
@@ -248,6 +255,7 @@ describe('the workflow’s tasks', () => {
     const { rerender } = render(
       <WorkflowTasks
         workflowId="w1"
+        workflowName="Annual review 2026"
         groupName="Testsmith Household"
         tasks={[open]}
         posts={[]}
@@ -261,6 +269,7 @@ describe('the workflow’s tasks', () => {
     rerender(
       <WorkflowTasks
         workflowId="w1"
+        workflowName="Annual review 2026"
         groupName="Testsmith Household"
         tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
         posts={[]}
@@ -515,14 +524,53 @@ describe('the task panel', () => {
     expect(pillOf(c.panel, 'Cancelled').className).toContain('neutral')
   })
 
-  test('the marks row says which client group the work is for, after the priority', async () => {
+  /**
+   * The eyebrow says WHERE the task is. The panel hides the page behind it, so
+   * the client and the workflow are named in the one place they cannot be seen.
+   * Until 9 September it read "Task", the client was a grey sentence at the end
+   * of the marks row, and the workflow's name was nowhere in the panel.
+   */
+  test('the eyebrow names the client group and the workflow, above the subject', async () => {
     const { panel } = await open()
-    const marks = within(panel).getByText('High').closest('div')!
-    expect(marks.textContent).toContain('For Testsmith Household')
-    // After the priority in the DOM, i.e. to its right, and set off by a gap.
-    const forWhom = within(panel).getByText('For Testsmith Household')
-    expect(within(panel).getByText('High').compareDocumentPosition(forWhom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(forWhom.className).toContain('ml-2')
+    const eyebrow = within(panel).getByText('Testsmith Household · Annual review 2026')
+    const subject = within(panel).getByRole('heading', { level: 2, name: 'Confirm the rollover' })
+    expect(eyebrow.compareDocumentPosition(subject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Not the old forms.
+    expect(panel.textContent).not.toContain('For Testsmith')
+    expect(within(panel).queryByText('Task')).toBeNull()
+    expect(within(panel).queryByText('Checkbox')).toBeNull()
+  })
+
+  /** Two states, one idiom: status and priority are both pills, so they read as a pair. */
+  test('status and priority are drawn the same way, as pills', async () => {
+    const { panel } = await open()
+    const status = within(panel).getByText('Done').closest('.ring-1')!
+    const priority = within(panel).getByText('High').closest('.ring-1')!
+    expect(status).toBeTruthy()
+    expect(priority).toBeTruthy()
+    expect(priority.parentElement).toBe(status.parentElement)
+  })
+
+  /**
+   * The row's tick, reachable from the record. Reading a thread is how someone
+   * decides a task is finished, and the only tick used to be behind the inert
+   * backdrop. Same `toggle` as the checkbox, so the two cannot disagree.
+   */
+  test('Mark done in the header sets the status, and becomes Reopen', async () => {
+    const { user, panel } = await open(task({ id: 't1', subject: 'Collect signed authority', status: 'open' }))
+    const button = within(panel).getByRole('button', { name: 'Mark done' })
+    await user.click(button)
+    expect(actions.setWorkflowTaskStatus).toHaveBeenCalledWith('t1', 'done', 'w1')
+    // Optimistic: the pill and the button both say so at once.
+    expect(within(panel).getByText('Done').closest('.ring-1')).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: 'Reopen' })).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: 'Mark done' })).toBeNull()
+  })
+
+  test('a cancelled task offers neither Mark done nor Reopen', async () => {
+    const { panel } = await open(cancelled)
+    expect(within(panel).queryByRole('button', { name: 'Mark done' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Reopen' })).toBeNull()
   })
 
   test('the Activity tab is the feed: a composer above what has been posted, and no comment field', async () => {

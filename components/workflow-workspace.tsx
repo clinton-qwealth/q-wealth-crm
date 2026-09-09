@@ -94,6 +94,7 @@ export function WorkflowWorkspace({
       <Column span={5}>
         <WorkflowTasks
           workflowId={w.id}
+          workflowName={w.name}
           groupName={w.group_name}
           tasks={tasks}
           posts={posts}

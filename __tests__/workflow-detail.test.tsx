@@ -176,10 +176,11 @@ describe('the workflow detail page', () => {
       />,
     )
     await user.click(screen.getByRole('button', { name: 'Open task: Collect the authority' }))
-    const panel = container.querySelector('dialog.qw-drawer')!
-    expect(panel.textContent).toContain('For Testsmith Household')
-    // Not the workflow's own name, which is the thing most easily passed by mistake.
-    expect(panel.textContent).not.toContain('For Annual review 2026')
+    const panel = container.querySelector('dialog.qw-drawer')! as HTMLElement
+    // Group first, then workflow — the order the eyebrow reads in. Asserted as
+    // one string so the two names cannot be wired the wrong way round, which is
+    // the mistake most easily made at this call site.
+    expect(within(panel).getByText('Testsmith Household · Annual review 2026')).toBeTruthy()
   })
 
   test('only the right column is still a placeholder; the centre is the task list', () => {

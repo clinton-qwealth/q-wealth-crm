@@ -262,9 +262,11 @@ dialog.qw-drawer[open]::backdrop {
   border-radius: 0.25rem;
   padding: 0 0.25rem;
 }
-/* A post's headings are three sizes of emphasis within a comment, not the
-   page's structure: the largest is 1.125em, well under the panel's own h2, and
-   the renderer places them beneath the panel's headings in the outline. */
+/* A post's heading is emphasis within a comment, not the page's structure: the
+   largest is 1.125em, well under the panel's own h2, and the renderer places
+   it beneath the panel's headings in the outline. The editor makes one size
+   (level 1 → h4) since 8 September; the h5/h6 rules stay because the renderer
+   still draws the two levels the gate once accepted. */
 .qw-post h1, .qw-post h2, .qw-post h3, .qw-post h4, .qw-post h5, .qw-post h6 {
   font-weight: 600;
   line-height: 1.3;

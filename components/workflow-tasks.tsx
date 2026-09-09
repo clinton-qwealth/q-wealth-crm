@@ -11,7 +11,6 @@ import {
 import {
   PRIORITIES,
   TASK_STATUS_LABEL,
-  TASK_TYPE_LABEL,
   type Priority,
   type TaskStatus,
   type EntityChoice,
@@ -71,6 +70,7 @@ type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
  */
 export function WorkflowTasks({
   workflowId,
+  workflowName,
   groupName,
   tasks: initial,
   posts,
@@ -79,7 +79,8 @@ export function WorkflowTasks({
   viewer,
 }: {
   workflowId: string
-  /** The client group the workflow is for. Named in the panel — see TaskPanel. */
+  /** The workflow's name, and the client group it is for. Both named in the panel — see TaskPanel. */
+  workflowName: string
   groupName: string
   tasks: WorkflowTask[]
   /** Every post on the workflow; the panel shows a task's own. */
@@ -251,7 +252,12 @@ export function WorkflowTasks({
                           the two do not read as one paragraph. 12px, up from 8:
                           at 8 the two still read as one block, and the footer
                           is a different kind of thing from the description —
-                          who has it and what kind it is, not what it is. */}
+                          who has it, not what it is.
+
+                          No task-type pill. There is one type, so a pill that
+                          said "Checkbox" on every row said nothing that told
+                          one row from another. The enum stays in the data for
+                          the second kind to arrive; the display waits for it. */}
                       <span className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
                         {t.assigned_to_name ? (
                           <span>Assigned to {t.assigned_to_name}</span>
@@ -262,7 +268,6 @@ export function WorkflowTasks({
                              owner picker use for the same state. */
                           <span className="text-neutral-400">Unassigned</span>
                         )}
-                        <Pill tone="neutral">{TASK_TYPE_LABEL[t.task_type]}</Pill>
                       </span>
 
                     </button>
@@ -326,7 +331,9 @@ export function WorkflowTasks({
           <TaskPanel
             task={selected}
             workflowId={workflowId}
+            workflowName={workflowName}
             groupName={groupName}
+            onToggleStatus={() => toggle(selected)}
             posts={posts}
             staff={staff}
             entities={entities}
@@ -407,24 +414,36 @@ function DueChip({ dueAt, state }: { dueAt: string; state: DueState | null }) {
  * correcting its details, and the database function refuses it. The
  * **priority** is display-only, because the row's own picker is two inches away
  * and a second control for one value is a second thing to keep in step.
+ *
+ * **The status IS changeable here**, since 9 September. The panel is where a
+ * task is read at length, and reading a thread is how somebody decides the
+ * task is finished — but the only tick was on the row, behind an inert
+ * backdrop, so finishing meant closing the record and finding it again in the
+ * list. Mark done / Reopen in the header goes through the same `toggle` as the
+ * row's checkbox, so the two cannot disagree about what a status change is.
  */
 function TaskPanel({
   task,
   workflowId,
+  workflowName,
   groupName,
   posts,
   staff,
   entities,
   viewer,
+  onToggleStatus,
   onClose,
 }: {
   task: WorkflowTask
   workflowId: string
+  workflowName: string
   groupName: string
   posts: WorkflowPost[]
   staff: Staff[]
   entities?: EntityChoice[]
   viewer: Viewer
+  /** The row's tick, reachable from the record. Not offered for a cancelled task. */
+  onToggleStatus: () => void
   onClose: () => void
 }) {
   const priority = PRIORITIES.find((p) => p.id === task.priority)!
@@ -444,41 +463,63 @@ function TaskPanel({
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">Task</p>
+          {/* The eyebrow says WHERE the task is, not what it is. It read "Task"
+              until 9 September — a word the drawer's shape already said — while
+              the client sat at the end of the marks row in the quietest type on
+              it, and the workflow's name was nowhere. The panel covers 40% of
+              the screen and hides the page behind it, so the one place both
+              names are worth repeating is the one place you cannot see them. */}
+          <p
+            className="truncate text-[11px] font-semibold uppercase tracking-widest text-brand"
+            title={`${groupName} · ${workflowName}`}
+          >
+            {groupName} · {workflowName}
+          </p>
           <h2
             id="task-panel-title"
             className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900"
           >
             {task.subject}
           </h2>
+          {/* Two pills, one idiom. The row held four facts in three treatments
+              — two pills, a bare glyph and a grey sentence — and the one task
+              type, "Checkbox", was a pill that said the same thing on every
+              task. Status and priority are the two states a task has; drawn
+              the same way, they read as a pair. */}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Pill tone="neutral">{TASK_TYPE_LABEL[task.task_type]}</Pill>
             {/* One pill driven by a map rather than three conditionals, so a
                 fourth status could not arrive without a tone. */}
             <Pill tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Pill>
-            <span className="inline-flex items-center gap-1 text-xs text-neutral-600">
-              <PriorityGlyph priority={task.priority} className="h-3.5 w-3.5" />
+            <Pill tone="neutral">
+              <PriorityGlyph priority={task.priority} className="-ml-0.5 mr-1 h-3 w-3" />
               {priority.label}
-            </span>
-            {/* Who the work is for, set off from the marks by a real gap: these
-                are properties of the task, that is the client it belongs to.
-                Every task in this panel is for the same group — but the panel
-                covers 40% of the screen and hides the page behind it, so the
-                one place the client's name is worth repeating is the one place
-                you cannot see it. */}
-            <span className="ml-2 text-xs text-neutral-500">For {groupName}</span>
+            </Pill>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close panel"
-          className="-mr-1 shrink-0 rounded-md p-1.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
-        >
-          <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-          </svg>
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* The row's tick, from inside the record — see the component note.
+              Not for a cancelled task: the row's checkbox is disabled for one
+              too, and reviving cancelled work is not a click's decision. */}
+          {task.status !== 'cancelled' ? (
+            <button
+              type="button"
+              onClick={onToggleStatus}
+              className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              {task.status === 'done' ? 'Reopen' : 'Mark done'}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close panel"
+            className="-mr-1 shrink-0 rounded-md p-1.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* The fields, above the tabs — the tab strip sits below the last of them,
@@ -618,18 +659,25 @@ function TaskPanel({
                  centres it, so the slack on a wide panel becomes even margins
                  instead of an over-long line.
 
-                 `px-6` never comes off: it is the FLOOR for a narrow panel,
+                 `px-5` never comes off: it is the FLOOR for a narrow panel,
                  where the cap is wider than the space available and therefore
                  does nothing at all. Padding alone would take the same bite at
                  every size — cramping the 32rem panel to fix the 42rem one —
                  which is why both levers are here rather than one.
 
+                 px-5, the panel's own gutter, not px-6. At 6 the composer's
+                 left border sat 4px inside the Details box's directly above it
+                 — and 4px is not an inset, it is a near-miss, which reads as a
+                 mistake. Now the header text, the box border, the first tab
+                 label, the composer border and the other two tabs' content all
+                 share one left edge at 20px.
+
                  They sit on SEPARATE elements deliberately. Tailwind's box
-                 model is border-box, so `max-w-xl px-6` on one element would
-                 cap the whole thing at 36rem and leave 33rem of content, the
-                 padding eating into the measure rather than sitting outside
-                 it. The column is a scale step inside the panel's: xl in 2xl. */
-              <div className="px-6 pb-6">
+                 model is border-box, so `max-w-xl px-5` on one element would
+                 cap the whole thing at 36rem and leave the padding eating into
+                 the measure rather than sitting outside it. The column is a
+                 scale step inside the panel's: xl in 2xl. */
+              <div className="px-5 pb-6">
                 <div className="mx-auto w-full max-w-xl">
                   {/* The feed replaced the comment field on 8 September. A post
                       is what a comment was trying to be — who said what, when —

@@ -482,10 +482,16 @@ function Reactions({
         aria-expanded={replyOpen}
         title="Reply"
         onClick={onReply}
-        className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
+        /* A GHOST, not a pill. Reply and Add reaction are controls; the
+           reaction chips beside them are content. Drawn as pills too, every
+           post carried two bordered buttons before anyone had reacted, and
+           seven posts were seven rows of chrome. Borderless and quiet until
+           hovered, but always present — hiding them until hover would fail
+           on touch and for a keyboard user. */
+        className={`inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
           replyOpen
-            ? 'border-brand-300 bg-brand-50 text-brand-700'
-            : 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+            ? 'bg-brand-50 text-brand-700'
+            : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
         }`}
       >
         <ReplyGlyph />
@@ -548,8 +554,9 @@ function AddReaction({ onPick }: { onPick: (key: ReactionKey) => void }) {
         aria-expanded={open}
         title="Add reaction"
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex h-6 items-center gap-0.5 rounded-full border border-dashed px-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
-          open ? 'border-neutral-400 text-neutral-700' : 'border-neutral-300 text-neutral-500 hover:border-neutral-400 hover:text-neutral-700'
+        /* Same ghost treatment as Reply, for the same reason. */
+        className={`inline-flex h-6 items-center gap-0.5 rounded-full px-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
+          open ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
         }`}
       >
         <SmilePlusGlyph />

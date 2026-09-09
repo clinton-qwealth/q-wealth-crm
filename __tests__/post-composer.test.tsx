@@ -287,20 +287,36 @@ describe('the post composer', () => {
     expect(editor.getJSON().content![0].type).toBe('blockquote')
   })
 
-  test('the toolbar offers everything StarterKit ships, and Undo is disabled until there is something to undo', async () => {
+  /**
+   * Fourteen controls, above the words. It was seventeen in the footer beside
+   * Post, and wrapped at every panel width: ~546px of buttons against 483px
+   * beside Post. On its own row it has the full width, and at fourteen it fits.
+   *
+   * Undo, Redo and Horizontal rule lost their buttons on 9 September. Undo and
+   * redo are the keyboard's (⌘Z, ⇧⌘Z) and still work; a rule is rare in a
+   * two-paragraph update. Neither left the SCHEMA — a post may still hold a
+   * rule — so the whitelist parity test above is untouched by this.
+   */
+  test('the toolbar is fourteen controls on a row above the editor; undo is the keyboard’s and still works', async () => {
     const { editor } = await mount()
     const toolbar = screen.getByRole('toolbar', { name: 'Formatting' })
     const labels = within(toolbar).getAllByRole('button').map((b) => b.getAttribute('aria-label'))
     expect(labels).toEqual([
       'Bold', 'Italic', 'Underline', 'Strikethrough', 'Inline code',
       'Heading',
-      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Horizontal rule', 'Callout',
-      'Image', 'Attach file',
-      'Link', 'Undo', 'Redo',
+      'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Callout', 'Image', 'Attach file',
+      'Link',
     ])
-    expect(screen.getByRole('button', { name: 'Undo' }).getAttribute('aria-disabled')).toBe('true')
+    // Above the editor in the DOM, i.e. on top of it on screen.
+    const words = document.querySelector('.qw-post')!
+    expect(toolbar.compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Not a control, still a command.
     editor.commands.insertContent('typed')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' }).getAttribute('aria-disabled')).toBeNull())
+    expect(editor.getText()).toContain('typed')
+    editor.commands.undo()
+    expect(editor.getText()).not.toContain('typed')
+    // Still in the schema: a post may hold one, it just has no button.
+    expect(editor.schema.nodes.horizontalRule).toBeTruthy()
   })
 
   /**
