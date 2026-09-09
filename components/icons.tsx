@@ -287,6 +287,20 @@ export function HourglassIcon({ className = 'h-4 w-4' }: { className?: string })
   )
 }
 
+/** One node fanning out to two: a workflow. The word carries the verb
+    ("Launch"), so the glyph carries the object — the same division as the
+    envelope and the signature beside it. */
+export function WorkflowIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <circle cx="4.25" cy="10" r="1.75" />
+      <circle cx="15.75" cy="5.75" r="1.75" />
+      <circle cx="15.75" cy="14.25" r="1.75" />
+      <path d="M6 9.25 14 6.4M6 10.75l8 2.85" />
+    </svg>
+  )
+}
+
 /** A star, for the STAR calculator — the name is the glyph. */
 export function StarIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (

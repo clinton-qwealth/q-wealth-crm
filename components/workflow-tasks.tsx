@@ -34,6 +34,7 @@ import {
   SignatureIcon,
   SmsIcon,
   StarIcon,
+  WorkflowIcon,
 } from './icons'
 
 const INPUT =
@@ -772,6 +773,7 @@ const TASK_ACTIONS: Tool[] = [
   { id: 'sms', name: 'SMS', Glyph: SmsIcon },
   { id: 'docusign', name: 'DocuSign', detail: 'Send to sign', Glyph: SignatureIcon },
   { id: 'generate-document', name: 'Generate document', Glyph: DocumentPlusIcon },
+  { id: 'launch-workflow', name: 'Launch workflow', Glyph: WorkflowIcon },
 ]
 
 /* Separate tools opened from a task, not actions taken on it — which is why
@@ -807,20 +809,27 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
-      {/* PACKED FROM THE LEFT, not spread across the width. A grid would
-          divide the whole column into equal cells, which at 565px made each
-          132px and left the tiles floating in the middle of their own share of
-          the row — evenly spaced, but aligned to nothing. Fixed-width items
-          that wrap put the first tile on the panel's own left edge, level with
-          the heading above it and the Details box border, and leave the slack
-          at the right where it reads as room rather than as gaps.
+      {/* CELLS PACKED FROM THE LEFT; CONTENT CENTRED INSIDE EACH ONE. Two
+          different alignments, and they are doing different jobs.
 
-          112px an item: four fit the 565px column with ~70px to spare, three
-          fit a narrow panel, two fit a phone — so wrapping does the
-          responsive work and no breakpoint is needed. */}
+          A grid divided the whole column into equal shares, which at 565px
+          made each 132px and left the tiles evenly spaced but aligned to
+          nothing. Fixed-width items that wrap pack against the left instead
+          and leave the slack at the right, where it reads as room rather than
+          as gaps — and wrapping does the responsive work, so no breakpoint is
+          needed: five fit the 565px column, four fit a narrow panel, three fit
+          a phone.
+
+          96px an item, not 112: it is what lets all five Actions sit on one
+          row (5 x 96 + 4 x 12 of gap = 528 of 565), and it keeps the label
+          close enough under its own glyph to read as belonging to it. The cost
+          is that a 64px tile centred in 96px sits 16px in from the panel's
+          gutter rather than flush against it — accepted, because a label
+          centred under its icon is what was asked for and a left-aligned label
+          under a centred one looks like a mistake. */}
       <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-5">
         {tools.map((tool) => (
-          <li key={tool.id} className="w-28">
+          <li key={tool.id} className="w-24">
             <ToolTile tool={tool} />
           </li>
         ))}
@@ -841,7 +850,7 @@ function ToolTile({ tool }: { tool: Tool }) {
          say whether this is broken, forbidden, or simply not built yet. */
       aria-label={`${name}${detail ? ` — ${detail}` : ''} — not built yet`}
       title="Not built yet"
-      className="flex w-full cursor-not-allowed flex-col items-start gap-2 text-left"
+      className="flex w-full cursor-not-allowed flex-col items-center gap-2 text-center"
     >
       <span className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400">
         <Glyph className="h-6 w-6" />

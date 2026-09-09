@@ -612,7 +612,7 @@ describe('the task panel', () => {
       expect(headings).toEqual(['Actions', 'Apps'])
     })
 
-    test('the seven tools, in order, each a square tile with a glyph', async () => {
+    test('the eight tools, in order, each a square tile with a glyph', async () => {
       const panel = await tools()
       const names = within(panel)
         .getAllByRole('button')
@@ -622,6 +622,7 @@ describe('the task panel', () => {
         'SMS — not built yet',
         'DocuSign — Send to sign — not built yet',
         'Generate document — not built yet',
+        'Launch workflow — not built yet',
         'Pathway to Wealth — Wealth modelling — not built yet',
         'How long will my money last — Projection modelling — not built yet',
         'STAR Calculator — Investment modelling — not built yet',
@@ -643,7 +644,7 @@ describe('the task panel', () => {
     test('every tile is genuinely disabled, and says why in its name', async () => {
       const panel = await tools()
       const buttons = within(panel).getAllByRole('button')
-      expect(buttons).toHaveLength(7)
+      expect(buttons).toHaveLength(8)
       for (const b of buttons) {
         expect((b as HTMLButtonElement).disabled).toBe(true)
         expect(b.getAttribute('aria-label')).toContain('not built yet')
@@ -652,26 +653,29 @@ describe('the task panel', () => {
     })
 
     /**
-     * Packed from the left, not spread across the column. jsdom has no layout
-     * engine, so this asserts the mechanism rather than the pixels: a wrapping
-     * flex row of fixed-width items, and a tile that aligns to the start of
-     * its item — which together put the first tile on the panel's own left
-     * edge. A grid of equal cells is what this replaced, and it centred every
-     * tile in its own share of the row.
+     * TWO alignments, doing different jobs: the cells pack against the left,
+     * and each cell centres its own content. jsdom has no layout engine, so
+     * this asserts the mechanism rather than the pixels — a wrapping flex row
+     * of fixed-width items (left-packed, slack on the right) whose buttons
+     * centre their glyph and label.
+     *
+     * A grid of equal shares is what the first half replaced: it spread the
+     * cells across the whole column, so the tiles were evenly spaced but
+     * aligned to nothing.
      */
-    test('the tiles pack from the left rather than spreading across the width', async () => {
+    test('the cells pack from the left, and each centres its own label', async () => {
       const panel = await tools()
       const list = within(panel).getAllByRole('list')[0]
+      // Left-packed: wrapping flex of fixed-width items, not a spreading grid.
       expect(list.className).toContain('flex-wrap')
       expect(list.className).not.toContain('grid')
-      // Fixed-width items, so four fit the column and the slack falls on the right.
       for (const item of list.querySelectorAll('li')) {
         expect(item.className).toMatch(/\bw-\d/)
       }
-      // And the tile sits at the start of its item, not centred in it.
+      // Centred within the cell: the label sits under its own glyph.
       const button = within(panel).getAllByRole('button')[0]
-      expect(button.className).toContain('items-start')
-      expect(button.className).not.toContain('items-center')
+      expect(button.className).toContain('items-center')
+      expect(button.className).toContain('text-center')
     })
 
     /** Dashed reads as planned; dimmed reads as broken. See the component note. */
