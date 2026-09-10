@@ -43,8 +43,16 @@ export function Tabs({
    * where scrolling the tabs out of reach is a dead end.
    */
   fill?: boolean
-  /** Horizontal padding of the container the strip bleeds across. */
-  gutter?: 4 | 5
+  /**
+   * Horizontal padding of the container the strip bleeds across, in Tailwind
+   * steps: 4 is 16px, 5 is 20px, **6 is 24px** — a `Card padding="roomy"`,
+   * which is what the workflow detail page's columns take.
+   *
+   * Written out per step rather than interpolated, because Tailwind scans
+   * source text and a constructed `-mx-${gutter}` would never be generated.
+   * That is why this is a closed set and not a number.
+   */
+  gutter?: 4 | 5 | 6
   /**
    * Pull the strip up into the container's top padding, so it caps a card.
    * False when something sits above it — in a panel with a header, the negative
@@ -140,14 +148,18 @@ export function Tabs({
   // Left padding is reduced by the button's own px-3 so the first label lands on
   // the container's text edge: a 20px gutter minus 12px of button padding is 8px.
   const pad = alignFirst
-    ? gutter === 5
-      ? 'pl-2 pr-5'
-      : 'pl-1 pr-4'
-    : gutter === 5
-      ? 'px-5'
-      : 'px-4'
-  const pull = !bleed ? '' : gutter === 5 ? '-mx-5' : '-mx-4'
-  const lift = !flushTop ? '' : gutter === 5 ? '-mt-5' : '-mt-4'
+    ? gutter === 6
+      ? 'pl-3 pr-6'
+      : gutter === 5
+        ? 'pl-2 pr-5'
+        : 'pl-1 pr-4'
+    : gutter === 6
+      ? 'px-6'
+      : gutter === 5
+        ? 'px-5'
+        : 'px-4'
+  const pull = !bleed ? '' : gutter === 6 ? '-mx-6' : gutter === 5 ? '-mx-5' : '-mx-4'
+  const lift = !flushTop ? '' : gutter === 6 ? '-mt-6' : gutter === 5 ? '-mt-5' : '-mt-4'
   // The rounded corners only belong on a strip that caps its container.
   const cap = flushTop ? 'rounded-t-[7px]' : ''
 
@@ -159,9 +171,11 @@ export function Tabs({
   const panelGround = !ground
     ? ''
     : bleed
-      ? gutter === 5
-        ? `-mx-5 px-5 pb-5 -mb-5 rounded-b-[7px] ${WELL}`
-        : `-mx-4 px-4 pb-4 -mb-4 rounded-b-[7px] ${WELL}`
+      ? gutter === 6
+        ? `-mx-6 px-6 pb-6 -mb-6 rounded-b-[7px] ${WELL}`
+        : gutter === 5
+          ? `-mx-5 px-5 pb-5 -mb-5 rounded-b-[7px] ${WELL}`
+          : `-mx-4 px-4 pb-4 -mb-4 rounded-b-[7px] ${WELL}`
       : WELL
 
   /* The strip is one step darker than the well it caps (see WELL in ui.tsx for

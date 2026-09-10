@@ -59,6 +59,10 @@ vi.mock('@/lib/supabase/server', () => ({
            getWorkflowEntityChoices, which the page loads for the `#` menu. */
         is: () => chain,
         in: () => chain,
+        /* `limit` for the file-notes query, which caps a workflow's notes at
+           fifty the way the group's list does. Without it on the chain the
+           page's whole wave rejects, which is how it was found. */
+        limit: () => chain,
         then: (resolve: (v: unknown) => unknown) =>
           Promise.resolve({
             data: table === 'staff_directory' ? [{ id: 's1', full_name: 'A Adviser', status: 'active' }] : [],
@@ -100,6 +104,7 @@ const show = (workflow: WorkflowDetail = card) =>
       tasks={[]}
       posts={[]}
       actions={[]}
+      notes={[]}
       recipient={null}
       viewer={VIEWER}
     />,
@@ -175,6 +180,7 @@ describe('the workflow detail page', () => {
         staff={STAFF}
         posts={[]}
         actions={[]}
+        notes={[]}
         recipient={null}
         viewer={VIEWER}
         tasks={[
@@ -195,15 +201,50 @@ describe('the workflow detail page', () => {
     expect(within(panel).getByText('Testsmith Household · Annual review 2026')).toBeTruthy()
   })
 
-  test('only the right column is still a placeholder; the centre is the task list', () => {
+  /**
+   * **No column is a bare placeholder any more.** The right one was a single
+   * dashed box reading "file notes filed under this workflow go here" from
+   * 7 September until the 10th, when it became a tab section — so the thing
+   * this test used to assert is exactly what it now asserts is gone.
+   */
+  test('all three columns are real; the right one is a tab section', () => {
     const { container } = show()
-    expect(screen.getByText(/File notes filed under this workflow go here/)).toBeTruthy()
+    expect(screen.queryByText(/File notes filed under this workflow go here/)).toBeNull()
     // The centre's "steps and activity" placeholder is gone: tasks are real.
     expect(screen.queryByText(/Steps and activity/)).toBeNull()
     expect(screen.getByRole('button', { name: /Add task/ })).toBeTruthy()
     // The left column has no placeholder at all any more.
     const left = container.querySelector('.lg\\:col-span-3')!
     expect(left.querySelector('.border-dashed')).toBeNull()
+
+    // And the right column is the tab strip.
+    const right = container.querySelector('.lg\\:col-span-4')!
+    expect(within(right as HTMLElement).getByRole('tablist', { name: 'Workflow record' })).toBeTruthy()
+  })
+
+  /**
+   * Two tabs to begin with, File Notes first because it is the one that is
+   * built. The strip is what makes this column a place things can be added to
+   * rather than one thing with a heading.
+   */
+  test('the right column offers File Notes and Activity History, in that order', () => {
+    show()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(tabs).toEqual(['File Notes', 'Activity History'])
+    expect(screen.getByRole('tab', { name: 'File Notes' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  /**
+   * `gutter={6}` because these columns are `Card padding="roomy"`. The strip
+   * cancels its container's padding with a negative margin to cap the card, so
+   * the step has to match the padding or the hairline stops short of the edges.
+   * jsdom has no layout, so this asserts the mechanism.
+   */
+  test('the strip is pulled out by 24px, matching the roomy card it caps', () => {
+    show()
+    const strip = screen.getByRole('tablist', { name: 'Workflow record' })
+    expect(strip.className).toContain('-mx-6')
+    expect(strip.className).not.toContain('-mx-4')
   })
 
   test('the progress bar sits between the marks and the fields, not at the bottom', () => {

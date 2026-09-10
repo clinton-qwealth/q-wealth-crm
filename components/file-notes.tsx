@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import {
   attachNoteToWorkflow,
   fileNoteUnderNewWorkflow,
@@ -101,7 +101,23 @@ function WorkflowCell({ note, onPick }: { note: NoteHeader; onPick: () => void }
  * to be outside the gate's own button, because a button inside a button is not
  * valid HTML.
  */
-function NoteRecord({ note, onPick }: { note: NoteHeader; onPick: () => void }) {
+export function NoteRecord({
+  note,
+  action,
+}: {
+  note: NoteHeader
+  /**
+   * The row's one action, rendered under the summary and outside the gate.
+   *
+   * A SLOT rather than a flag, because the two screens that show a note record
+   * want different things there. On a group's page it is the workflow the note
+   * is filed under — the fact that tells one row from another. On a workflow's
+   * own page **every note is filed under this workflow**, so the same control
+   * would read the same on every row: exactly the one-value pill the task list
+   * removed on 9 September. That screen passes nothing.
+   */
+  action?: ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const bodyId = `note-${note.note_id}-body`
   /* An untitled note is not nameless — its kind is the next most useful thing
@@ -145,10 +161,9 @@ function NoteRecord({ note, onPick }: { note: NoteHeader; onPick: () => void }) 
         </span>
       </button>
 
-      {/* The row's one action, outside the gate so it is always reachable. */}
-      <div className="mt-1.5 pl-6">
-        <WorkflowCell note={note} onPick={onPick} />
-      </div>
+      {/* The row's one action, outside the gate so it is always reachable —
+          when there is one. */}
+      {action ? <div className="mt-1.5 pl-6">{action}</div> : null}
 
       {open ? (
         <div id={bodyId} className="mt-2 pl-6">
@@ -424,7 +439,11 @@ export function FileNotes({
       >
         {notes.length
           ? notes.map((n) => (
-              <NoteRecord key={n.note_id} note={n} onPick={() => setPicking(n)} />
+              <NoteRecord
+                key={n.note_id}
+                note={n}
+                action={<WorkflowCell note={n} onPick={() => setPicking(n)} />}
+              />
             ))
           : null}
       </DataSection>

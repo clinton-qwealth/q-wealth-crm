@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
 import type { EntityChoice, TaskAction, WorkflowDetail, WorkflowPost, WorkflowTask } from '@/lib/workflow-board'
-import { Card, Placeholder } from './ui'
+import type { NoteHeader } from '@/lib/notes'
+import { Card } from './ui'
+import { Tabs } from './tabs'
 import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
 import { WorkflowTasks } from './workflow-tasks'
+import { WorkflowNotes } from './workflow-notes'
 
 const SPAN: Record<3 | 4 | 5, string> = {
   3: 'lg:col-span-3',
@@ -38,6 +41,7 @@ export function WorkflowWorkspace({
   posts,
   actions,
   recipient,
+  notes,
   entities,
   viewer,
 }: {
@@ -51,6 +55,8 @@ export function WorkflowWorkspace({
   actions: TaskAction[]
   /** Who an email from this workflow prefills to, or null when nobody is on file. */
   recipient: { email: string; name: string | null } | null
+  /** The file notes filed under this workflow, newest first. */
+  notes: NoteHeader[]
   /** What `#` may name: this workflow's group, its members, its sibling workflows. */
   entities?: EntityChoice[]
   /** The signed-in staff member — the author of anything posted from here. */
@@ -112,9 +118,55 @@ export function WorkflowWorkspace({
         />
       </Column>
 
-      {/* Right — the notes filed under it */}
+      {/* Right — the record's own history, in tabs.
+
+          Two of them to begin with, and the strip is what makes this column a
+          place things can be added to rather than one thing with a heading. It
+          replaced a single dashed placeholder that had said "file notes filed
+          under this workflow go here" since 7 September; the data had been
+          there the whole time, on `notes.workflow_id`.
+
+          `gutter={6}` because these columns are `Card padding="roomy"` — 24px,
+          where the group page's centre card is 16px. The strip cancels its
+          container's padding with a negative margin to cap the card, so the
+          step has to match or the hairline stops short of the edges. That
+          option was added to `Tabs` for this, rather than making this one
+          instance sit inset while every other strip on the site caps its
+          card. */}
       <Column span={4}>
-        <Placeholder className="h-64">File notes filed under this workflow go here.</Placeholder>
+        <Tabs
+          ground
+          gutter={6}
+          label="Workflow record"
+          items={[
+            {
+              id: 'notes',
+              label: 'File Notes',
+              panel: <WorkflowNotes notes={notes} />,
+            },
+            {
+              id: 'history',
+              label: 'Activity History',
+              /* Named, not guessed. What belongs here is being decided; a
+                 dashed blank that says so beats inventing a timeline and
+                 dressing the guess up as a feature — the same treatment the
+                 Tools tab's unbuilt tiles and the group page's blank beside
+                 the workflow cards take. */
+              panel: (
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+                  <p className="text-sm font-medium text-neutral-700">
+                    Activity history is not built yet
+                  </p>
+                  <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+                    What this shows is still being decided. The workflow’s posts and its
+                    recorded actions both exist and both carry their workflow, so the data is
+                    already there.
+                  </p>
+                </div>
+              ),
+            },
+          ]}
+        />
       </Column>
     </>
   )

@@ -77,6 +77,58 @@ export type NoteHeader = {
  * on group_id there yields one row per note, so nothing needs de-duplicating
  * here.
  */
+/**
+ * The file notes filed under one workflow, newest first.
+ *
+ * Behind the workflow detail page's right column. `notes.workflow_id` has
+ * carried this since 6 September and no screen read it until now — the column
+ * existed and the data was there, which is why this is one query and no
+ * migration.
+ *
+ * **Deduplicated by note, deliberately.** `group_notes_summary` has one row per
+ * (note, GROUP) pair — a note reaches a group by naming it or by naming one of
+ * its members, and the lateral union inside the view keeps both routes. So a
+ * note whose subjects span two groups appears twice, and filtering on
+ * `workflow_id` alone would list it twice on this screen. **Two notes in the
+ * live database already reach more than one group**, and neither is filed under
+ * a workflow yet, so the duplicate would have been latent until the day
+ * somebody filed one — the kind that ships unnoticed.
+ *
+ * The group page does not need this: it filters on `group_id`, which yields one
+ * row per note by construction.
+ *
+ * **Not filtered by group as well**, which would also have deduplicated it.
+ * That would mean knowing the workflow's group first, and the workflow row is
+ * fetched in the same wave as this — so it would cost a second round trip to
+ * avoid three lines of JavaScript.
+ *
+ * Throws rather than returning an empty list, the house rule: a discarded query
+ * `error` turns a broken column into one that says a workflow has no notes.
+ */
+export async function getWorkflowNotes(workflowId: string): Promise<NoteHeader[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+
+  const { data, error } = await supabase
+    .from('group_notes_summary')
+    .select(
+      'note_id, note_type, title, occurred_at, author_name, source, workflow_id, workflow_name, workflow_status, body_excerpt, body_is_truncated',
+    )
+    .eq('workflow_id', workflowId)
+    /* Newest first, the same rule the group's list follows: a note list is read
+       from the top and the thing somebody wants is almost always the latest. */
+    .order('occurred_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    throw new Error(`The notes filed under this workflow could not be read: ${error.message}`)
+  }
+
+  const seen = new Set<string>()
+  return ((data ?? []) as NoteHeader[]).filter((n) =>
+    seen.has(n.note_id) ? false : (seen.add(n.note_id), true),
+  )
+}
+
 export async function getGroupNotes(groupId: string): Promise<{
   notes: NoteHeader[]
   /** A BoardCard is a WorkflowOption with more on it, so the notes picker takes these as they are. */

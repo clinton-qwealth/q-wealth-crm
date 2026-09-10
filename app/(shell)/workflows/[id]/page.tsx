@@ -9,6 +9,7 @@ import {
   getWorkflowTaskActions,
   getWorkflowTasks,
 } from '@/lib/workflows'
+import { getWorkflowNotes } from '@/lib/notes'
 import { WorkflowWorkspace } from '@/components/workflow-workspace'
 
 export const metadata = { title: 'Workflow · Q Wealth CRM' }
@@ -26,12 +27,17 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
   if (!staff) redirect('/login')
 
   const { id } = await params
-  /* One wave: the row, the staff list, the tasks and the posts need nothing
-     from each other, so asking for them together costs one round trip rather
-     than seven. The recipient lookup is the one that is not a single query —
-     workflow, then group, then contact points — but it still joins this wave
-     rather than adding one of its own. */
-  const [workflow, staffChoices, tasks, posts, entityChoices, actions, recipient] =
+  /* One wave: the row, the staff list, the tasks, the posts, the recorded
+     actions and now the file notes need nothing from each other, so asking for
+     them together costs one round trip rather than eight. The recipient lookup
+     is the one that is not a single query — workflow, then group, then contact
+     points — but it still joins this wave rather than adding one of its own.
+
+     The notes join it for the same reason, which is also why they are fetched
+     by WORKFLOW rather than by group: filtering on the group would mean knowing
+     the workflow's group first, and the workflow row is in this same wave. See
+     getWorkflowNotes for what that costs instead. */
+  const [workflow, staffChoices, tasks, posts, entityChoices, actions, recipient, notes] =
     await Promise.all([
       getWorkflow(id),
       getStaffChoices(),
@@ -40,6 +46,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       getWorkflowEntityChoices(id),
       getWorkflowTaskActions(id),
       getWorkflowRecipient(id),
+      getWorkflowNotes(id),
     ])
   if (!workflow) notFound()
 
@@ -51,6 +58,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       posts={posts}
       actions={actions}
       recipient={recipient}
+      notes={notes}
       entities={entityChoices}
       /* `manage_staff` is what current_staff_has('admin') reads, so this is
          the same question the database asks when it decides who may take an
