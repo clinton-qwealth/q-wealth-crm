@@ -35,6 +35,162 @@ const activeRows = () =>
     .map((r) => r.getAttribute('data-label') ?? r.textContent)
 
 describe('the investment mix donut', () => {
+  /**
+   * The "Mix by value" heading was removed on 10 September, and the chart's
+   * sheet has to stay level with the records sheet beside it — which has a
+   * heading above it. So the heading's BOX is still rendered, invisible.
+   */
+  describe('lining up with the records list', () => {
+    test('carries no heading text at all', () => {
+      render(<AccountDonut accounts={three} />)
+      expect(screen.queryByText('Mix by value')).toBeNull()
+      expect(screen.queryByRole('heading')).toBeNull()
+    })
+
+    test('but keeps the heading’s box, invisible and unannounced, above the sheet', () => {
+      const { container } = render(<AccountDonut accounts={three} />)
+      const spacer = container.querySelector('[data-slot="mix-chart"] > :first-child')!
+      // `invisible` is visibility:hidden — it keeps the box. `hidden` would not.
+      expect(spacer.className).toContain('invisible')
+      expect(spacer.className).not.toContain('hidden')
+      expect(spacer.getAttribute('aria-hidden')).toBe('true')
+      // The shared token, so it cannot drift from the real heading's metrics.
+      expect(spacer.className).toContain('mb-2.5')
+      expect(spacer.className).toContain('text-xs')
+      // Not a heading element: an invisible one would still sit in the outline.
+      expect(spacer.tagName).toBe('DIV')
+    })
+  })
+
+  test('the ring is fluid and scales with its column, not a fixed 128px box', () => {
+    render(<AccountDonut accounts={three} />)
+    const ring = screen.getByRole('img')
+    expect(ring.className).toContain('w-full')
+    expect(ring.className).toContain('aspect-square')
+    // The wrapper Recharts sizes inline is overridden, or it would stay fixed.
+    expect(ring.className).toContain('recharts-wrapper')
+    expect(ring.getAttribute('style')).toBeNull()
+  })
+
+  /**
+   * The gap and the rounded ends, asked for on 10 September — and both had to be
+   * measured out of the path data, because Recharts' props are not visible in
+   * the DOM.
+   *
+   * The first attempt at this was vacuous and a mutation said so: it asserted
+   * `d.length > 40` and that the three paths differed, which is true with the
+   * gap and the corners both switched off. What follows are the two signatures
+   * that actually separate them.
+   */
+  describe('the shape of the ring', () => {
+    /**
+     * Rounded ends show up as arc commands. A square-ended donut sector is two
+     * arcs — the outer sweep and the inner sweep back. Each rounded corner adds
+     * one more, so a sector with `cornerRadius` carries six. Measured: 2 → 6.
+     */
+    test('every segment has round ends, not square ones', () => {
+      render(<AccountDonut accounts={three} />)
+      for (const seg of segments()) {
+        const arcs = (seg.getAttribute('d')!.match(/A/g) ?? []).length
+        expect(arcs, 'arc commands: 2 is square-ended, 6 is rounded').toBe(6)
+      }
+    })
+
+    /**
+     * The gap shows up in where each segment STARTS.
+     *
+     * Without one, the segments partition the circle exactly, so the nth starts
+     * after `sum of the shares before it × 360°` of travel. A `paddingAngle`
+     * makes every segment narrower than its share, so each subsequent one
+     * starts after LESS travel than that. Measured with 70/20/10: starts move
+     * from 252° and 324° to 248.7° and 321.9°.
+     *
+     * Note the span between consecutive starts still sums to 360° whichever way
+     * — the gap lives inside each segment, not between the start points. That
+     * was the first thing tried, and it could not tell them apart.
+     */
+    test('the segments are separated, so each starts before its share would put it', () => {
+      render(<AccountDonut accounts={three} />)
+      const cx = 120 // SIZE / 2, in viewBox units
+      const travelled = segments().map((seg) => {
+        const [, x, y] = seg.getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
+        const deg = (Math.atan2(cx - Number(y), Number(x) - cx) * 180) / Math.PI
+        // Clockwise degrees travelled from the twelve o'clock start.
+        return (((90 - deg) % 360) + 360) % 360
+      })
+
+      // 70 / 20 / 10, so with no gap the starts would be exactly here.
+      const ifTouching = [0, 0.7 * 360, 0.9 * 360]
+      expect(travelled[0]).toBeCloseTo(0, 5)
+      expect(travelled[1]).toBeLessThan(ifTouching[1] - 1)
+      expect(travelled[2]).toBeLessThan(ifTouching[2] - 1)
+      // And still in order, so a gap has not reshuffled the ring.
+      expect(travelled[1]).toBeLessThan(travelled[2])
+    })
+
+    /**
+     * A lone account is a closed annulus — two arcs, the outer sweep and the
+     * inner one back — and **no corner arcs, because a full ring has no
+     * corners.** So the six-arc rule above does not apply to it, which is why
+     * it is asserted separately rather than folded into that loop.
+     *
+     * Recharts also ignores `paddingAngle` here of its own accord: the path is
+     * byte-identical at 0 and at 3, which is what retired the conditional that
+     * used to guard this case.
+     */
+    test('a lone segment is a closed ring, drawn, with no notch in it', () => {
+      render(<AccountDonut accounts={[account({ label: 'Only', latest_value: 500 })]} />)
+      expect(segments()).toHaveLength(1)
+      const d = segments()[0].getAttribute('d')!
+      expect((d.match(/A/g) ?? []).length, 'a full ring is two arcs').toBe(2)
+      // A real path, not a degenerate move-to — which is what it looks like
+      // until you notice Recharts writes these across several lines.
+      expect(d.replace(/\s+/g, ' ')).toMatch(/^M .* A .* L .* A .* Z$/)
+
+      /* And it is a RING, not a hairline and not a pie. The two arc radii are
+         the outer and inner edges, so their difference is the band. Asserted
+         here rather than on the three-slice ring because a lone segment has no
+         corner arcs to sort out of the way — 108.1 and 69, a band of 36% of the
+         outer radius. Caught by mutation: pushing the inner radius to 92% left
+         every other assertion in this file passing. */
+      const radii = Array.from(d.matchAll(/A\s*([\d.]+),/g)).map((m) => Number(m[1]))
+      const [outer, inner] = [Math.max(...radii), Math.min(...radii)]
+      const band = (outer - inner) / outer
+      expect(band, 'band as a fraction of the outer radius').toBeGreaterThan(0.2)
+      expect(band, 'a donut, not a pie').toBeLessThan(0.7)
+
+      /*
+       * And the radii are EXACTLY the shared constants against half the
+       * viewBox — which is what ties the real ring to its own ghost.
+       *
+       * This is the assertion that pins `margin={{ 0,0,0,0 }}` on the chart.
+       * Recharts defaults that margin to 5, which resolves a percentage radius
+       * against 115 rather than 120: the ring quietly shrinks ~4% while the
+       * ghost, computed from `SIZE`, does not follow. Every other assertion in
+       * this file passed with the margin removed — this is the one that caught
+       * it.
+       */
+      const half = 120 // SIZE / 2
+      expect(outer, 'outer edge at OUTER_RADIUS of half the viewBox').toBeCloseTo(0.94 * half, 4)
+      expect(inner, 'inner edge at INNER_RADIUS of half the viewBox').toBeCloseTo(0.6 * half, 4)
+    })
+
+    /**
+     * The ring nearly fills its box, which is what "larger" meant on
+     * 10 September — and what percentage radii buy over pixel ones. Measured:
+     * `60%`/`94%` puts the outer edge at 0.84 of the half-viewBox, where the
+     * pixel radii it replaced sat at 0.46 — a ring half the size in the same
+     * square.
+     */
+    test('the ring fills its box rather than floating small inside it', () => {
+      render(<AccountDonut accounts={three} />)
+      const half = 120 // SIZE / 2
+      const [, , y] = segments()[0].getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
+      const outer = half - Number(y)
+      expect(outer / half).toBeGreaterThan(0.75)
+    })
+  })
+
   test('draws one segment per slice, in the mix ramp’s tones', () => {
     render(<AccountDonut accounts={three} />)
     const fills = segments().map((s) => s.getAttribute('fill'))
@@ -157,9 +313,84 @@ describe('the investment mix donut', () => {
       expect(screen.getByText(/Once this group holds investment accounts/)).toBeTruthy()
     })
 
-    test('and the heading stands either way, so the column is never blank', () => {
-      render(<AccountDonut accounts={[]} />)
-      expect(screen.getByText('Mix by value')).toBeTruthy()
+    /**
+     * The grey silhouette, asked for on 10 September. Its whole job is to be
+     * the shape of the thing that belongs here — so what is asserted is that it
+     * appears in **both** empty states, that it matches the real ring's
+     * geometry, and above all that it is **neither of the app's other two grey
+     * stand-ins**: not dashed (which means "not built") and not pulsing (which
+     * means "arriving", and nothing is arriving).
+     */
+    describe('the ghost ring', () => {
+      const ghost = () => document.querySelector('[data-slot="ghost-ring"]')
+
+      test('stands in when there are no accounts at all', () => {
+        render(<AccountDonut accounts={[]} />)
+        expect(ghost()).toBeTruthy()
+        expect(segments()).toHaveLength(0)
+      })
+
+      test('and when accounts exist but none has a value', () => {
+        render(
+          <AccountDonut
+            accounts={[account({ latest_value: null }), account({ latest_value: 0 })]}
+          />,
+        )
+        expect(ghost()).toBeTruthy()
+        expect(segments()).toHaveLength(0)
+      })
+
+      test('but never alongside a real ring', () => {
+        render(<AccountDonut accounts={three} />)
+        expect(ghost()).toBeNull()
+        expect(segments()).toHaveLength(3)
+      })
+
+      /**
+       * The distinction that matters. A pulse would promise a value that is
+       * never coming, and a dashed edge would say the chart is unbuilt.
+       */
+      test('does not pulse, and is not dashed', () => {
+        const { container } = render(<AccountDonut accounts={[]} />)
+        expect(container.innerHTML).not.toContain('animate-pulse')
+        expect(container.innerHTML).not.toContain('animate-')
+        expect(container.innerHTML).not.toContain('border-dashed')
+        expect(container.innerHTML).not.toContain('dashed')
+      })
+
+      test('is decorative, and the sentence carries the meaning', () => {
+        render(<AccountDonut accounts={[]} />)
+        expect(ghost()!.closest('[aria-hidden="true"]')).toBeTruthy()
+        expect(screen.getByText(/Once this group holds investment accounts/)).toBeTruthy()
+      })
+
+      /* Same band as the real ring, from the same two constants — so a nudge to
+         the chart's proportions cannot leave its own placeholder behind. */
+      test('matches the real ring’s band, derived from the same constants', () => {
+        render(<AccountDonut accounts={[]} />)
+        const c = ghost()!
+        const half = 120 // SIZE / 2
+        const r = Number(c.getAttribute('r'))
+        const w = Number(c.getAttribute('stroke-width'))
+        // Real ring: inner 60%, outer 94% of half.
+        expect(r - w / 2).toBeCloseTo(0.6 * half, 5)
+        expect(r + w / 2).toBeCloseTo(0.94 * half, 5)
+      })
+
+      test('scales with the column like the real ring does', () => {
+        render(<AccountDonut accounts={[]} />)
+        const box = ghost()!.closest('div')!
+        expect(box.className).toContain('w-full')
+        expect(box.className).toContain('aspect-square')
+      })
+    })
+
+    test('and the sheet still stands, so the column is never bare', () => {
+      const { container } = render(<AccountDonut accounts={[]} />)
+      expect(container.querySelector('[data-slot="mix-chart"]')).toBeTruthy()
+      // The alignment spacer is there in the empty state too, or the sentence
+      // would sit higher than the records list beside it.
+      expect(container.querySelector('.invisible')).toBeTruthy()
     })
   })
 

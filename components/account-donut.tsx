@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
 import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
-import { accountMoney, SHEET } from './ui'
+import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 
 /**
  * How a group's investment value is split across its accounts.
@@ -56,7 +56,12 @@ import { accountMoney, SHEET } from './ui'
  */
 export type DonutAccount = MixAccount
 
-/** The ramp, as tokens. See the note in `globals.css` for why role-named. */
+/**
+ * The palette, as tokens — violets, blues and pinks, in the order segments are
+ * drawn. Categorical rather than a single-hue ramp; the reasoning and the one
+ * hard rule (no colour that already means something on this page) are in
+ * `globals.css` beside the values.
+ */
 const RAMP = [
   'var(--mix-1)',
   'var(--mix-2)',
@@ -66,7 +71,44 @@ const RAMP = [
   'var(--mix-6)',
 ] as const
 
-const SIZE = 128
+/**
+ * The chart's LOGICAL size — a viewBox, not a rendered width.
+ *
+ * Recharts' inner `<svg>` carries `viewBox` plus `width:100%;height:100%`
+ * (verified), so it scales to whatever box it is given. Only the
+ * `.recharts-wrapper` div it sits in is fixed at these pixels, and the class
+ * below overrides that to fill its container — which is how the ring gets to be
+ * fluid without `ResponsiveContainer`, whose parent-measuring renders **nothing**
+ * in jsdom and would blind every test in this file.
+ *
+ * 240 rather than 128: asked for larger on 10 September, and the reserved column
+ * went from 45% to 35% of a wider centre in the same session, so it now has
+ * roughly 174px of content width at 1440 and ~101px at 1024. Fluid covers both;
+ * the cap stops it becoming a dinner plate if the column ever widens.
+ */
+const SIZE = 240
+
+/**
+ * Forces Recharts' wrapper to fill its container.
+ *
+ * The wrapper gets an inline `width: 240px` from the props, and an inline style
+ * is only beaten by `!important` — which is exactly what Tailwind's `!` prefix
+ * emits. Verified as a CSS specificity question rather than in jsdom, where no
+ * stylesheet is loaded.
+ */
+const FLUID = '[&_.recharts-wrapper]:!h-full [&_.recharts-wrapper]:!w-full'
+
+/**
+ * The ring's band, as fractions of half the viewBox.
+ *
+ * Named because the **ghost ring** below has to match the real one exactly, and
+ * two sets of literals would drift the moment either is nudged. The PieChart
+ * below sets `margin` to zero explicitly for the same reason: Recharts' default
+ * margin is 5, which makes its percentage radii resolve against 115 rather than
+ * 120 and leaves the ghost's arithmetic quietly 4% out. Measured both ways.
+ */
+const INNER_RADIUS = 0.6
+const OUTER_RADIUS = 0.94
 
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   const { slices, total, missing, counted } = accountMix(accounts)
@@ -81,13 +123,16 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   if (!slices.length) {
     return (
       <Frame>
-        <p className="px-3.5 py-4 text-xs leading-relaxed text-neutral-500">
-          {accounts.length === 0
-            ? 'Once this group holds investment accounts, their mix by value shows here.'
-            : `No value has been recorded against ${
-                accounts.length === 1 ? 'this account' : 'any of these accounts'
-              } yet, so there is no mix to show.`}
-        </p>
+        <div className="flex flex-col items-center gap-3 px-3.5 py-4">
+          <GhostRing />
+          <p className="text-xs leading-relaxed text-neutral-500">
+            {accounts.length === 0
+              ? 'Once this group holds investment accounts, their mix by value shows here.'
+              : `No value has been recorded against ${
+                  accounts.length === 1 ? 'this account' : 'any of these accounts'
+                } yet, so there is no mix to show.`}
+          </p>
+        </div>
       </Frame>
     )
   }
@@ -98,26 +143,41 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
         <div
           role="img"
           aria-label={ariaLabel(slices.map((s) => `${s.label} ${sharePct(s.share)}`), total)}
-          className="relative"
-          style={{ width: SIZE, height: SIZE }}
+          className={`relative aspect-square w-full max-w-[220px] ${FLUID}`}
         >
-          {/* A fixed size rather than ResponsiveContainer: the ring is a
-              128px square in a fluid column, and ResponsiveContainer measures
-              its parent — which in jsdom has no layout, so it would render at
-              zero and every test below would assert against nothing. */}
-          <PieChart width={SIZE} height={SIZE}>
+          {/* Zero margin, stated rather than inherited: Recharts defaults to 5,
+              and the ghost ring's radii are computed from SIZE. */}
+          <PieChart width={SIZE} height={SIZE} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
             <Pie
               data={slices}
               dataKey="value"
               nameKey="label"
               cx="50%"
               cy="50%"
-              innerRadius={40}
-              outerRadius={62}
-              /* The separator between segments. Recharts' own, so it scales
-                 with each arc instead of being subtracted from it — which is
-                 what used to threaten to eat a sliver whole. */
-              paddingAngle={slices.length > 1 ? 2 : 0}
+              /* Percentages, not pixels, so the ring's proportions hold at
+                 every column width rather than the band getting fatter as the
+                 chart shrinks. 60/94 leaves the rounded ends room to sit inside
+                 the viewBox instead of being clipped by it. */
+              innerRadius={`${INNER_RADIUS * 100}%`}
+              outerRadius={`${OUTER_RADIUS * 100}%`}
+              /*
+               * The gap between segments, asked for on 10 September. Recharts'
+               * own, so it scales with each arc rather than being subtracted
+               * from it — which is what used to threaten to eat a sliver whole.
+               *
+               * Written first as `slices.length > 1 ? 3 : 0`, to spare a lone
+               * segment a notch in what should be a closed ring. A mutation
+               * showed that conditional was **dead**: for a single sector
+               * Recharts emits a byte-identical path whether the padding is 0
+               * or 3, because a full annulus has no neighbour to be separated
+               * from. Removed rather than kept, on the same reasoning as the
+               * zero-total guard in `account-mix.ts` — a branch that cannot
+               * change anything reads as a live rule.
+               */
+              paddingAngle={3}
+              /* Rounded ends, also asked for. A number is in viewBox units, so
+                 it scales with SIZE like everything else here. */
+              cornerRadius={7}
               stroke="none"
               /* Starts at twelve o'clock and fills clockwise, so the largest
                  share is where a reader looks first. */
@@ -172,8 +232,8 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
           >
-            <span className="text-[15px] font-semibold text-neutral-900">{counted}</span>
-            <span className="mt-0.5 text-[10px] text-neutral-500">
+            <span className="text-2xl font-semibold text-neutral-900">{counted}</span>
+            <span className="mt-0.5 text-[11px] text-neutral-500">
               {counted === 1 ? 'account' : 'accounts'}
             </span>
           </span>
@@ -222,14 +282,83 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   )
 }
 
-/** The heading and sheet, so the chart reads as one more object in the ledger. */
+/**
+ * The donut's silhouette in light grey, for when there is nothing to draw.
+ *
+ * Asked for on 10 September — "similar to a shadow or placeholder" — so the
+ * column shows the shape of the thing that belongs there instead of a sentence
+ * floating in white space.
+ *
+ * ## It is a THIRD state, and must not be mistaken for either of the others
+ *
+ * This app already has two grey stand-ins, and both mean something specific:
+ *
+ * | Mark | Means | Where |
+ * | --- | --- | --- |
+ * | **Dashed** border | planned, **not built** | `Placeholder`, `ReservedColumn`, the Tools tab's inactive tiles |
+ * | **Pulsing** grey bars | **arriving**, wait a moment | `PageSkeleton` behind every `loading.tsx` |
+ * | Solid flat grey (this) | **built, and empty** | here |
+ *
+ * So it is deliberately **not dashed** — the chart exists and works — and
+ * deliberately **does not pulse.** A pulse says content is on its way, and
+ * nothing is on its way: there is no valuation to load. Animating this would be
+ * the same lie as a skeleton that never resolves, which is exactly why
+ * `PageSkeleton` carries no `aria-busy`.
+ *
+ * ## A solid ring, not ghost segments
+ *
+ * A segmented ghost was the more decorative option and was rejected: gaps imply
+ * a number of accounts, and the number here is unknown — or worse, known to be
+ * zero. The unbroken band is the object's outline and claims nothing about what
+ * will fill it.
+ *
+ * Decorative, so `aria-hidden`: the sentence beneath carries the meaning, and
+ * `neutral-200` on white is about 1.2:1, far under any text floor. That is the
+ * same argument the loading skeleton's bars make.
+ */
+function GhostRing() {
+  const half = SIZE / 2
+  return (
+    <div aria-hidden="true" className="aspect-square w-full max-w-[220px]">
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full">
+        {/* Stroked circle rather than two arcs: the band is a stroke width, so
+            it is derived from the same two constants the real ring uses and
+            cannot drift from it. */}
+        <circle
+          cx={half}
+          cy={half}
+          r={((INNER_RADIUS + OUTER_RADIUS) / 2) * half}
+          fill="none"
+          strokeWidth={(OUTER_RADIUS - INNER_RADIUS) * half}
+          className="stroke-neutral-200"
+          data-slot="ghost-ring"
+        />
+      </svg>
+    </div>
+  )
+}
+
+/**
+ * The sheet, so the chart reads as one more object in the ledger — and the
+ * blank box above it that lines the sheet up with the records beside it.
+ *
+ * **The "Mix by value" heading was removed on 10 September**, at which point the
+ * chart's sheet rose to where the records list's HEADING sits and the two
+ * stopped being level. So the heading's box is still rendered, `invisible` and
+ * `aria-hidden`: `visibility: hidden` keeps a box in the layout where `hidden`
+ * would remove it, and rendering the shared `SECTION_HEADING` token rather than
+ * a measured `h-4 mb-2.5` means the two can never drift when that token's size
+ * or margin changes.
+ *
+ * A `div`, not an `h3`: an invisible heading would still sit in the document
+ * outline, which is a claim about structure this no longer makes.
+ */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      {/* Same treatment as the section headings beside it. */}
-      <h3 className="mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        Mix by value
-      </h3>
+    <div data-slot="mix-chart">
+      <div aria-hidden="true" className={`${SECTION_HEADING} invisible`}>
+        &nbsp;
+      </div>
       <div className={SHEET}>{children}</div>
     </div>
   )

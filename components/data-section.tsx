@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { PlusIcon } from './icons'
-import { SHEET } from './ui'
+import { SECTION_HEADING, SHEET } from './ui'
 
 /**
  * The container pattern for a tab panel that holds records.
@@ -110,9 +110,11 @@ export function DataSection({
         {title ? (
           /* Same treatment as the Members heading in the left column, so the two
              read as the same kind of label. */
-          <h3 className="truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
-            {title}
-          </h3>
+          /* `SECTION_HEADING` carries the `mb-2.5` this row does not need, so
+             it is stripped here — the row's own gap positions the sheet. The
+             mix chart beside this list renders the token whole and invisible to
+             line its sheet up with this one. */
+          <h3 className={SECTION_HEADING.replace('mb-2.5 ', '')}>{title}</h3>
         ) : null}
         {countLabel ? <p className="text-xs text-neutral-500">{countLabel}</p> : null}
         {action ?? (

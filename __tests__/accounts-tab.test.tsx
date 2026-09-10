@@ -172,12 +172,14 @@ describe('the Accounts tab’s investment section', () => {
     /* The right half held a dashed `ReservedColumn` until 10 September and now
        holds the mix donut — a trial. What is pinned is that it is the RIGHT
        half: the records must not end up beside it in the other order. */
-    expect(within(right).getByText('Mix by value')).toBeTruthy()
+    /* Identified by slot, not by a heading: "Mix by value" was removed on
+       10 September so the chart lines up with the first record rather than
+       sitting under a label of its own. */
+    expect(right.getAttribute('data-slot')).toBe('mix-chart')
     /* `hidden: true` because `Tabs` renders every panel and marks the inactive
        ones `hidden` — which takes their contents out of the accessibility tree,
        so a plain `getByRole` finds nothing here. Workflows is the tab that
-       opens, so the Accounts panel is always the hidden one in this file.
-       `getByText` above is unaffected, which is why only this query failed. */
+       opens, so the Accounts panel is always the hidden one in this file. */
     expect(within(right).getByRole('img', { hidden: true })).toBeTruthy()
   })
 
@@ -194,7 +196,7 @@ describe('the Accounts tab’s investment section', () => {
     expect(right.getAttribute('aria-hidden')).toBe('true')
     expect(right.textContent).toBe('')
     // And it is not carrying the accounts tab's chart.
-    expect(within(workflows).queryByText('Mix by value')).toBeNull()
+    expect(workflows.querySelector('[data-slot="mix-chart"]')).toBeNull()
   })
 
   /**

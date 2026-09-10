@@ -31,28 +31,35 @@
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
 
-  /* The investment-mix ramp: violet, "innovator purple", asked for 10 Sep 2026.
-     ROLE-NAMED rather than colour-named, because the SEQUENCE is the meaning —
-     these six are one hue in descending intensity, so the largest share is the
-     strongest, and a reader reads the ring as amounts of the same thing. Six
-     different colours would imply six categories.
+  /* The investment-mix palette: violets, blues, pinks — asked for 10 Sep 2026
+     against a reference image of light streaks in those hues.
 
-     Violet because it is the only family on the group page with no job: green
-     is a live state, amber needs attention, red is the wrong direction, gold is
-     an investment tile, blue is insurance and brand orange is an action. A
-     chart ramp must not borrow any of those.
+     CATEGORICAL, not a ramp. The first version was one violet hue in six
+     descending steps, on the argument that these segments are the same kind of
+     thing in different amounts. That was overruled in favour of the reference,
+     and the consequence is worth naming: distinct hues read as distinct
+     CATEGORIES, so the legend does more work and the ring is easier to match
+     against it — which for "which account is this slice" is the more useful
+     reading of the two.
 
-     Steps are Tailwind's violet 900/700/500/400/300/200 as explicit hexes
-     rather than `var(--color-violet-*)`: Recharts takes a fill VALUE, and a
-     theme variable Tailwind has not been asked for by a utility may not be
-     emitted at all. Widest separation at the top, where the two segments a
-     reader actually compares live. */
-  --mix-1: #4c1d95;
-  --mix-2: #6d28d9;
-  --mix-3: #8b5cf6;
-  --mix-4: #a78bfa;
-  --mix-5: #c4b5fd;
-  --mix-6: #ddd6fe;
+     The one hard rule these had to clear: **no colour already carrying meaning
+     on this page.** Green is a live state, amber needs attention, red is the
+     wrong direction, gold is an investment tile, blue-100 is insurance and
+     brand orange is an action. The reference image's coral and orange streaks
+     are therefore deliberately absent — an orange slice beside a Suspended pill
+     would read as a warning.
+
+     Deeper than the reference, on purpose. Those streaks glow because they sit
+     on near-black; the same values on a white sheet wash out and drop under the
+     3:1 non-text floor. Each of these clears roughly 3.4:1 or better against
+     white, and adjacent pairs are separated by hue as well as lightness so a
+     gap of white between segments is not the only thing telling them apart. */
+  --mix-1: #7c3aed;
+  --mix-2: #0891b2;
+  --mix-3: #db2777;
+  --mix-4: #2563eb;
+  --mix-5: #a21caf;
+  --mix-6: #6366f1;
 }
 
 @theme inline {

@@ -181,6 +181,17 @@ export function Placeholder({ children, className = 'h-56' }: { children: string
  *
  * Below `lg` it is one column and the reserved half drops beneath.
  */
+/**
+ * The label above a section's sheet — "Investment Accounts", "Members".
+ *
+ * Exported because the mix chart beside the accounts list has **no** heading
+ * (removed 10 September) and still has to start level with the records sheet.
+ * It renders this same box, invisible, rather than a hand-measured spacer: one
+ * token means the two cannot drift when the heading's size or margin changes.
+ */
+export const SECTION_HEADING =
+  'mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500'
+
 export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,13fr)_minmax(0,7fr)]'
 
 /**
