@@ -115,17 +115,24 @@ describe('/groups/[id] round-trip depth', () => {
 })
 
 /**
- * The index is empty, and "empty" includes making no queries.
+ * The index lists the groups, and **one query is the whole budget.**
  *
- * Worth pinning rather than assuming: the obvious next commit adds a group list
- * to this page, and the obvious way to get it wrong is to fetch the groups one
- * per row, or to fetch them here AND again in the detail page. This asserts the
- * starting point so the first query added is a deliberate one.
+ * This test asserted zero queries while the page was a placeholder, with a note
+ * that the obvious way to get the list wrong is to fetch one row at a time. The
+ * list landed the same day, so the assertion is now the real one: exactly one
+ * read, of the view that decides visibility, and nothing per row.
  */
 describe('/groups index', () => {
-  test('the empty index reaches the database not at all', async () => {
+  test('the index reads the group view exactly once, and nothing per row', async () => {
     calls.length = 0
     await GroupsIndexPage()
-    expect(calls).toEqual([])
+    expect(calls).toEqual(['group_summary'])
+  })
+
+  test('its depth is one wave, so the list costs one round trip', async () => {
+    calls.length = 0
+    const started = Date.now()
+    await GroupsIndexPage()
+    expect(Math.round((Date.now() - started) / LATENCY)).toBe(1)
   })
 })
