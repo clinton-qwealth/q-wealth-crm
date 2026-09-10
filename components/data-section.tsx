@@ -142,7 +142,15 @@ export function DataSection({
              sums, and a band closes the sheet the way a rule under a column of
              figures does. Larger and bolder than any row — it is the number
              most likely to be read aloud. */
-          <div className="flex items-baseline justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-3.5 py-2.5">
+          /* `data-slot` so "this section has no total" is assertable without
+             matching text: the label is caller-supplied, so a text query would
+             pass for the wrong reason if a caller ever labelled it anything but
+             "Total". The investment accounts section stopped passing a total on
+             10 September and its test leans on this. */
+          <div
+            data-slot="total"
+            className="flex items-baseline justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-3.5 py-2.5"
+          >
             <span className="min-w-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                 {total.label}

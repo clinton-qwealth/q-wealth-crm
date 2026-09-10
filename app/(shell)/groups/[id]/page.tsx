@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, AccountTypeTile, AccountValue, Card, coverSummary, PageHeading, Pill, Placeholder, PolicyTile, StatTile } from '@/components/ui'
+import { coverSummary, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, PolicyTile, ReservedColumn, StatTile, TAB_SPLIT } from '@/components/ui'
 import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
 import { DataRow, DataSection } from '@/components/data-section'
@@ -220,32 +220,6 @@ const ACCOUNT_STATUS_LABEL: Record<string, string> = {
   closed: 'Closed',
 }
 
-/**
- * The footer figure for the accounts list.
- *
- * Sums every account shown, including suspended and closed ones — decided
- * 5 Sep 2026, so the number always reconciles with what is on screen.
- *
- * THE NOTE IS THE IMPORTANT PART. An account with no recorded valuation
- * contributes nothing, and there is no way for it to: at the time of writing
- * two of the five real accounts have never had a value written, because nothing
- * records valuations after the opening one. A bare total would look like the
- * group's holdings while quietly omitting those, which is exactly the kind of
- * figure someone repeats in a client conversation. So the count is stated
- * whenever any row is missing a value.
- */
-function accountsTotal(rows: AccountRow[]) {
-  const valued = rows.filter((r) => r.latest_value != null)
-  const missing = rows.length - valued.length
-  return {
-    label: 'Total',
-    value: accountMoney.format(valued.reduce((sum, r) => sum + Number(r.latest_value), 0)),
-    note:
-      missing === 0
-        ? undefined
-        : `Excludes ${missing} account${missing === 1 ? '' : 's'} with no recorded value`,
-  }
-}
 
 /** Strip formatting so the dialler gets something it can use. */
 function telHref(number: string) {
@@ -460,67 +434,72 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 label: 'Accounts',
                 panel: (
                   <div className="flex flex-col gap-6">
-                  <DataSection
-                    title="Investment Accounts"
-                    addLabel="Add account"
-                    action={
-                      <AddAccountModal
-                        owners={ownerOptions}
-                        providers={providers}
-                        triggerVariant="quiet"
-                      />
-                    }
-                    emptyAction={
-                      <AddAccountModal owners={ownerOptions} providers={providers} />
-                    }
-                    empty={{
-                      title: 'No accounts yet',
-                      description:
-                        'Investment and superannuation accounts owned by this group\u2019s members.',
-                    }}
-                    /* Accounts only. The insurance section below deliberately has
-                       no total: a lump sum and a monthly benefit cannot be added
-                       together, which is the whole reason coverSummary() joins
-                       them rather than summing. */
-                    total={accounts.length ? accountsTotal(accounts) : undefined}
-                  >
-                    {accounts.length
-                      ? accounts.map((a) => (
-                          <DataRow
-                            key={a.account_id}
-                            leading={<AccountTypeTile type={a.account_type} />}
-                            primary={a.label}
-                            /* One heading now covers both kinds of account, so the
-                               row has to say which this is. */
-                            secondary={[
-                              ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
-                              a.owners,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                            /* Marked only when it is not active. Most accounts
-                               are, so badging every row would be noise and the
-                               exceptions would stop standing out. */
-                            badge={
-                              a.status === 'active' ? undefined : (
-                                <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
-                                  {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
-                                </Pill>
-                              )
-                            }
-                            meta={
-                              <AccountValue
-                                value={a.latest_value}
-                                changeAmount={a.change_amount}
-                                changePct={a.change_pct}
-                                baselineValue={a.baseline_value}
-                                baselinePoints={a.baseline_points}
-                              />
-                            }
+                    {/* Two columns, exactly the split the Workflows tab uses —
+                        records left, the other 45% reserved. Asked for on
+                        10 September; `TAB_SPLIT` is shared with that tab rather
+                        than copied, so the two cannot drift apart. The Insurance
+                        section below is deliberately still full width: only the
+                        investment section was asked for, and matching it is a
+                        decision rather than a fix. */}
+                    <div className={TAB_SPLIT}>
+                      <DataSection
+                        title="Investment Accounts"
+                        addLabel="Add account"
+                        action={
+                          <AddAccountModal
+                            owners={ownerOptions}
+                            providers={providers}
+                            triggerVariant="quiet"
                           />
-                        ))
-                      : undefined}
-                  </DataSection>
+                        }
+                        emptyAction={
+                          <AddAccountModal owners={ownerOptions} providers={providers} />
+                        }
+                        empty={{
+                          title: 'No accounts yet',
+                          description:
+                            'Investment and superannuation accounts owned by this group\u2019s members.',
+                        }}
+                      >
+                        {accounts.length
+                          ? accounts.map((a) => (
+                              <DataRow
+                                key={a.account_id}
+                                leading={<AccountTypeTile type={a.account_type} />}
+                                primary={a.label}
+                                /* One heading now covers both kinds of account, so the
+                                   row has to say which this is. */
+                                secondary={[
+                                  ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
+                                  a.owners,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                                /* Marked only when it is not active. Most accounts
+                                   are, so badging every row would be noise and the
+                                   exceptions would stop standing out. */
+                                badge={
+                                  a.status === 'active' ? undefined : (
+                                    <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
+                                      {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
+                                    </Pill>
+                                  )
+                                }
+                                meta={
+                                  <AccountValue
+                                    value={a.latest_value}
+                                    changeAmount={a.change_amount}
+                                    changePct={a.change_pct}
+                                    baselineValue={a.baseline_value}
+                                    baselinePoints={a.baseline_points}
+                                  />
+                                }
+                              />
+                            ))
+                          : undefined}
+                      </DataSection>
+                      <ReservedColumn />
+                    </div>
                     <DataSection
                       title="Insurance Policies"
                       addLabel="Add policy"

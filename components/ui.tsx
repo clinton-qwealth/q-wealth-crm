@@ -150,6 +150,53 @@ export function Placeholder({ children, className = 'h-56' }: { children: string
   )
 }
 
+/**
+ * The two-column split a tab uses when its records sit on the left and the
+ * right is reserved.
+ *
+ * **Exported so the two tabs that use it cannot drift.** The group page's
+ * Workflows tab established it and its Accounts tab was asked for "exactly the
+ * same" on 10 September — which is a correctness requirement, not a visual
+ * preference, so it is one constant rather than two copies of a class string.
+ * Same reasoning as `SHEET`: a shared token means the two are literally the
+ * same object, and nobody has to notice when one is changed.
+ *
+ * 11fr / 9fr — 55 / 45 — and **proportional rather than a fixed width**, so it
+ * scales with the window. The Workflows column was first pinned to the board's
+ * card width so the same card was met at the same size on both screens; once it
+ * was widened at the reader's request the width no longer matched the board, and
+ * a fixed width had nothing left to match. `minmax(0,…)` on both tracks because
+ * a grid track's default `min-width: auto` refuses to shrink below its content,
+ * which is what lets a long account label or a wide card push the layout out.
+ *
+ * Below `lg` it is one column and the reserved half drops beneath.
+ */
+export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]'
+
+/**
+ * The right half of a `TAB_SPLIT`, before anything has been decided for it.
+ *
+ * Dashed, because in this app dashed means **planned, not built** — the same
+ * mark the Goals tab and the Tools tab's inactive tiles wear, and deliberately
+ * NOT what a loading skeleton wears. It is meant to look like a placeholder
+ * rather than an empty region, so the space can be seen and decided on instead
+ * of being filled with a guess dressed up as a feature.
+ *
+ * `aria-hidden` and empty: there is nothing here to announce yet, and a screen
+ * reader should not be told about a blank. It carries no children on purpose —
+ * a `Placeholder` with a sentence in it is a different thing, for a space whose
+ * eventual contents are already known.
+ */
+export function ReservedColumn() {
+  return (
+    <div
+      aria-hidden
+      data-slot="placeholder"
+      className="min-h-[8rem] rounded-lg border border-dashed border-neutral-300/80"
+    />
+  )
+}
+
 export function Card({
   children,
   className = '',

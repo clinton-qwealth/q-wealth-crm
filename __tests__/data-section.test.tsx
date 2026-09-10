@@ -33,6 +33,37 @@ describe('DataSection', () => {
   })
 
   /**
+   * The total band carries `data-slot="total"`, and this asserts it EXISTS.
+   *
+   * That matters more than it looks. The accounts tab's test asserts the
+   * investment section has **no** total by querying for this slot, and an
+   * absence assertion is only as good as the hook it looks for — drop the
+   * attribute and that test keeps passing while testing nothing. Found by
+   * mutation on 10 September: removing the attribute broke no test at all.
+   * The label is caller-supplied, so matching the word "Total" is not a
+   * substitute.
+   */
+  test('the total band is marked with a slot, so its absence is assertable', () => {
+    const { container: withTotal } = render(
+      <DataSection addLabel="Add" empty={empty} total={{ label: 'Sum', value: '$10.00' }}>
+        <DataRow primary="A" meta="$10.00" />
+      </DataSection>,
+    )
+    const band = withTotal.querySelector('[data-slot="total"]')
+    expect(band).toBeTruthy()
+    // The label and the figure both live in it, whatever the label says.
+    expect(band!.textContent).toContain('Sum')
+    expect(band!.textContent).toContain('$10.00')
+
+    const { container: without } = render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="A" meta="$10.00" />
+      </DataSection>,
+    )
+    expect(without.querySelector('[data-slot="total"]')).toBeNull()
+  })
+
+  /**
    * Meta sits opposite the text, and that is the only placement.
    *
    * A `metaBelow` option was added and removed on 10 September — the file notes

@@ -6,6 +6,7 @@ import type { WorkflowType } from '@/lib/notes'
 import type { BoardCard } from '@/lib/workflow-board'
 import { PlusIcon } from './icons'
 import { formatNoteDate, WORKFLOW_TYPE_LABEL } from './file-notes'
+import { ReservedColumn, TAB_SPLIT } from './ui'
 import { WorkflowCard } from './workflow-card'
 import { useWorkflowCards } from './use-workflow-cards'
 
@@ -245,17 +246,14 @@ export function WorkflowSection({
         </p>
       ) : null}
 
-      {/* The cards take 55% of the tab and the placeholder 45% — a proportional
-          split, so it scales with the window. The column was first pinned to
-          the board's card width (306px at 1440) so the same card was met at the
-          same size on both screens; it was widened at the reader's request to
-          352px at 1440, and once the width no longer matches the board there
-          is no reason for it to be fixed. There is no inner well around the
-          stack: the tab body is already the well (same token), and a well
+      {/* The cards take 55% of the tab and the reserved half 45%. The split
+          itself lives in `TAB_SPLIT` — the Accounts tab was asked for exactly
+          the same one on 10 September, so the measurements and the reasoning
+          moved there rather than being copied. There is no inner well around
+          the stack: the tab body is already the well (same token), and a well
           inside a well of the same tone is invisible, so it would only inset
-          the cards past the heading's edge. Below lg the tab is full width and
-          the placeholder drops beneath. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]">
+          the cards past the heading's edge. */}
+      <div className={TAB_SPLIT}>
         <section aria-label="Workflow cards">
           <ul className="flex flex-col gap-2">
             {live.map((c) => (
@@ -270,13 +268,7 @@ export function WorkflowSection({
             ))}
           </ul>
         </section>
-        {/* Reserved. Blank on purpose and hidden from assistive technology:
-            there is nothing here to announce yet. */}
-        <div
-          aria-hidden
-          data-slot="placeholder"
-          className="min-h-[8rem] rounded-lg border border-dashed border-neutral-300/80"
-        />
+        <ReservedColumn />
       </div>
 
       {cancelled ? (
