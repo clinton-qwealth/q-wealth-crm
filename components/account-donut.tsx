@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
 import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
-import { accountMoney, SECTION_HEADING, SHEET_SHADOW } from './ui'
+import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 
 /**
  * How a group's investment value is split across its accounts.
@@ -107,6 +107,20 @@ const FLUID = '[&_.recharts-wrapper]:!h-full [&_.recharts-wrapper]:!w-full'
  * margin is 5, which makes its percentage radii resolve against 115 rather than
  * 120 and leaves the ghost's arithmetic quietly 4% out. Measured both ways.
  */
+/**
+ * The box both the ring and its ghost sit in.
+ *
+ * One constant because they were two copies of `max-w-[220px]` and had already
+ * been changed independently once. Fluid, so it fills a narrow column and
+ * shrinks with it; capped so it does not become a dinner plate.
+ *
+ * **9rem (144px), down from 220px on 10 September** — asked for smaller. The
+ * cap is what bites in practice: the reserved column carries about 174px of
+ * content at 1440, so the ring was previously rendering at the column's full
+ * width and now sits comfortably inside it.
+ */
+const RING_BOX = 'aspect-square w-full max-w-[9rem]'
+
 const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
 
@@ -141,7 +155,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
       <Frame>
         <div className="flex flex-col items-center gap-3 px-3.5 py-4">
           <GhostRing />
-          <p className="text-xs leading-relaxed text-neutral-400">
+          <p className="text-xs leading-relaxed text-neutral-500">
             {accounts.length === 0
               ? 'Once this group holds investment accounts, their mix by value shows here.'
               : `No value has been recorded against ${
@@ -159,7 +173,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
         <div
           role="img"
           aria-label={ariaLabel(slices.map((s) => `${s.label} ${sharePct(s.share)}`), total)}
-          className={`relative aspect-square w-full max-w-[220px] ${FLUID}`}
+          className={`relative ${RING_BOX} ${FLUID}`}
         >
           {/* Zero margin, stated rather than inherited: Recharts defaults to 5,
               and the ghost ring's radii are computed from SIZE. */}
@@ -248,8 +262,8 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
           >
-            <span className="text-2xl font-semibold text-white">{counted}</span>
-            <span className="mt-0.5 text-[11px] text-neutral-400">
+            <span className="text-2xl font-semibold text-neutral-900">{counted}</span>
+            <span className="mt-0.5 text-[11px] text-neutral-500">
               {counted === 1 ? 'account' : 'accounts'}
             </span>
           </span>
@@ -267,7 +281,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive(null)}
                 className={`flex items-center gap-2 rounded px-1 py-1 text-xs transition-colors ${
-                  active === i ? 'bg-white/10' : ''
+                  active === i ? 'bg-neutral-100' : ''
                 }`}
               >
                 <span
@@ -275,11 +289,8 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                   className="size-2.5 shrink-0 rounded-sm"
                   style={{ background: RAMP[i] ?? RAMP[RAMP.length - 1] }}
                 />
-                {/* neutral-300 measures 12.7:1 on the ground and neutral-400
-                    7.5:1; neutral-500 would be 3.98:1, under the floor for text
-                    this small, so it is not used here. */}
-                <span className="min-w-0 flex-1 truncate text-neutral-300">{s.label}</span>
-                <span className="shrink-0 font-medium tabular-nums text-white">
+                <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
+                <span className="shrink-0 font-medium tabular-nums text-neutral-900">
                   {sharePct(s.share)}
                 </span>
               </div>
@@ -323,14 +334,14 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
  * will fill it.
  *
  * Decorative, so `aria-hidden`: the sentence beneath carries the meaning, and
- * it measures about 1.21:1 against the dark ground — far under any text floor,
- * which is the same argument the loading skeleton's bars make. It was
- * `neutral-200` while the sheet was white and inverted with it.
+ * `neutral-200` on white is about 1.2:1 — far under any text floor, which is
+ * the same argument the loading skeleton's bars make. It inverted to
+ * `white/[0.08]` while the sheet was briefly dark and came back with it.
  */
 function GhostRing() {
   const half = SIZE / 2
   return (
-    <div aria-hidden="true" className="aspect-square w-full max-w-[220px]">
+    <div aria-hidden="true" className={RING_BOX}>
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full">
         {/* Stroked circle rather than two arcs: the band is a stroke width, so
             it is derived from the same two constants the real ring uses and
@@ -341,10 +352,7 @@ function GhostRing() {
           r={((INNER_RADIUS + OUTER_RADIUS) / 2) * half}
           fill="none"
           strokeWidth={(OUTER_RADIUS - INNER_RADIUS) * half}
-          /* white/8 composites to about 1.21:1 against the ground — the same
-             whisper `neutral-200` was against white, so the silhouette reads
-             as absence rather than as a real ring. */
-          className="stroke-white/[0.08]"
+          className="stroke-neutral-200"
           data-slot="ghost-ring"
         />
       </svg>
@@ -373,16 +381,12 @@ function Frame({ children }: { children: React.ReactNode }) {
       <div aria-hidden="true" className={`${SECTION_HEADING} invisible`}>
         &nbsp;
       </div>
-      {/* A DARK sheet, which is the one place on this page that has one — see
-          the note in `globals.css`. Composed from `SHEET_SHADOW` rather than
-          `SHEET`, because `SHEET` bakes in `bg-white`; the hairline goes to
-          white/10 so the edge reads on a dark surface instead of ringing it in
-          light grey. */}
-      <div
-        className={`overflow-hidden rounded-lg border border-white/10 bg-mix-ground ${SHEET_SHADOW}`}
-      >
-        {children}
-      </div>
+      {/* The site's own sheet. A dark ground was tried on 10 September and
+          reverted the same day — the third dark surface this page has rejected.
+          `SHEET_SHADOW` stays factored out in `ui.tsx` from that attempt, which
+          is no loss: the elevation is now named once instead of being a string
+          inside another string. */}
+      <div className={SHEET}>{children}</div>
     </div>
   )
 }

@@ -31,35 +31,37 @@
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
 
-  /* The investment-mix chart: a DARK ground and a luminous palette on it,
-     asked for 10 Sep 2026 against a reference image of light streaks on
-     near-black.
+  /* The investment-mix palette: Tailwind's own purples, pinks and blues, on a
+     WHITE sheet. Asked for 10 Sep 2026 — a dark ground was tried the same day
+     and reverted, which puts this page back to the finding it already had twice
+     on 6 September: this palette does not want a dark surface anywhere. Three
+     for three now.
 
-     A dark surface is a departure, and a documented one. Two were rejected on
-     the group page on 6 September — charcoal stat cards, then a charcoal tab
-     strip — and the note then read "twice is a pattern: this palette does not
-     want a dark surface anywhere". This is the exception, on the grounds that a
-     chart is a DISPLAY object rather than a card of records: it is closer to a
-     photograph on the page than to a ledger, and nothing else sits on it.
+     EVERY VALUE IS A TAILWIND STEP, named beside it. They have to be copied as
+     hex rather than referenced: Tailwind v4 only emits a theme variable that
+     some generated utility asks for, so `var(--color-violet-600)` resolves to
+     nothing unless something happens to use `text-violet-600` elsewhere. Copied
+     values with the scale name recorded is the honest version of "use Tailwind's
+     colours".
 
-     THE PALETTE HAD TO INVERT WITH THE GROUND, and the numbers are the reason
-     rather than the taste. The previous values were deepened specifically to
-     clear 3:1 against white; measured against this ground they fall to
-     2.98–5.12:1, with the fuchsia UNDER the 3:1 non-text floor. These, which
-     are roughly the reference's own luminosity, measure 6.32–10.43:1 on it.
-     Deep colours on dark read as mud; that is not a stylistic claim.
+     All six are the 600 step bar one, which keeps them of a piece, and all sit
+     in the 200-340° hue band — purple, pink and blue, with nothing warm. That
+     band is the rule rather than the taste: orange is this app's action colour
+     and red means the wrong direction, so a warm slice beside a Suspended pill
+     would read as a warning.
 
-     Still no orange or red, for the same reason as before: orange is the action
-     colour and red means the wrong direction, so a warm slice would read as a
-     warning whatever it sits on. Ordered largest-share first, with adjacent
-     hues kept apart so the ring is legible before the legend is consulted. */
-  --mix-ground: #0b1024;
-  --mix-1: #a78bfa;
-  --mix-2: #22d3ee;
-  --mix-3: #f472b6;
-  --mix-4: #60a5fa;
-  --mix-5: #e879f9;
-  --mix-6: #818cf8;
+     ORDERED FOR THE RING, not by family. Consecutive segments touch, and so do
+     the last and the first, so the order is chosen to keep every neighbouring
+     pair at least 25° apart in hue — measured at 31-112°, with the closest pair
+     being fuchsia and violet. Contrast on white runs 4.10-6.29:1 against a 3:1
+     non-text floor; the weakest is the sky, which only ever draws when a group
+     holds six or more valued accounts. */
+  --mix-1: #4f46e5; /* indigo-600  6.29:1  243° */
+  --mix-2: #db2777; /* pink-600    4.60:1  333° */
+  --mix-3: #2563eb; /* blue-600    5.17:1  221° */
+  --mix-4: #c026d3; /* fuchsia-600 4.71:1  293° */
+  --mix-5: #7c3aed; /* violet-600  5.70:1  262° */
+  --mix-6: #0284c7; /* sky-600     4.10:1  200° */
 }
 
 @theme inline {
@@ -78,7 +80,6 @@
   --color-gold-100: var(--gold-100);
   --color-gold-700: var(--gold-700);
 
-  --color-mix-ground: var(--mix-ground);
   --color-mix-1: var(--mix-1);
   --color-mix-2: var(--mix-2);
   --color-mix-3: var(--mix-3);
