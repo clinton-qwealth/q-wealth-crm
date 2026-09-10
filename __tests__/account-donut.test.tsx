@@ -103,19 +103,29 @@ describe('the investment mix donut', () => {
       cleanup()
       render(<AccountDonut accounts={[]} />)
       const ghostBox = document.querySelector('[data-slot="ghost-ring"]')!.closest('div')!.className
-      for (const cls of ['aspect-square', 'w-full', 'max-w-[9rem]']) {
+      for (const cls of ['aspect-square', 'w-full', 'max-w-[10rem]']) {
         expect(real, `real ring: ${cls}`).toContain(cls)
         expect(ghostBox, `ghost: ${cls}`).toContain(cls)
       }
     })
 
-    /* Smaller on instruction, 10 September. The cap is what bites: the reserved
-       column carries ~174px of content at 1440, so a 220px cap meant the ring
-       rendered at the column's full width. */
-    test('is capped smaller than the column it sits in', () => {
+    /**
+     * Capped a little inside the column, and the number was arrived at by
+     * overshooting once.
+     *
+     * The cap is the only thing that bites: the reserved column carries ~174px
+     * of content at 1440, so the original 220px cap did nothing and the ring
+     * filled the column. Asked for smaller, it went to 9rem/144px — a 17% cut,
+     * which read as too small — and settled at 10rem/160px, about 8% inside
+     * the column. Both rejected values are asserted against, so a revert to
+     * either fails rather than looking like a fresh decision.
+     */
+    test('is capped a little inside the column, at neither of the rejected sizes', () => {
       render(<AccountDonut accounts={three} />)
-      expect(screen.getByRole('img').className).toContain('max-w-[9rem]')
-      expect(screen.getByRole('img').className).not.toContain('max-w-[220px]')
+      const cls = screen.getByRole('img').className
+      expect(cls).toContain('max-w-[10rem]')
+      expect(cls).not.toContain('max-w-[9rem]')
+      expect(cls).not.toContain('max-w-[220px]')
     })
   })
 

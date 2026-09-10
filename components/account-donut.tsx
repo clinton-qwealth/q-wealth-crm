@@ -114,12 +114,17 @@ const FLUID = '[&_.recharts-wrapper]:!h-full [&_.recharts-wrapper]:!w-full'
  * been changed independently once. Fluid, so it fills a narrow column and
  * shrinks with it; capped so it does not become a dinner plate.
  *
- * **9rem (144px), down from 220px on 10 September** — asked for smaller. The
- * cap is what bites in practice: the reserved column carries about 174px of
- * content at 1440, so the ring was previously rendering at the column's full
- * width and now sits comfortably inside it.
+ * **10rem (160px)**, and the arithmetic is worth writing down because the cap
+ * is the only thing that bites: the reserved column carries about **174px** of
+ * content at 1440, so a cap above that does nothing and the ring simply fills
+ * the column. It began at 220px — i.e. rendering at 174 — was asked to be
+ * smaller and went to 9rem/144px, which was a 17% cut and read as too small.
+ * 160px is about 8% inside the column, which is what "a little smaller" meant.
+ *
+ * Below `lg` the cap stops mattering again: the column carries only ~101px of
+ * content at 1024, and the ring is fluid, so it shrinks with it.
  */
-const RING_BOX = 'aspect-square w-full max-w-[9rem]'
+const RING_BOX = 'aspect-square w-full max-w-[10rem]'
 
 const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
