@@ -17,15 +17,18 @@ import { AccountDonut, type DonutAccount } from '@/components/account-donut'
  */
 const account = (o: Partial<DonutAccount> & { latest_value: string | number | null }): DonutAccount => ({
   account_id: `a${Math.random().toString(36).slice(2)}`,
-  label: 'An account',
+  account_type: 'investment',
   ...o,
 })
 
-const three = [
-  account({ label: 'Joint Super', latest_value: 700 }),
-  account({ label: 'Portfolio', latest_value: 200 }),
-  account({ label: 'Cash', latest_value: 100 }),
-]
+const superannuation = (v: string | number | null) =>
+  account({ account_type: 'superannuation', latest_value: v })
+const investment = (v: string | number | null) =>
+  account({ account_type: 'investment', latest_value: v })
+
+/* Two types, 70/30 — the shape the ring draws since it began grouping by
+   account type on 10 September. */
+const both = [superannuation(700), investment(200), investment(100)]
 
 const segments = () => Array.from(document.querySelectorAll('[data-slot="segment"]'))
 const rows = () => Array.from(document.querySelectorAll('[data-slot="legend-row"]'))
@@ -54,14 +57,14 @@ describe('the investment mix donut', () => {
     const sheet = () => document.querySelector('[data-slot="mix-chart"] > :last-child')!
 
     test('is the site’s own white sheet, with its elevation', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       expect(sheet().className).toContain('bg-white')
       expect(sheet().className).toContain('shadow-[')
       expect(sheet().className).toContain('border-neutral-200')
     })
 
     test('and nothing is left over from the dark experiment', () => {
-      const { container } = render(<AccountDonut accounts={three} />)
+      const { container } = render(<AccountDonut accounts={both} />)
       const inside = container.innerHTML
       for (const darkOnly of ['bg-mix-ground', 'border-white/10', 'text-neutral-300', 'bg-white/10', 'stroke-white/']) {
         expect(inside, `${darkOnly} belongs to the dark ground and would be invisible here`).not.toContain(darkOnly)
@@ -69,7 +72,7 @@ describe('the investment mix donut', () => {
     })
 
     test('the legend and figures read on white', () => {
-      const { container } = render(<AccountDonut accounts={three} />)
+      const { container } = render(<AccountDonut accounts={both} />)
       const inside = container.querySelector('[data-slot="mix-chart"] > :last-child')!.innerHTML
       expect(inside).toContain('text-neutral-700')
       expect(inside).toContain('text-neutral-900')
@@ -77,7 +80,7 @@ describe('the investment mix donut', () => {
     })
 
     test('the hover highlight is the light-ground grey', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       fireEvent.mouseEnter(rows()[0])
       expect(rows()[0].className).toContain('bg-neutral-100')
     })
@@ -98,7 +101,7 @@ describe('the investment mix donut', () => {
    */
   describe('the ring’s size', () => {
     test('the ring and its ghost sit in the same box', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       const real = screen.getByRole('img').className
       cleanup()
       render(<AccountDonut accounts={[]} />)
@@ -121,7 +124,7 @@ describe('the investment mix donut', () => {
      * either fails rather than looking like a fresh decision.
      */
     test('is capped a little inside the column, at neither of the rejected sizes', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       const cls = screen.getByRole('img').className
       expect(cls).toContain('max-w-[10rem]')
       expect(cls).not.toContain('max-w-[9rem]')
@@ -131,13 +134,13 @@ describe('the investment mix donut', () => {
 
   describe('lining up with the records list', () => {
     test('carries no heading text at all', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       expect(screen.queryByText('Mix by value')).toBeNull()
       expect(screen.queryByRole('heading')).toBeNull()
     })
 
     test('but keeps the heading’s box, invisible and unannounced, above the sheet', () => {
-      const { container } = render(<AccountDonut accounts={three} />)
+      const { container } = render(<AccountDonut accounts={both} />)
       const spacer = container.querySelector('[data-slot="mix-chart"] > :first-child')!
       // `invisible` is visibility:hidden — it keeps the box. `hidden` would not.
       expect(spacer.className).toContain('invisible')
@@ -152,7 +155,7 @@ describe('the investment mix donut', () => {
   })
 
   test('the ring is fluid and scales with its column, not a fixed 128px box', () => {
-    render(<AccountDonut accounts={three} />)
+    render(<AccountDonut accounts={both} />)
     const ring = screen.getByRole('img')
     expect(ring.className).toContain('w-full')
     expect(ring.className).toContain('aspect-square')
@@ -167,7 +170,7 @@ describe('the investment mix donut', () => {
    * the DOM.
    *
    * The first attempt at this was vacuous and a mutation said so: it asserted
-   * `d.length > 40` and that the three paths differed, which is true with the
+   * `d.length > 40` and that the both paths differed, which is true with the
    * gap and the corners both switched off. What follows are the two signatures
    * that actually separate them.
    */
@@ -178,7 +181,7 @@ describe('the investment mix donut', () => {
      * one more, so a sector with `cornerRadius` carries six. Measured: 2 → 6.
      */
     test('every segment has round ends, not square ones', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       for (const seg of segments()) {
         const arcs = (seg.getAttribute('d')!.match(/A/g) ?? []).length
         expect(arcs, 'arc commands: 2 is square-ended, 6 is rounded').toBe(6)
@@ -199,7 +202,7 @@ describe('the investment mix donut', () => {
      * was the first thing tried, and it could not tell them apart.
      */
     test('the segments are separated, so each starts before its share would put it', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       const cx = 120 // SIZE / 2, in viewBox units
       const travelled = segments().map((seg) => {
         const [, x, y] = seg.getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
@@ -208,13 +211,10 @@ describe('the investment mix donut', () => {
         return (((90 - deg) % 360) + 360) % 360
       })
 
-      // 70 / 20 / 10, so with no gap the starts would be exactly here.
-      const ifTouching = [0, 0.7 * 360, 0.9 * 360]
+      // 70 / 30 by type, so with no gap the second would start exactly here.
+      const ifTouching = 0.7 * 360
       expect(travelled[0]).toBeCloseTo(0, 5)
-      expect(travelled[1]).toBeLessThan(ifTouching[1] - 1)
-      expect(travelled[2]).toBeLessThan(ifTouching[2] - 1)
-      // And still in order, so a gap has not reshuffled the ring.
-      expect(travelled[1]).toBeLessThan(travelled[2])
+      expect(travelled[1]).toBeLessThan(ifTouching - 1)
     })
 
     /**
@@ -228,7 +228,7 @@ describe('the investment mix donut', () => {
      * used to guard this case.
      */
     test('a lone segment is a closed ring, drawn, with no notch in it', () => {
-      render(<AccountDonut accounts={[account({ label: 'Only', latest_value: 500 })]} />)
+      render(<AccountDonut accounts={[investment(500)]} />)
       expect(segments()).toHaveLength(1)
       const d = segments()[0].getAttribute('d')!
       expect((d.match(/A/g) ?? []).length, 'a full ring is two arcs').toBe(2)
@@ -238,7 +238,7 @@ describe('the investment mix donut', () => {
 
       /* And it is a RING, not a hairline and not a pie. The two arc radii are
          the outer and inner edges, so their difference is the band. Asserted
-         here rather than on the three-slice ring because a lone segment has no
+         here rather than on the both-slice ring because a lone segment has no
          corner arcs to sort out of the way — 108.1 and 69, a band of 36% of the
          outer radius. Caught by mutation: pushing the inner radius to 92% left
          every other assertion in this file passing. */
@@ -272,7 +272,7 @@ describe('the investment mix donut', () => {
      * square.
      */
     test('the ring fills its box rather than floating small inside it', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       const half = 120 // SIZE / 2
       const [, , y] = segments()[0].getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
       const outer = half - Number(y)
@@ -280,60 +280,92 @@ describe('the investment mix donut', () => {
     })
   })
 
-  test('draws one segment per slice, in the mix ramp’s tones', () => {
-    render(<AccountDonut accounts={three} />)
+  test('draws one segment per account type, in the tiles’ own two colours', () => {
+    render(<AccountDonut accounts={both} />)
     const fills = segments().map((s) => s.getAttribute('fill'))
-    expect(fills).toEqual(['var(--mix-1)', 'var(--mix-2)', 'var(--mix-3)'])
-    // Distinct, so the legend's swatches can be trusted to identify a segment.
-    expect(new Set(fills).size).toBe(3)
+    /* Keyed by TYPE, not by rank: superannuation is the larger share here and
+       is emerald, and the reversal below proves it stays emerald when it is
+       the smaller one. */
+    expect(fills).toEqual(['var(--mix-superannuation)', 'var(--mix-investment)'])
+    expect(new Set(fills).size).toBe(2)
+  })
+
+  /**
+   * The reversal — and this test did not exist until a mutation asked for it.
+   *
+   * A comment above claimed it did. Keying the colour off the slice's RANK
+   * instead of its type passed every other assertion in this file, because in
+   * the sample above superannuation happens to be the larger share, so rank and
+   * type agree. **The whole reason for grouping by type is that the arc matches
+   * the tile beside it**, which only holds if superannuation is emerald when it
+   * is the SMALLER share too.
+   */
+  test('superannuation stays emerald even when it is the smaller share', () => {
+    render(<AccountDonut accounts={[investment(900), superannuation(100)]} />)
+    const fills = segments().map((s) => s.getAttribute('fill'))
+    // Investment leads on size, so it is drawn first — and is still gold.
+    expect(fills).toEqual(['var(--mix-investment)', 'var(--mix-superannuation)'])
+    expect(rows().map((r) => r.textContent)).toEqual(['Investment90%', 'Superannuation10%'])
+  })
+
+  /**
+   * An unrecognised `account_type` is drawn in neutral rather than borrowing a
+   * tile colour it has no right to. The enum holds two values; a third must not
+   * arrive wearing the shield's green.
+   */
+  test('an unknown account type is drawn in neutral, not in a tile colour', () => {
+    render(
+      <AccountDonut
+        accounts={[account({ account_type: 'annuity', latest_value: 500 }), investment(500)]}
+      />,
+    )
+    const fills = segments().map((s) => s.getAttribute('fill'))
+    expect(fills).toContain('#a3a3a3')
+    expect(fills).not.toContain('var(--mix-superannuation)')
   })
 
   test('the legend lists shares, largest first, and never amounts', () => {
-    render(<AccountDonut accounts={three} />)
-    expect(rows().map((r) => r.textContent)).toEqual([
-      'Joint Super70%',
-      'Portfolio20%',
-      'Cash10%',
-    ])
+    render(<AccountDonut accounts={both} />)
+    expect(rows().map((r) => r.textContent)).toEqual(['Superannuation70%', 'Investment30%'])
     expect(screen.queryByText(/\$/)).toBeNull()
   })
 
   describe('hovering highlights the ring and the legend together', () => {
     test('pointing at a legend row activates that row and dims the other segments', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       expect(activeRows()).toEqual([])
       // Every segment starts at full strength.
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1', '1'])
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1'])
 
       fireEvent.mouseEnter(rows()[1])
 
       expect(rows()[1].getAttribute('data-active')).toBe('true')
       expect(rows()[1].className).toContain('bg-neutral-100')
       // The hovered segment keeps its strength; the rest recede.
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '1', '0.4'])
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '1'])
     })
 
     test('and pointing at a segment activates its legend row', () => {
-      render(<AccountDonut accounts={three} />)
-      fireEvent.mouseEnter(segments()[2])
+      render(<AccountDonut accounts={both} />)
+      fireEvent.mouseEnter(segments()[1])
       expect(activeRows()).toHaveLength(1)
-      expect(rows()[2].getAttribute('data-active')).toBe('true')
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '0.4', '1'])
+      expect(rows()[1].getAttribute('data-active')).toBe('true')
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '1'])
     })
 
     test('leaving puts everything back, rather than latching on the last one', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       fireEvent.mouseEnter(rows()[0])
       expect(activeRows()).toHaveLength(1)
       fireEvent.mouseLeave(rows()[0])
       expect(activeRows()).toEqual([])
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1', '1'])
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1'])
     })
 
     /* `null` is "nothing hovered" and index 0 is the largest segment. A -1 or 0
        sentinel would make the first slice permanently highlighted. */
     test('nothing is highlighted before the pointer arrives, including the first slice', () => {
-      render(<AccountDonut accounts={three} />)
+      render(<AccountDonut accounts={both} />)
       expect(rows()[0].getAttribute('data-active')).toBe('false')
     })
   })
@@ -389,7 +421,7 @@ describe('the investment mix donut', () => {
     })
 
     /* The fact survives where the reader can still see it: one segment drawn,
-       and a centre count that does not claim three. */
+       and a centre count that does not claim both. */
     test('but the ring still draws only what it can, and counts only that', () => {
       render(
         <AccountDonut
@@ -452,9 +484,9 @@ describe('the investment mix donut', () => {
       })
 
       test('but never alongside a real ring', () => {
-        render(<AccountDonut accounts={three} />)
+        render(<AccountDonut accounts={both} />)
         expect(ghost()).toBeNull()
-        expect(segments()).toHaveLength(3)
+        expect(segments()).toHaveLength(2)
       })
 
       /**
@@ -507,23 +539,26 @@ describe('the investment mix donut', () => {
 
   /** Colour carries the mapping on screen, so the ring says itself in words. */
   test('the ring has a text equivalent naming every share', () => {
-    render(<AccountDonut accounts={three} />)
+    render(<AccountDonut accounts={both} />)
     const label = screen.getByRole('img').getAttribute('aria-label')!
     expect(label).toContain('$1,000.00 in total')
-    expect(label).toContain('Joint Super 70%')
-    expect(label).toContain('Portfolio 20%')
-    expect(label).toContain('Cash 10%')
+    /* Names the type, its share AND how many accounts fold into it — a
+       Recharts `Cell` takes no children, so it cannot carry a `<title>` the way
+       the hand-rolled `<circle>` did, and this label is the whole spoken
+       version of the ring. */
+    expect(label).toContain('Superannuation 70%, 1 account')
+    expect(label).toContain('Investment 30%, 2 accounts')
   })
 
   test('a legend swatch is decorative and adds no text of its own', () => {
-    render(<AccountDonut accounts={[account({ label: 'Only', latest_value: 5 })]} />)
+    render(<AccountDonut accounts={[investment(5)]} />)
     const swatch = rows()[0].firstElementChild!
     expect(swatch.getAttribute('aria-hidden')).toBe('true')
     expect(swatch.textContent).toBe('')
   })
 
   test('the centre overlay is hidden from assistive technology and unclickable', () => {
-    render(<AccountDonut accounts={three} />)
+    render(<AccountDonut accounts={both} />)
     const centre = document.querySelector('[aria-hidden="true"].absolute')!
     // The role="img" label already says the whole ring; this would repeat it.
     expect(centre.className).toContain('pointer-events-none')
@@ -562,13 +597,13 @@ describe('the investment mix donut', () => {
   test('animation defers to the reader’s motion preference, not to a hardcoded true', () => {
     // The setup stub reports "reduce", so honouring it means the arcs are
     // painted at their final geometry rather than mid-animation.
-    render(<AccountDonut accounts={three} />)
-    expect(segments()).toHaveLength(3)
+    render(<AccountDonut accounts={both} />)
+    expect(segments()).toHaveLength(2)
     expect(segments()[0].getAttribute('d')).toBeTruthy()
   })
 
   test('the hover fade is CSS, and stands still under reduced motion', () => {
-    render(<AccountDonut accounts={three} />)
+    render(<AccountDonut accounts={both} />)
     for (const seg of segments()) {
       expect(seg.getAttribute('class')).toContain('transition-[fill-opacity]')
       expect(seg.getAttribute('class')).toContain('motion-reduce:transition-none')

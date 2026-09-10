@@ -2,16 +2,20 @@
 
 import { useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
-import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
+import { accountMix, sharePct, type MixAccount, type MixSlice } from '@/lib/account-mix'
 import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 
 /**
  * How a group's investment value is split across its accounts.
  *
  * **A trial, asked for on 10 September**, in the right half of the Accounts
- * tab — the space the two-column split reserved. The rows on the left answer
- * "what is each account worth"; this answers "which account is most of the
- * money", which a column of figures makes you compute in your head.
+ * tab — the space the two-column split reserved.
+ *
+ * It groups **by account type**, in the tiles' own two colours. The reasoning —
+ * three palettes that did not work, and the two structural reasons why — is in
+ * `lib/account-mix.ts`. The rows on the left answer "what is each account
+ * worth"; this answers "how much of it is in super", which a column of figures
+ * makes you compute in your head.
  *
  * ## Recharts, and why it is not Chart.js
  *
@@ -57,19 +61,26 @@ import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 export type DonutAccount = MixAccount
 
 /**
- * The palette, as tokens — violets, blues and pinks, in the order segments are
- * drawn. Categorical rather than a single-hue ramp; the reasoning and the one
- * hard rule (no colour that already means something on this page) are in
- * `globals.css` beside the values.
+ * The tone for each account type — **the tile's own colour**, keyed by meaning
+ * rather than by rank.
+ *
+ * Keyed, not ordered, and that is the point: superannuation is emerald whether
+ * it is the larger share or the smaller one, so the arc always matches the
+ * shield in the row beside it. An ordered ramp would have made the biggest
+ * slice green whatever it happened to be.
+ *
+ * The fallback is neutral rather than a guess. `account_type` is an enum with
+ * two values today; a third would be drawn in grey and named by its raw type,
+ * which is honest, rather than silently borrowing a colour that already means
+ * something on this page.
  */
-const RAMP = [
-  'var(--mix-1)',
-  'var(--mix-2)',
-  'var(--mix-3)',
-  'var(--mix-4)',
-  'var(--mix-5)',
-  'var(--mix-6)',
-] as const
+const TYPE_TONE: Record<string, string> = {
+  superannuation: 'var(--mix-superannuation)',
+  investment: 'var(--mix-investment)',
+}
+const UNKNOWN_TONE = '#a3a3a3'
+
+const toneFor = (slice: MixSlice) => TYPE_TONE[slice.key] ?? UNKNOWN_TONE
 
 /**
  * The chart's LOGICAL size — a viewBox, not a rendered width.
@@ -177,7 +188,15 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
       <div className="flex flex-col items-center gap-3 px-3.5 py-4">
         <div
           role="img"
-          aria-label={ariaLabel(slices.map((s) => `${s.label} ${sharePct(s.share)}`), total)}
+          aria-label={ariaLabel(
+            slices.map(
+              (s) =>
+                `${s.label} ${sharePct(s.share)}, ${
+                  s.accounts === 1 ? '1 account' : `${s.accounts} accounts`
+                }`,
+            ),
+            total,
+          )}
           className={`relative ${RING_BOX} ${FLUID}`}
         >
           {/* Zero margin, stated rather than inherited: Recharts defaults to 5,
@@ -242,7 +261,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
               {slices.map((s, i) => (
                 <Cell
                   key={s.key}
-                  fill={RAMP[i] ?? RAMP[RAMP.length - 1]}
+                  fill={toneFor(s)}
                   /* Dim the rest rather than move the hovered one: a segment
                      that pops outward changes the ring's silhouette, and the
                      thing being compared here is angle, not position. */
@@ -255,6 +274,11 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                   /* Hoverable, and named for anything reading the tree. */
                   data-slot="segment"
                   data-label={s.label}
+                  /* How many accounts fold into this arc, for anything reading
+                     the tree — a Recharts `Cell` takes no children, so it
+                     cannot carry a `<title>` the way the hand-rolled `<circle>`
+                     did. The ring's own `aria-label` says it in words. */
+                  data-accounts={s.accounts}
                 />
               ))}
             </Pie>
@@ -292,7 +316,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 <span
                   aria-hidden="true"
                   className="size-2.5 shrink-0 rounded-sm"
-                  style={{ background: RAMP[i] ?? RAMP[RAMP.length - 1] }}
+                  style={{ background: toneFor(s) }}
                 />
                 <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
                 <span className="shrink-0 font-medium tabular-nums text-neutral-900">

@@ -60,9 +60,6 @@ const contrast = (a: string, b: string) => {
  * existed for a few hours on 10 September while a dark surface was tried, and
  * went with it — the third dark surface this page has rejected.
  */
-const GROUND = '#ffffff'
-const RAMP = [1, 2, 3, 4, 5, 6].map((n) => token(`mix-${n}`))
-
 /** Hue in degrees, 0 = red. */
 const hue = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -73,103 +70,77 @@ const hue = (hex: string) => {
   return (((h * 60) % 360) + 360) % 360
 }
 
-describe('the investment-mix palette', () => {
+const GROUND = '#ffffff'
+const UI = readFileSync(resolve(process.cwd(), 'components/ui.tsx'), 'utf8')
+
+/**
+ * Just `AccountTypeTile`'s own source, not the whole file.
+ *
+ * Scoped because the first version of these assertions searched all of
+ * `ui.tsx` for `text-emerald-700` — and passed off the **success pill** on
+ * another line entirely, so recolouring the tile to teal broke nothing. Found
+ * by mutation; the lesson is that `toContain` against a whole module is a
+ * search, not an assertion.
+ */
+const TILE = (() => {
+  const start = UI.indexOf('export function AccountTypeTile')
+  if (start < 0) throw new Error('AccountTypeTile is gone from ui.tsx')
+  return UI.slice(start, UI.indexOf('\n}', start))
+})()
+
+/** The two arcs, keyed by account type — see `globals.css`. */
+const SUPER = token('mix-superannuation')
+/** Investment points at the existing gold token, so resolve one more hop. */
+const INVESTMENT = token('gold-700')
+
+describe('the mix arcs wear the tiles’ own colours', () => {
   /**
-   * 3:1 is WCAG's floor for non-text graphics, which is what a chart segment
-   * is — the legend beside it carries the text. Every colour clears it with
-   * room; the deep values this replaced did not.
+   * The point of grouping by account type. The list beside the ring paints an
+   * emerald shield for superannuation and a gold rising line for investment;
+   * a per-account ring gave the same account a third, unrelated colour
+   * eighteen pixels away. These assertions are what keep the two in step.
    */
-  test('every segment colour clears the 3:1 non-text floor against the ground', () => {
-    for (const [i, colour] of RAMP.entries()) {
-      const ratio = contrast(colour, GROUND)
-      expect(ratio, `--mix-${i + 1} (${colour}) against ${GROUND}`).toBeGreaterThan(3)
-    }
+  test('the investment arc IS the gold token the tile glyph uses', () => {
+    expect(CSS).toMatch(/--mix-investment:\s*var\(--gold-700\)/)
+    expect(TILE, 'the tile still paints its glyph gold-700').toContain('text-gold-700')
   })
 
   /**
-   * And with margin, rather than sitting on the line.
-   *
-   * 3.5:1 rather than the 6:1 this asserted while the ground was dark. On white
-   * a vivid mid-tone caps out around 7:1 before it stops being the purple or
-   * pink it is meant to be, so demanding 6 would force the palette darker than
-   * what was asked for. Measured range: 4.10-6.29:1, the weakest being the sky
-   * at position six, which only draws for a group holding six or more valued
-   * accounts.
+   * Emerald has no project token — the tile uses Tailwind's `text-emerald-700`
+   * utility — so the value has to be copied. The guard is the pair: the token
+   * holds emerald-700's value AND the tile is asserted still to use that
+   * family, so recolouring the tile without the ring fails here.
    */
-  test('and clears it with margin, all six above 3.5:1', () => {
-    for (const [i, colour] of RAMP.entries()) {
-      expect(contrast(colour, GROUND), `--mix-${i + 1} (${colour})`).toBeGreaterThan(3.5)
-    }
+  test('the superannuation arc is emerald-700, the shield’s own colour', () => {
+    expect(SUPER).toBe('#047857')
+    expect(TILE, 'the tile still paints its shield emerald-700').toContain('text-emerald-700')
   })
 
-  test('all six are distinct, so a legend swatch identifies one segment', () => {
-    expect(new Set(RAMP).size).toBe(RAMP.length)
+  test('both clear the 3:1 non-text floor on the white sheet', () => {
+    expect(contrast(SUPER, GROUND)).toBeGreaterThan(3)
+    expect(contrast(INVESTMENT, GROUND)).toBeGreaterThan(3)
   })
 
-  /**
-   * Adjacent segments touch on the ring, so consecutive colours have to be
-   * told apart from each other and not only from the ground. Measured as a
-   * luminance-or-hue difference: the pair may match in brightness as long as
-   * the hue moves, which is how a violet can sit beside a cyan.
-   */
-  test('consecutive colours differ from each other, by lightness or by hue', () => {
-    const hue = (hex: string) => {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
-      const [max, min] = [Math.max(r, g, b), Math.min(r, g, b)]
-      if (max === min) return 0
-      const d = max - min
-      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-      return ((h * 60) % 360 + 360) % 360
-    }
-    /* Every i to i+1 AND the last back to the first: the ring closes, so the
-       sixth segment touches the first one. That join was untested while the
-       palette was a single-hue ramp, where it could not matter. */
-    for (let i = 0; i < RAMP.length; i += 1) {
-      const [a, b] = [RAMP[i], RAMP[(i + 1) % RAMP.length]]
-      const dHue = Math.min(Math.abs(hue(a) - hue(b)), 360 - Math.abs(hue(a) - hue(b)))
-      const dLum = Math.abs(luminance(a) - luminance(b))
-      expect(
-        dHue > 25 || dLum > 0.12,
-        `--mix-${i + 1} (${a}) and --mix-${((i + 1) % RAMP.length) + 1} (${b}) are too close: ${dHue.toFixed(0)}° apart, Δluminance ${dLum.toFixed(3)}`,
-      ).toBe(true)
-    }
+  /* Two arcs that touch, so they have to be told apart from each other as well
+     as from the sheet. Green against gold is a wide hue gap and a real
+     lightness difference. */
+  test('and are distinguishable from each other', () => {
+    expect(SUPER).not.toBe(INVESTMENT)
+    const gap = Math.min(
+      Math.abs(hue(SUPER) - hue(INVESTMENT)),
+      360 - Math.abs(hue(SUPER) - hue(INVESTMENT)),
+    )
+    expect(gap, `${SUPER} and ${INVESTMENT} are ${gap.toFixed(0)}° apart`).toBeGreaterThan(25)
   })
 
   /**
-   * Purples, pinks and blues — and nothing warm, whatever a reference image
-   * has in it. Orange is this app's action colour and red means the wrong
-   * direction, so a warm slice beside a *Suspended* pill would read as a
-   * warning.
-   *
-   * Expressed as a **hue band**, 195-340°, which is what those three families
-   * occupy. The first version of this test compared RGB channels
-   * (`b > r * 0.6 || g > r * 0.9`) and was simply wrong: a deep pink is
-   * red-dominant in RGB, so `pink-600` — squarely in the requested set —
-   * failed it. Tailwind's reds, oranges, ambers, yellows and greens all sit
-   * outside this band.
+   * No ramp any more. Six numbered tokens existed through three failed
+   * palettes; they are gone, and this asserts they have not crept back — a
+   * stray `--mix-1` would be a positional colour, which is exactly what made
+   * the ring disagree with the tiles.
    */
-  test('every colour is a purple, a pink or a blue, and none is warm', () => {
-    for (const [i, colour] of RAMP.entries()) {
-      const h = hue(colour)
-      expect(
-        h > 195 && h < 340,
-        `--mix-${i + 1} (${colour}) sits at ${h.toFixed(0)}°, outside the purple-pink-blue band`,
-      ).toBe(true)
-    }
-  })
-
-  /**
-   * Every value is a real Tailwind step. They are copied rather than
-   * referenced because Tailwind v4 only emits a theme variable some generated
-   * utility asks for, so `var(--color-violet-600)` would resolve to nothing —
-   * checked in the built CSS. The scale name is recorded beside each value in
-   * `globals.css`; this asserts the comment is actually there, because a value
-   * with no provenance is the thing that drifts.
-   */
-  test('each value records which Tailwind step it came from', () => {
-    const block = CSS.slice(CSS.indexOf('--mix-1:'), CSS.indexOf('--mix-6:') + 60)
-    for (const family of ['indigo-600', 'pink-600', 'blue-600', 'fuchsia-600', 'violet-600', 'sky-600']) {
-      expect(block, `the comment naming ${family}`).toContain(family)
-    }
+  test('no numbered ramp survives, so colour cannot go back to being positional', () => {
+    expect(CSS).not.toMatch(/--mix-[1-6]\s*:/)
+    expect(CSS).not.toContain('--mix-ground')
   })
 })

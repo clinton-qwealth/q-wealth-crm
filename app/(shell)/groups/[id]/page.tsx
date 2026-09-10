@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { coverSummary, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
 import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
+import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { AccountDonut } from '@/components/account-donut'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
@@ -207,11 +208,6 @@ const POLICY_STATUS_LABEL: Record<string, string> = {
   in_force: 'In force',
   lapsed: 'Lapsed',
   cancelled: 'Cancelled',
-}
-
-const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  investment: 'Investment',
-  superannuation: 'Superannuation',
 }
 
 

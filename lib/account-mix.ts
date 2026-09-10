@@ -1,101 +1,118 @@
 /**
- * How a group's investment value divides across its accounts.
+ * How a group's investment value divides — **by account type**, not by account.
  *
- * **Pure, and deliberately separate from the chart that draws it.** The donut
- * moved to Recharts on 10 September, which means the library owns the arc
- * geometry — so the arithmetic that used to be checkable through
- * `stroke-dasharray` attributes is no longer visible in the DOM at all. Putting
- * it here keeps it checkable, with no renderer involved: shares, ordering,
- * grouping and — the one that matters — what the chart is unable to show.
+ * ## Why by type
  *
- * The same reasoning as `wealthSummary()` and `coverSummary()`: a rule worth
- * getting right is a rule worth testing without a browser in the way.
+ * The chart began as one segment per account and was recoloured three times
+ * without ever looking right. The reason turned out to be structural rather
+ * than a matter of hue, and it was found by measuring the page:
+ *
+ * 1. **The tiles beside it already colour these accounts.** An emerald shield
+ *    is superannuation; a gold rising line is investment. A per-account ring
+ *    gave the same account a third, unrelated colour, so "Joint Super" read
+ *    green in the row and indigo in the ring — two encodings for one thing,
+ *    eighteen pixels apart.
+ * 2. **Area, not saturation.** This page's tile glyphs run 94–98% saturated,
+ *    *more* than the fills that were replaced (69–82%) — so the page is not shy
+ *    of strong colour. What it had never carried was a large *field* of it: a
+ *    glyph is a dot inside a pale tile, where the ring was ~15,000px² of the
+ *    stuff, the biggest patch of colour anywhere on the page.
+ *
+ * Grouping by type answers both at once. The ring wears the tiles' own two
+ * colours, adds no new colour language, and — because there are exactly two
+ * account types — it is two calm arcs rather than six competing ones.
+ *
+ * **What it gives up, plainly:** per-account shares. The list immediately to the
+ * left already prints every account's value, so that reading is a glance away;
+ * what it could not do is answer "how much of this is in super", which is the
+ * question a ring is good at.
+ *
+ * Pure and renderer-free, because Recharts owns the arc geometry — so the
+ * arithmetic is checkable without a DOM. Same reasoning as `wealthSummary()`.
  */
+
+/**
+ * The account types, and how they read.
+ *
+ * One map, shared with the accounts list — which prints the same words on each
+ * row — so the ring's legend and the row beneath it cannot disagree.
+ */
+export const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  investment: 'Investment',
+  superannuation: 'Superannuation',
+}
 
 /** The shape the chart needs from an account row, and nothing more. */
 export type MixAccount = {
   account_id: string
-  label: string
+  account_type: string
   latest_value: string | number | null
 }
 
 export type MixSlice = {
-  /** Stable key. `other` for the grouped tail. */
+  /** The `account_type`, so a colour can be keyed by meaning rather than rank. */
   key: string
   label: string
   value: number
   /** Fraction of the drawn total, 0–1. */
   share: number
+  /** How many accounts fold into this arc. */
+  accounts: number
 }
 
 export type AccountMix = {
   /** What the ring draws, largest first. Empty when there is nothing to draw. */
   slices: MixSlice[]
-  /**
-   * The sum of what is drawn — NOT the group's holdings, which may be more.
-   * Zero exactly when `slices` is empty, which is what keeps every share's
-   * division safe without a guard. See the note in `accountMix`.
-   */
+  /** The sum of what is drawn — NOT the group's holdings, which may be more. */
   total: number
   /** Accounts with no recorded value, or recorded at zero. Never hidden. */
   missing: number
-  /** How many accounts the ring actually represents, tail included. */
+  /** How many accounts the ring represents, across every arc. */
   counted: number
 }
 
-/**
- * The most segments drawn before the tail is grouped.
- *
- * Six, because that is how many steps the violet ramp has — and two accounts
- * sharing a shade would make the legend ambiguous, which is worse than a
- * grouped "4 smaller accounts" that says exactly what it is.
- */
-export const MAX_SLICES = 6
-
 export function accountMix(accounts: MixAccount[]): AccountMix {
   const valued = accounts
-    .map((a) => ({ key: a.account_id, label: a.label, value: Number(a.latest_value) }))
+    .map((a) => ({ type: a.account_type, value: Number(a.latest_value) }))
     /* `latest_value` arrives as a string over PostgREST, so this is a Number()
        away from being a concatenation bug. A null becomes NaN and is dropped
        here rather than poisoning the total. An account recorded at exactly zero
        is a VALUED account that cannot be drawn — it counts as missing, because
        a zero-width arc is not something a reader can see or hover. */
     .filter((a) => Number.isFinite(a.value) && a.value > 0)
-    .sort((a, b) => b.value - a.value)
 
   const total = valued.reduce((sum, a) => sum + a.value, 0)
 
   /*
-   * There is no zero-total guard here, and that is deliberate.
-   *
-   * One was written — `if (!valued.length || total <= 0) return { slices: [] …
-   * }` — and a mutation proved it **dead**: the filter above keeps only finite
-   * values greater than zero, so `total` is positive whenever anything survives
-   * it, and when nothing survives the code below maps an empty array to an
-   * empty array and reports the same figures the guard returned. Replacing the
-   * condition with `false` changed no output at all.
-   *
-   * So the invariant it was defending is upheld one step earlier, by the filter:
-   * **`total > 0` whenever `drawn` is non-empty**, which is what makes the
-   * `a.value / total` below safe. Removed rather than kept, on the same
-   * reasoning as the nav matcher's dead root branch — an unreachable guard
-   * reads as a live rule and invites somebody to "fix" the filter beneath it.
+   * There is no zero-total guard, and that is deliberate: the filter above
+   * keeps only finite values greater than zero, so `total` is positive whenever
+   * anything survives it, and when nothing does the map below produces an empty
+   * array and the same figures a guard would have returned. One was written and
+   * a mutation proved it dead — see the equivalent note that used to sit here.
+   * The invariant it defended is upheld by the filter: **`total > 0` whenever
+   * `slices` is non-empty**, which is what makes the division safe.
    */
-  const head = valued.slice(0, valued.length > MAX_SLICES ? MAX_SLICES - 1 : MAX_SLICES)
-  const tail = valued.slice(head.length)
-  const drawn = tail.length
-    ? [
-        ...head,
-        {
-          key: 'other',
-          label: `${tail.length} smaller accounts`,
-          value: tail.reduce((sum, a) => sum + a.value, 0),
-        },
-      ]
-    : head
+  const byType = new Map<string, { value: number; accounts: number }>()
+  for (const a of valued) {
+    const at = byType.get(a.type) ?? { value: 0, accounts: 0 }
+    byType.set(a.type, { value: at.value + a.value, accounts: at.accounts + 1 })
+  }
+
+  const slices = [...byType.entries()]
+    .map(([key, { value, accounts: n }]) => ({
+      key,
+      /* Falls back to the raw type rather than dropping the arc. The enum holds
+         two values today; a third would still be drawn and still be named,
+         which is better than a ring that quietly omits money. */
+      label: ACCOUNT_TYPE_LABEL[key] ?? key,
+      value,
+      share: value / total,
+      accounts: n,
+    }))
+    .sort((a, b) => b.value - a.value)
 
   return {
-    slices: drawn.map((a) => ({ ...a, share: a.value / total })),
+    slices,
     total,
     missing: accounts.length - valued.length,
     counted: valued.length,
@@ -106,7 +123,7 @@ export function accountMix(accounts: MixAccount[]): AccountMix {
  * A share as whole percent, and never a bare `0%` for a segment that is there.
  *
  * `<1%` rather than rounding to nothing: the arc is drawn, so a reader can see
- * it and hover it, and a legend saying `0%` beside a visible segment reads as a
+ * it and hover it, and a legend saying zero beside a visible segment reads as a
  * rendering fault.
  */
 export function sharePct(share: number) {
