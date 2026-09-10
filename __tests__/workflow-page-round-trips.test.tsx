@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import { createRoundTripHarness } from './helpers/round-trips'
 
 /**
  * How deep is the chain of Supabase round trips behind /workflows/[id]?
@@ -17,18 +18,13 @@ import { describe, expect, test, vi } from 'vitest'
  * rewritten and it was tightened to 1 — re-chaining either loader takes it
  * straight back to 3.
  *
- * Every stubbed call takes a fixed LATENCY, so elapsed / LATENCY is the depth.
+ * **Depth is counted, not timed** — the harness releases stubbed queries one
+ * wave at a time and counts the waves, so the figure does not move with machine
+ * load. See `helpers/round-trips.ts` for why that replaced a stopwatch.
  */
-const LATENCY = 25
-
-const calls: string[] = []
+const { wait, calls, measure } = createRoundTripHarness()
 
 function stubClient() {
-  const wait = (label: string) => {
-    calls.push(label)
-    return new Promise((r) => setTimeout(r, LATENCY))
-  }
-
   /* Rows shaped to send each loader down its LONGEST path: a group id on the
      workflow, a primary contact on the group with an email on file, members who
      are clients, a sibling workflow. Nothing returns early. */
@@ -103,10 +99,10 @@ const { default: WorkflowPage } = await import('@/app/(shell)/workflows/[id]/pag
 
 describe('/workflows/[id] round-trip depth', () => {
   test('the whole page is one wave: every loader is a single read', async () => {
-    calls.length = 0
-    const started = Date.now()
-    await WorkflowPage({ params: Promise.resolve({ id: 'w1' }) })
-    const depth = Math.round((Date.now() - started) / LATENCY)
+    const { depth, error } = await measure(() =>
+      WorkflowPage({ params: Promise.resolve({ id: 'w1' }) }),
+    )
+    expect(error).toBeUndefined()
 
     /* Eight loaders, eight reads. The recipient and the entity choices each
        used to be three chained reads; now each is one embedded read of the

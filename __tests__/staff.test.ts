@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
  */
 type Claims = { data: { claims: { sub: string; aal: string } } | null; error: { message: string } | null }
 
-const LATENCY = 25
+const queries: string[] = []
 let CLAIMS: Claims = { data: null, error: null }
 let ROW: Record<string, unknown> | null = null
 let ROW_ERROR: { message: string } | null = null
@@ -37,8 +37,13 @@ vi.mock('@/lib/supabase/server', () => ({
           eqCalls.push([column, value])
           return chain
         },
-        maybeSingle: () =>
-          new Promise((r) => setTimeout(() => r({ data: ROW, error: ROW_ERROR }), LATENCY)),
+        /* Resolves immediately: nothing here is timed. What "one round trip"
+           means for this function is "one query", and that is counted rather
+           than clocked — see the last test. */
+        maybeSingle: async () => {
+          queries.push('staff_users')
+          return { data: ROW, error: ROW_ERROR }
+        },
       }
       return chain
     },
@@ -70,6 +75,7 @@ beforeEach(() => {
   ROW = null
   ROW_ERROR = null
   eqCalls.length = 0
+  queries.length = 0
   getClaims.mockClear()
   getUser.mockClear()
 })
@@ -130,15 +136,26 @@ describe('getCurrentStaff', () => {
   })
 
   /**
-   * The point of the change, measured: ONE round trip, the staff_users select.
-   * Under getUser() there were two, sequential — getUser then the select —
-   * and a revert to getUser() with a stub that also waits LATENCY reads 2.
+   * The point of the change: ONE round trip, the `staff_users` select.
+   *
+   * **Counted, not timed.** An earlier version measured elapsed time against a
+   * fixed 25ms sleep, which is the same construction that put CI red on
+   * 10 September when the group page's depth test read 3 instead of 2 on
+   * unchanged code. There is nothing to time here anyway: `getClaims()` is
+   * local, so the query count IS the round-trip count, and the two assertions
+   * that a revert to `getUser()` would break are the ones above — GoTrue is
+   * never called, and the row is looked up by the token's own subject.
    */
-  test('costs one round trip, not two', async () => {
+  test('issues exactly one query, so the auth step costs no round trip of its own', async () => {
     CLAIMS = signedIn
     ROW = row()
-    const started = Date.now()
     await getCurrentStaff()
-    expect(Math.round((Date.now() - started) / LATENCY)).toBe(1)
+    expect(queries).toEqual(['staff_users'])
+  })
+
+  test('and issues none at all when there is no session', async () => {
+    CLAIMS = { data: null, error: null }
+    await getCurrentStaff()
+    expect(queries).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import { createRoundTripHarness } from './helpers/round-trips'
 
 /**
  * How deep is the chain of Supabase round trips behind /groups?
@@ -14,34 +15,15 @@ import { describe, expect, test, vi } from 'vitest'
  * revalidatePath('/groups'), and the action does not return to the browser
  * until the page has re-rendered behind it.
  *
- * Every stubbed call takes a fixed LATENCY, so elapsed / LATENCY is the depth.
+ * **Depth is counted, not timed.** The harness releases stubbed queries one
+ * wave at a time and counts the waves, so the number is exact on any machine
+ * and under any load. It used to sleep 25ms per query and divide elapsed time —
+ * which put CI red on 10 September with "expected 3 to be 2" on unchanged code.
+ * See `helpers/round-trips.ts`.
  */
-const LATENCY = 25
-
-const calls: string[] = []
-/* Which wave each table was FIRST read in, from the clock the test started. A
-   whole-page depth cannot see a loader that chains two reads while another
-   loader is already two deep — the chain hides under the floor. The issue wave
-   can: a read that belongs in the first wave and is issued in the second has
-   been chained onto something. Only meaningful for a table ONE loader reads
-   (client_group_members is read by three, in different waves, and says
-   nothing). */
-let clock = 0
-const issuedIn: Record<string, number> = {}
-const startClock = () => {
-  calls.length = 0
-  for (const k of Object.keys(issuedIn)) delete issuedIn[k]
-  clock = Date.now()
-  return clock
-}
+const { wait, calls, issuedIn, measure } = createRoundTripHarness()
 
 function stubClient() {
-  const wait = (label: string) => {
-    calls.push(label)
-    issuedIn[label] = Math.min(issuedIn[label] ?? Infinity, Math.round((Date.now() - clock) / LATENCY))
-    return new Promise((r) => setTimeout(r, LATENCY))
-  }
-
   // Rows shaped to send the code down its longest path: real members, real
   // ids, so nothing returns early and every wave is actually reached.
   const fixtures: Record<string, unknown[]> = {
@@ -124,12 +106,13 @@ const { default: GroupsIndexPage } = await import('@/app/(shell)/groups/page')
 
 describe('/groups/[id] round-trip depth', () => {
   test('the page fetches in a shallow chain, not one call after another', async () => {
-    const started = startClock()
     /* `params`, not `searchParams`: the id became a path segment on
        10 September when /groups became the index and the detail page moved
        under it. */
-    await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) })
-    const depth = Math.round((Date.now() - started) / LATENCY)
+    const { depth, error } = await measure(() =>
+      GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) }),
+    )
+    expect(error).toBeUndefined()
 
     /* Measured with this same harness: a depth of 12 before the fetches were
        grouped; 4 after; 3 once the group row joined the wave on 10 September
@@ -170,8 +153,10 @@ describe('/groups/[id] round-trip depth', () => {
    * has to be shown to still happen — after the wave, not instead of it.
    */
   test('an unknown group is still a 404, one wave later', async () => {
-    calls.length = 0
-    await expect(GroupDetailPage({ params: Promise.resolve({ id: 'nope' }) })).rejects.toThrow('notFound')
+    const { error } = await measure(() =>
+      GroupDetailPage({ params: Promise.resolve({ id: 'nope' }) }),
+    )
+    expect((error as Error)?.message).toBe('notFound')
     // The siblings did run: that is the trade the comment on the page records.
     expect(calls).toContain('group_summary')
     expect(calls).toContain('group_notes_summary')
@@ -188,15 +173,12 @@ describe('/groups/[id] round-trip depth', () => {
  */
 describe('/groups index', () => {
   test('the index reads the group view exactly once, and nothing per row', async () => {
-    calls.length = 0
-    await GroupsIndexPage()
+    await measure(() => GroupsIndexPage())
     expect(calls).toEqual(['group_summary'])
   })
 
   test('its depth is one wave, so the list costs one round trip', async () => {
-    calls.length = 0
-    const started = Date.now()
-    await GroupsIndexPage()
-    expect(Math.round((Date.now() - started) / LATENCY)).toBe(1)
+    const { depth } = await measure(() => GroupsIndexPage())
+    expect(depth).toBe(1)
   })
 })
