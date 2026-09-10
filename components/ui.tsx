@@ -96,8 +96,21 @@ export function PageHeading({
  * object: one white surface with hairline rows, the only elevated thing in its
  * well.
  */
-export const SHEET_SURFACE =
-  'rounded-lg border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+/**
+ * The two-layer elevation every sheet and card wears — a 1px contact edge plus
+ * a soft offset ambient, so a surface reads as paper on a desk rather than an
+ * outlined region.
+ *
+ * Its own token because the investment-mix chart is a **dark** sheet (10 Sep)
+ * and cannot use `SHEET`, which bakes in `bg-white`. Overriding a background
+ * utility with another depends on which rule Tailwind emits last, which is not
+ * something to rely on; composing from the shadow instead keeps one definition
+ * of the elevation and one of the surface.
+ */
+export const SHEET_SHADOW =
+  'shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]'
+
+export const SHEET_SURFACE = `rounded-lg border border-neutral-200 bg-white ${SHEET_SHADOW}`
 
 /*
  * SHEET clips its contents so hairline rows and footer bands meet the rounded

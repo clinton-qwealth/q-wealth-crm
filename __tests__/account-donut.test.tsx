@@ -40,6 +40,77 @@ describe('the investment mix donut', () => {
    * sheet has to stay level with the records sheet beside it — which has a
    * heading above it. So the heading's BOX is still rendered, invisible.
    */
+  /**
+   * The dark ground, asked for 10 September against a reference image of light
+   * streaks on near-black — and the one dark surface on this page.
+   *
+   * Two charcoal surfaces were rejected here on 6 September and the note read
+   * "this palette does not want a dark surface anywhere", so the exception is
+   * asserted rather than left to look like a slip. What matters most is that
+   * the whole thing inverted TOGETHER: a light-text token left behind on a dark
+   * sheet, or a deep segment colour, is invisible rather than merely ugly.
+   */
+  describe('the dark ground', () => {
+    const sheet = () => document.querySelector('[data-slot="mix-chart"] > :last-child')!
+
+    test('the sheet carries the ground token, not a white background', () => {
+      render(<AccountDonut accounts={three} />)
+      expect(sheet().className).toContain('bg-mix-ground')
+      expect(sheet().className).not.toContain('bg-white')
+    })
+
+    /* Composed from the shared shadow rather than from `SHEET`, which bakes in
+       `bg-white` — overriding one background utility with another depends on
+       which rule Tailwind emits last. */
+    test('but keeps the site’s elevation, and a hairline that reads on dark', () => {
+      render(<AccountDonut accounts={three} />)
+      expect(sheet().className).toContain('shadow-[')
+      expect(sheet().className).toContain('border-white/10')
+      expect(sheet().className).not.toContain('border-neutral-200')
+    })
+
+    test('every text tone inverted with it, so nothing is left dark-on-dark', () => {
+      render(<AccountDonut accounts={three} />)
+      /* Scoped to the SHEET, not the whole wrapper. The alignment spacer above
+         it renders the shared `SECTION_HEADING` token, which carries
+         `text-neutral-500` — and legitimately, because that box is `invisible`
+         and its colour never paints. Scanning the wrapper failed for exactly
+         that reason on the first run. */
+      const inside = sheet().innerHTML
+      for (const tooDark of ['text-neutral-900', 'text-neutral-700', 'text-neutral-500', 'text-neutral-600']) {
+        expect(inside, `${tooDark} would be unreadable on the dark ground`).not.toContain(tooDark)
+      }
+      // The legend label at 12.7:1 and the figures at 18.9:1.
+      expect(inside).toContain('text-neutral-300')
+      expect(inside).toContain('text-white')
+    })
+
+    test('the hover highlight is a light wash, not the light-ground grey', () => {
+      render(<AccountDonut accounts={three} />)
+      fireEvent.mouseEnter(rows()[0])
+      expect(rows()[0].className).toContain('bg-white/10')
+      expect(rows()[0].className).not.toContain('bg-neutral-100')
+    })
+
+    test('the ghost inverted too, so it whispers instead of glowing', () => {
+      render(<AccountDonut accounts={[]} />)
+      const ring = document.querySelector('[data-slot="ghost-ring"]')!
+      /* `getAttribute('class')`, not `.className`: on an SVG element that
+         property is an `SVGAnimatedString` object rather than a string, so a
+         `toContain` against it silently compares nothing. It reported
+         `expected [] to include …` on the first run, which is the tell. */
+      expect(ring.getAttribute('class')).toContain('stroke-white/[0.08]')
+      expect(ring.getAttribute('class')).not.toContain('stroke-neutral-200')
+    })
+
+    test('and the empty state’s sentence is legible on it', () => {
+      const { container } = render(<AccountDonut accounts={[]} />)
+      const p = container.querySelector('p')!
+      expect(p.className).toContain('text-neutral-400')
+      expect(p.className).not.toContain('text-neutral-500')
+    })
+  })
+
   describe('lining up with the records list', () => {
     test('carries no heading text at all', () => {
       render(<AccountDonut accounts={three} />)
@@ -219,7 +290,7 @@ describe('the investment mix donut', () => {
       fireEvent.mouseEnter(rows()[1])
 
       expect(rows()[1].getAttribute('data-active')).toBe('true')
-      expect(rows()[1].className).toContain('bg-neutral-100')
+      expect(rows()[1].className).toContain('bg-white/10')
       // The hovered segment keeps its strength; the rest recede.
       expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '1', '0.4'])
     })
@@ -270,30 +341,52 @@ describe('the investment mix donut', () => {
     expect(document.querySelector('[aria-hidden="true"].absolute')!.textContent).toBe('1account')
   })
 
-  /** THE assertion. An omission is stated, every time, in words. */
-  test('says how many accounts it cannot show', () => {
-    render(
-      <AccountDonut
-        accounts={[
-          account({ latest_value: 500 }),
-          account({ latest_value: null }),
-          account({ latest_value: 0 }),
-        ]}
-      />,
-    )
-    expect(screen.getByText('2 accounts with no recorded value are not shown.')).toBeTruthy()
-    expect(segments()).toHaveLength(1)
+  /**
+   * The omission notice was **removed on instruction, 10 September.**
+   *
+   * It read "2 accounts with no recorded value are not shown", and it was
+   * argued for hard before that: nothing writes a valuation after an account's
+   * opening one, so unvalued accounts are the normal case and a chart that
+   * dropped them silently is the defect the wealth summary was built around.
+   *
+   * This asserts the removal rather than deleting the tests, because the reason
+   * it was safe is worth pinning: **the omission is still visible on screen.**
+   * The centre counts only what the ring draws, and the list beside it prints
+   * "No value recorded" against every account it cannot draw. What went is the
+   * summary of it here, not the fact itself.
+   */
+  describe('the omission notice, removed on instruction', () => {
+    test('no longer appears, even with accounts it cannot draw', () => {
+      render(
+        <AccountDonut
+          accounts={[
+            account({ latest_value: 500 }),
+            account({ latest_value: null }),
+            account({ latest_value: 0 }),
+          ]}
+        />,
+      )
+      expect(screen.queryByText(/not shown/)).toBeNull()
+      expect(screen.queryByText(/no recorded value/)).toBeNull()
+    })
+
+    /* The fact survives where the reader can still see it: one segment drawn,
+       and a centre count that does not claim three. */
+    test('but the ring still draws only what it can, and counts only that', () => {
+      render(
+        <AccountDonut
+          accounts={[
+            account({ latest_value: 500 }),
+            account({ latest_value: null }),
+            account({ latest_value: 0 }),
+          ]}
+        />,
+      )
+      expect(segments()).toHaveLength(1)
+      expect(document.querySelector('[aria-hidden="true"].absolute')!.textContent).toBe('1account')
+    })
   })
 
-  test('one omission reads as singular', () => {
-    render(<AccountDonut accounts={[account({ latest_value: 500 }), account({ latest_value: null })]} />)
-    expect(screen.getByText('1 account with no recorded value is not shown.')).toBeTruthy()
-  })
-
-  test('nothing is said when nothing is missing', () => {
-    render(<AccountDonut accounts={[account({ latest_value: 500 })]} />)
-    expect(screen.queryByText(/not shown/)).toBeNull()
-  })
 
   describe('nothing to draw', () => {
     test('accounts recorded at zero produce a sentence, not a ring', () => {

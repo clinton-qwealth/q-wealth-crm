@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
 import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
-import { accountMoney, SECTION_HEADING, SHEET } from './ui'
+import { accountMoney, SECTION_HEADING, SHEET_SHADOW } from './ui'
 
 /**
  * How a group's investment value is split across its accounts.
@@ -111,7 +111,23 @@ const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
 
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
-  const { slices, total, missing, counted } = accountMix(accounts)
+  /*
+   * `missing` is deliberately not read.
+   *
+   * The line under the chart — "2 accounts with no recorded value are not
+   * shown" — was removed on instruction, 10 September. What that costs is
+   * small and worth writing down: the centre count says how many accounts the
+   * ring represents, and the list beside it prints "No value recorded" against
+   * each account it cannot draw, so an omission is still visible on screen —
+   * it is simply no longer summarised here. The wealth summary's own tooltip
+   * carries the same caveat for the figures in the page header.
+   *
+   * `accountMix` still computes and tests it, because a calculator describing
+   * its input completely is not the same as a component carrying an unused
+   * prop, and this is the first thing to reach for if the count discrepancy
+   * ever wants explaining again.
+   */
+  const { slices, total, counted } = accountMix(accounts)
 
   /**
    * Which segment the pointer is on, shared by the ring and the legend so
@@ -125,7 +141,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
       <Frame>
         <div className="flex flex-col items-center gap-3 px-3.5 py-4">
           <GhostRing />
-          <p className="text-xs leading-relaxed text-neutral-500">
+          <p className="text-xs leading-relaxed text-neutral-400">
             {accounts.length === 0
               ? 'Once this group holds investment accounts, their mix by value shows here.'
               : `No value has been recorded against ${
@@ -232,8 +248,8 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
           >
-            <span className="text-2xl font-semibold text-neutral-900">{counted}</span>
-            <span className="mt-0.5 text-[11px] text-neutral-500">
+            <span className="text-2xl font-semibold text-white">{counted}</span>
+            <span className="mt-0.5 text-[11px] text-neutral-400">
               {counted === 1 ? 'account' : 'accounts'}
             </span>
           </span>
@@ -251,7 +267,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive(null)}
                 className={`flex items-center gap-2 rounded px-1 py-1 text-xs transition-colors ${
-                  active === i ? 'bg-neutral-100' : ''
+                  active === i ? 'bg-white/10' : ''
                 }`}
               >
                 <span
@@ -259,8 +275,11 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                   className="size-2.5 shrink-0 rounded-sm"
                   style={{ background: RAMP[i] ?? RAMP[RAMP.length - 1] }}
                 />
-                <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
-                <span className="shrink-0 font-medium tabular-nums text-neutral-900">
+                {/* neutral-300 measures 12.7:1 on the ground and neutral-400
+                    7.5:1; neutral-500 would be 3.98:1, under the floor for text
+                    this small, so it is not used here. */}
+                <span className="min-w-0 flex-1 truncate text-neutral-300">{s.label}</span>
+                <span className="shrink-0 font-medium tabular-nums text-white">
                   {sharePct(s.share)}
                 </span>
               </div>
@@ -268,15 +287,6 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
           ))}
         </ul>
 
-        {missing > 0 ? (
-          /* The same rule the removed footer total carried: a chart that leaves
-             rows out says how many, every time. */
-          <p className="w-full text-[11px] leading-snug text-neutral-400">
-            {missing === 1
-              ? '1 account with no recorded value is not shown.'
-              : `${missing} accounts with no recorded value are not shown.`}
-          </p>
-        ) : null}
       </div>
     </Frame>
   )
@@ -313,8 +323,9 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
  * will fill it.
  *
  * Decorative, so `aria-hidden`: the sentence beneath carries the meaning, and
- * `neutral-200` on white is about 1.2:1, far under any text floor. That is the
- * same argument the loading skeleton's bars make.
+ * it measures about 1.21:1 against the dark ground — far under any text floor,
+ * which is the same argument the loading skeleton's bars make. It was
+ * `neutral-200` while the sheet was white and inverted with it.
  */
 function GhostRing() {
   const half = SIZE / 2
@@ -330,7 +341,10 @@ function GhostRing() {
           r={((INNER_RADIUS + OUTER_RADIUS) / 2) * half}
           fill="none"
           strokeWidth={(OUTER_RADIUS - INNER_RADIUS) * half}
-          className="stroke-neutral-200"
+          /* white/8 composites to about 1.21:1 against the ground — the same
+             whisper `neutral-200` was against white, so the silhouette reads
+             as absence rather than as a real ring. */
+          className="stroke-white/[0.08]"
           data-slot="ghost-ring"
         />
       </svg>
@@ -359,7 +373,16 @@ function Frame({ children }: { children: React.ReactNode }) {
       <div aria-hidden="true" className={`${SECTION_HEADING} invisible`}>
         &nbsp;
       </div>
-      <div className={SHEET}>{children}</div>
+      {/* A DARK sheet, which is the one place on this page that has one — see
+          the note in `globals.css`. Composed from `SHEET_SHADOW` rather than
+          `SHEET`, because `SHEET` bakes in `bg-white`; the hairline goes to
+          white/10 so the edge reads on a dark surface instead of ringing it in
+          light grey. */}
+      <div
+        className={`overflow-hidden rounded-lg border border-white/10 bg-mix-ground ${SHEET_SHADOW}`}
+      >
+        {children}
+      </div>
     </div>
   )
 }
