@@ -184,8 +184,8 @@ describe('the Accounts tab’s investment section', () => {
   /* The proportion itself, so a silent change to 55/45 fails rather than
      quietly re-laying both tabs. Changing it deliberately means changing this
      line, which is the intent. */
-  test('the split is 55 / 45, proportional, and shrinkable on both tracks', () => {
-    expect(TAB_SPLIT).toContain('lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]')
+  test('the split is 60 / 40, proportional, and shrinkable on both tracks', () => {
+    expect(TAB_SPLIT).toContain('lg:grid-cols-[minmax(0,12fr)_minmax(0,8fr)]')
     expect(TAB_SPLIT).toContain('grid-cols-1')
   })
 

@@ -161,8 +161,12 @@ export function Placeholder({ children, className = 'h-56' }: { children: string
  * Same reasoning as `SHEET`: a shared token means the two are literally the
  * same object, and nobody has to notice when one is changed.
  *
- * 11fr / 9fr — 55 / 45 — and **proportional rather than a fixed width**, so it
- * scales with the window. The Workflows column was first pinned to the board's
+ * 12fr / 8fr — 60 / 40 — and **proportional rather than a fixed width**, so it
+ * scales with the window. It was 11 / 9 for a day: the accounts rows turned out
+ * to be over budget in a 55% column — a name, a type, the owners, a currency
+ * figure and a trend badge — so it moved one point on 10 September, which is
+ * about 30px at 1440. Widening the constant widens BOTH tabs on purpose; the
+ * two were asked to match, and a card stack takes the extra room happily. The Workflows column was first pinned to the board's
  * card width so the same card was met at the same size on both screens; once it
  * was widened at the reader's request the width no longer matched the board, and
  * a fixed width had nothing left to match. `minmax(0,…)` on both tracks because
@@ -171,7 +175,7 @@ export function Placeholder({ children, className = 'h-56' }: { children: string
  *
  * Below `lg` it is one column and the reserved half drops beneath.
  */
-export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]'
+export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,12fr)_minmax(0,8fr)]'
 
 /**
  * The right half of a `TAB_SPLIT`, before anything has been decided for it.

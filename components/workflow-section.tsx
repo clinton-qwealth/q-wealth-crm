@@ -246,7 +246,7 @@ export function WorkflowSection({
         </p>
       ) : null}
 
-      {/* The cards take 55% of the tab and the reserved half 45%. The split
+      {/* The cards take 60% of the tab and the reserved half 40%. The split
           itself lives in `TAB_SPLIT` — the Accounts tab was asked for exactly
           the same one on 10 September, so the measurements and the reasoning
           moved there rather than being copied. There is no inner well around
