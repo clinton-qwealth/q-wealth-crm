@@ -30,6 +30,29 @@
   --gold-50: #fbf6e4;
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
+
+  /* The investment-mix ramp: violet, "innovator purple", asked for 10 Sep 2026.
+     ROLE-NAMED rather than colour-named, because the SEQUENCE is the meaning —
+     these six are one hue in descending intensity, so the largest share is the
+     strongest, and a reader reads the ring as amounts of the same thing. Six
+     different colours would imply six categories.
+
+     Violet because it is the only family on the group page with no job: green
+     is a live state, amber needs attention, red is the wrong direction, gold is
+     an investment tile, blue is insurance and brand orange is an action. A
+     chart ramp must not borrow any of those.
+
+     Steps are Tailwind's violet 900/700/500/400/300/200 as explicit hexes
+     rather than `var(--color-violet-*)`: Recharts takes a fill VALUE, and a
+     theme variable Tailwind has not been asked for by a utility may not be
+     emitted at all. Widest separation at the top, where the two segments a
+     reader actually compares live. */
+  --mix-1: #4c1d95;
+  --mix-2: #6d28d9;
+  --mix-3: #8b5cf6;
+  --mix-4: #a78bfa;
+  --mix-5: #c4b5fd;
+  --mix-6: #ddd6fe;
 }
 
 @theme inline {
@@ -47,6 +70,13 @@
   --color-gold-50: var(--gold-50);
   --color-gold-100: var(--gold-100);
   --color-gold-700: var(--gold-700);
+
+  --color-mix-1: var(--mix-1);
+  --color-mix-2: var(--mix-2);
+  --color-mix-3: var(--mix-3);
+  --color-mix-4: var(--mix-4);
+  --color-mix-5: var(--mix-5);
+  --color-mix-6: var(--mix-6);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

@@ -53,3 +53,37 @@ if (typeof Range !== 'undefined' && !Range.prototype.getClientRects) {
     return new DOMRect(0, 0, 0, 0)
   }
 }
+
+// jsdom leaves `window.matchMedia` as an ACCESSOR whose getter returns
+// undefined — so `'matchMedia' in window` is `true` while
+// `typeof window.matchMedia` is `'undefined'`. An `in` guard skips right past
+// it (which it did, twice), and a plain assignment is not guaranteed against a
+// property defined that way. Hence `typeof` to detect it and `defineProperty`
+// to replace it. `window === globalThis` here, so one definition covers both.
+//
+// The stub reports **prefers-reduced-motion: reduce**, and that is a deliberate
+// claim about this environment rather than a convenience. jsdom has no display
+// and no animation clock: `requestAnimationFrame`-driven work does not
+// progress, and a Recharts pie with its entry animation enabled renders **zero
+// sectors** — measured, not assumed. Declaring "this runtime does not do
+// motion" is both true and what makes the final geometry assertable.
+//
+// The cost is stated where it belongs: the animated path is exercised in a
+// browser or not at all, exactly like contrast. A test that cares about the
+// preference wiring overrides `matches` in both directions.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: /prefers-reduced-motion/.test(query),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}

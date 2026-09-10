@@ -1,3 +1,8 @@
+'use client'
+
+import { useState } from 'react'
+import { Cell, Pie, PieChart } from 'recharts'
+import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
 import { accountMoney, SHEET } from './ui'
 
 /**
@@ -8,18 +13,26 @@ import { accountMoney, SHEET } from './ui'
  * "what is each account worth"; this answers "which account is most of the
  * money", which a column of figures makes you compute in your head.
  *
- * ## Hand-written, not a charting dependency
+ * ## Recharts, and why it is not Chart.js
  *
- * One ring of arcs needs no library. `recharts` and `chart.js` are both larger
- * than this whole application's runtime dependency list, and this site has
- * written its own drag-and-drop and its own TOTP generator rather than import
- * them — the one single-feature dependency it has taken, TipTap, was taken
- * because a rich-text editor over `contenteditable` is a decade of edge cases.
- * A donut is `stroke-dasharray` on a circle.
+ * Asked for after weighing both. The deciding difference is what they draw
+ * onto: **Recharts renders SVG, Chart.js renders to `<canvas>`.** In this
+ * repository that is not a stylistic choice —
  *
- * `stroke-dasharray` rather than arc paths on purpose: no trigonometry, and the
- * degenerate cases fall out for free — one account is a whole ring rather than
- * a path with a zero-length sweep, which is where hand-rolled arc maths breaks.
+ * * jsdom implements no canvas at all (`getContext('2d')` returns null and
+ *   warns), so a canvas chart is **invisible to every test**. A donut that
+ *   fails silently — arcs that draw but sum to the wrong thing — is exactly
+ *   the shape of defect only a test catches.
+ * * A canvas has no DOM nodes, so there is no per-segment element to hover, to
+ *   name, or to give a `<title>`. Accessibility becomes one opaque rectangle.
+ *
+ * SVG keeps all of it. The cost of the library is real and recorded: it is the
+ * site's **second** single-feature dependency after TipTap, it pulls 35
+ * packages, and it forces this component to be a Client Component — the donut
+ * now ships to the browser and hydrates, where the hand-rolled version was
+ * rendered on the server. That was accepted for animation and hover, which the
+ * library gives for free and which are the reason it is here. It also honours
+ * `prefers-reduced-motion` on its own account, which is one less thing here.
  *
  * ## What it refuses to do
  *
@@ -28,88 +41,44 @@ import { accountMoney, SHEET } from './ui'
  * two of the five real accounts have never had one. A donut of "the group's
  * accounts" that silently dropped them would be the same defect the wealth
  * summary was designed around: a figure that looks complete, gets repeated in a
- * client conversation, and is wrong. So the count of what is missing sits under
- * the chart whenever any account is missing, and if NOTHING has a value there
- * is no chart at all — a sentence instead.
+ * client conversation, and is wrong.
  *
  * **The centre holds the account count, not the total.** The total was
  * deliberately taken off this tab on 10 September, and Total investments is
- * already in the page header — a third instance of the same number, in the one
- * place the eye lands hardest, is not an improvement.
+ * already in the page header.
  *
  * **The legend shows shares, not amounts.** Every amount is already in the row
- * immediately to the left. Repeating them would make a 200px column carry two
- * columns of currency and say nothing new; the share is the thing this view
- * adds.
+ * immediately to the left; the share is what this view adds.
+ *
+ * The arithmetic behind all of that lives in `lib/account-mix.ts`, pure and
+ * tested without a renderer — because Recharts owns the arc geometry now, so it
+ * is no longer inspectable in the DOM the way `stroke-dasharray` was.
  */
-export type DonutAccount = {
-  account_id: string
-  label: string
-  latest_value: string | number | null
-}
+export type DonutAccount = MixAccount
 
-/**
- * Violet, most-valuable first, and monotonically lighter.
- *
- * Asked for as "innovator purple". Deliberately a **sequential ramp of one
- * hue** rather than six different colours: these segments are the same kind of
- * thing in different amounts, and a rainbow would imply categories. It also
- * keeps the chart clear of every colour that already means something here —
- * green is a live state, amber needs attention, red is the wrong direction,
- * gold is an investment tile and blue is insurance. Violet is the only family
- * on the page with no job yet.
- *
- * Tailwind's own violet scale rather than a new token: this is a trial, and
- * `--gold-*` exists because amber was semantically taken, which is not the case
- * here. **If it ships, promote it to named tokens in `globals.css`** so the
- * ramp is one decision rather than six literals.
- *
- * Steps 900 → 300 rather than 800 → 300: the two largest segments are the ones
- * a reader compares, so they get the widest separation.
- */
+/** The ramp, as tokens. See the note in `globals.css` for why role-named. */
 const RAMP = [
-  'text-violet-900',
-  'text-violet-700',
-  'text-violet-500',
-  'text-violet-400',
-  'text-violet-300',
-  'text-violet-200',
+  'var(--mix-1)',
+  'var(--mix-2)',
+  'var(--mix-3)',
+  'var(--mix-4)',
+  'var(--mix-5)',
+  'var(--mix-6)',
 ] as const
 
-/** How many accounts get their own segment before the tail is grouped. */
-const SLICES = RAMP.length
-
-const R = 40
-const STROKE = 16
-const C = 2 * Math.PI * R
-/** Separator between segments, in the same units as the circumference. */
-const GAP = 2
-
-type Slice = {
-  key: string
-  label: string
-  value: number
-  share: number
-  tone: string
-  /** Dash length drawn, and where the arc starts, both in circumference units. */
-  dash: number
-  start: number
-}
+const SIZE = 128
 
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
-  const valued = accounts
-    .filter((a) => a.latest_value != null)
-    .map((a) => ({ key: a.account_id, label: a.label, value: Number(a.latest_value) }))
-    .filter((a) => Number.isFinite(a.value) && a.value > 0)
-    .sort((a, b) => b.value - a.value)
+  const { slices, total, missing, counted } = accountMix(accounts)
 
-  const missing = accounts.length - valued.length
-  const total = valued.reduce((sum, a) => sum + a.value, 0)
+  /**
+   * Which segment the pointer is on, shared by the ring and the legend so
+   * hovering either highlights both. `null` is "nothing hovered", which is not
+   * the same as index 0 — hence a nullable number rather than a -1 sentinel.
+   */
+  const [active, setActive] = useState<number | null>(null)
 
-  /* No chart rather than an empty ring. `total > 0` is the real guard: every
-     share is a division by it, and an account recorded at exactly zero is a
-     valued account that cannot be drawn. */
-  if (!valued.length || total <= 0) {
+  if (!slices.length) {
     return (
       <Frame>
         <p className="px-3.5 py-4 text-xs leading-relaxed text-neutral-500">
@@ -123,92 +92,118 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
     )
   }
 
-  /* More accounts than the ramp has steps: the tail becomes one segment rather
-     than two accounts sharing a colour, which would make the legend a lie. */
-  const head = valued.slice(0, valued.length > SLICES ? SLICES - 1 : SLICES)
-  const tail = valued.slice(head.length)
-  const grouped = tail.length
-    ? [...head, { key: 'other', label: `${tail.length} smaller accounts`, value: tail.reduce((s, a) => s + a.value, 0) }]
-    : head
-
-  /*
-   * Geometry is computed here, not while rendering.
-   *
-   * The first version accumulated the offset with `offset += len` inside the
-   * JSX `map`, which the React compiler's lint refuses — and rightly: mutating
-   * a variable during render is exactly the thing that breaks when a component
-   * is re-run or re-ordered. A running total belongs in a fold before the
-   * markup, where it is a value rather than a side effect.
-   */
-  const slices: Slice[] = grouped.reduce<Slice[]>((acc, a, i) => {
-    const share = a.value / total
-    const len = share * C
-    /* Only inset a gap where the segment can afford one, so a sliver stays
-       visible instead of being eaten by its own separator. A lone segment is a
-       closed ring and takes no gap at all. */
-    const inset = grouped.length > 1 && len > GAP * 2 ? GAP : 0
-    acc.push({
-      ...a,
-      share,
-      tone: RAMP[i] ?? RAMP[RAMP.length - 1],
-      dash: Math.max(len - inset, 0.4),
-      start: acc.reduce((sum, s) => sum + s.share * C, 0),
-    })
-    return acc
-  }, [])
   return (
     <Frame>
       <div className="flex flex-col items-center gap-3 px-3.5 py-4">
-        <svg viewBox="0 0 100 100" role="img" aria-label={ariaLabel(slices, total)} className="h-32 w-32">
-          {/* -90° so the largest segment starts at twelve o'clock, where a
-              reader looks first, and the ring fills clockwise. */}
-          <g transform="rotate(-90 50 50)" fill="none" strokeWidth={STROKE}>
-            {slices.map((s) => (
-              <circle
-                key={s.key}
-                cx="50"
-                cy="50"
-                r={R}
-                className={`stroke-current ${s.tone}`}
-                strokeDasharray={`${s.dash} ${C - s.dash}`}
-                strokeDashoffset={-s.start}
-              >
-                <title>{`${s.label} — ${accountMoney.format(s.value)}, ${pct(s.share)}`}</title>
-              </circle>
-            ))}
-          </g>
-          {/* The count, not the money — see the note at the top. */}
-          <text
-            x="50"
-            y="50"
-            textAnchor="middle"
-            className="fill-neutral-900 text-[15px] font-semibold"
-            style={{ fontSize: 15 }}
-            dy="1"
-          >
-            {valued.length}
-          </text>
-          <text
-            x="50"
-            y="50"
-            textAnchor="middle"
-            className="fill-neutral-500"
-            style={{ fontSize: 7 }}
-            dy="11"
-          >
-            {valued.length === 1 ? 'account' : 'accounts'}
-          </text>
-        </svg>
+        <div
+          role="img"
+          aria-label={ariaLabel(slices.map((s) => `${s.label} ${sharePct(s.share)}`), total)}
+          className="relative"
+          style={{ width: SIZE, height: SIZE }}
+        >
+          {/* A fixed size rather than ResponsiveContainer: the ring is a
+              128px square in a fluid column, and ResponsiveContainer measures
+              its parent — which in jsdom has no layout, so it would render at
+              zero and every test below would assert against nothing. */}
+          <PieChart width={SIZE} height={SIZE}>
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="label"
+              cx="50%"
+              cy="50%"
+              innerRadius={40}
+              outerRadius={62}
+              /* The separator between segments. Recharts' own, so it scales
+                 with each arc instead of being subtracted from it — which is
+                 what used to threaten to eat a sliver whole. */
+              paddingAngle={slices.length > 1 ? 2 : 0}
+              stroke="none"
+              /* Starts at twelve o'clock and fills clockwise, so the largest
+                 share is where a reader looks first. */
+              startAngle={90}
+              endAngle={-270}
+              /*
+               * `"auto"`, NOT `true`, and the difference is the whole point.
+               *
+               * Recharts consults `prefers-reduced-motion` only for `"auto"` —
+               * `JavascriptAnimate` resolves `isActiveProp === 'auto' ? !isSsr
+               * && !prefersReducedMotion : isActiveProp`, so a bare
+               * `isAnimationActive` (which is `true`) animates for a reader who
+               * asked not to be animated at. This was written as `true` first
+               * and caught by a test.
+               *
+               * `"auto"` is also Pie's own default, so this is stating the
+               * default rather than changing it — deliberately, because the
+               * value carries a decision that a missing prop would hide. With
+               * it, the library reads the query SSR-safely and subscribes to
+               * changes, which is more than a hand-rolled read here did.
+               */
+              isAnimationActive="auto"
+              animationDuration={650}
+              onMouseEnter={(_, index: number) => setActive(index)}
+              onMouseLeave={() => setActive(null)}
+            >
+              {slices.map((s, i) => (
+                <Cell
+                  key={s.key}
+                  fill={RAMP[i] ?? RAMP[RAMP.length - 1]}
+                  /* Dim the rest rather than move the hovered one: a segment
+                     that pops outward changes the ring's silhouette, and the
+                     thing being compared here is angle, not position. */
+                  fillOpacity={active === null || active === i ? 1 : 0.4}
+                  /* `Cell` merges a className onto the sector — verified — so
+                     the fade is CSS and `motion-reduce:` reaches it, the same
+                     idiom the loading skeleton and the modals use. That is why
+                     no JavaScript here reads the preference at all. */
+                  className="transition-[fill-opacity] duration-150 motion-reduce:transition-none"
+                  /* Hoverable, and named for anything reading the tree. */
+                  data-slot="segment"
+                  data-label={s.label}
+                />
+              ))}
+            </Pie>
+          </PieChart>
 
-        <ul className="flex w-full flex-col gap-1.5">
-          {slices.map((s) => (
-            <li key={s.key} className="flex items-center gap-2 text-xs">
-              <span
-                aria-hidden="true"
-                className={`size-2.5 shrink-0 rounded-sm bg-current ${s.tone}`}
-              />
-              <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
-              <span className="shrink-0 tabular-nums font-medium text-neutral-900">{pct(s.share)}</span>
+          {/* The count, centred over the ring. Absolutely positioned rather
+              than an SVG <text>: Recharts owns the svg's contents, and a label
+              inside it would be re-created on every animation frame. */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
+          >
+            <span className="text-[15px] font-semibold text-neutral-900">{counted}</span>
+            <span className="mt-0.5 text-[10px] text-neutral-500">
+              {counted === 1 ? 'account' : 'accounts'}
+            </span>
+          </span>
+        </div>
+
+        <ul className="flex w-full flex-col gap-0.5">
+          {slices.map((s, i) => (
+            <li key={s.key}>
+              {/* The legend is the other half of the hover: pointing at a row
+                  highlights its segment, and vice versa. A div rather than a
+                  button — there is nothing to activate, only to point at. */}
+              <div
+                data-slot="legend-row"
+                data-active={active === i ? 'true' : 'false'}
+                onMouseEnter={() => setActive(i)}
+                onMouseLeave={() => setActive(null)}
+                className={`flex items-center gap-2 rounded px-1 py-1 text-xs transition-colors ${
+                  active === i ? 'bg-neutral-100' : ''
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 shrink-0 rounded-sm"
+                  style={{ background: RAMP[i] ?? RAMP[RAMP.length - 1] }}
+                />
+                <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
+                <span className="shrink-0 font-medium tabular-nums text-neutral-900">
+                  {sharePct(s.share)}
+                </span>
+              </div>
             </li>
           ))}
         </ul>
@@ -240,18 +235,10 @@ function Frame({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Whole percents, and never a bare "0%" for a segment that is really there. */
-function pct(share: number) {
-  const whole = Math.round(share * 100)
-  return whole === 0 ? '<1%' : `${whole}%`
-}
-
 /**
  * The chart's text equivalent. Colour carries the mapping on screen, so the
- * whole ring needs saying in words — the per-segment `<title>` is a hover
- * affordance, not a substitute.
+ * whole ring needs saying in words — a hover tooltip is not a substitute.
  */
-function ariaLabel(slices: Slice[], total: number) {
-  const parts = slices.map((s) => `${s.label} ${pct(s.share)}`).join(', ')
-  return `Investment mix by value, ${accountMoney.format(total)} in total: ${parts}`
+function ariaLabel(parts: string[], total: number) {
+  return `Investment mix by value, ${accountMoney.format(total)} in total: ${parts.join(', ')}`
 }
