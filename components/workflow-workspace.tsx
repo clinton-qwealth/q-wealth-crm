@@ -7,6 +7,7 @@ import { WorkflowState } from './workflow-state'
 import { WorkflowDetails } from './workflow-details'
 import { WorkflowTasks } from './workflow-tasks'
 import { WorkflowNotes } from './workflow-notes'
+import { AddNoteModal } from './add-note-modal'
 
 const SPAN: Record<3 | 4 | 5, string> = {
   3: 'lg:col-span-3',
@@ -62,6 +63,41 @@ export function WorkflowWorkspace({
   /** The signed-in staff member — the author of anything posted from here. */
   viewer: { id: string; name: string; email: string; canRemoveAnyImage: boolean }
 }) {
+  /**
+   * Add file note, from the workflow's own page.
+   *
+   * **The workflow is the only option the select offers, and it is
+   * pre-selected.** A note added from this tab that was not filed under this
+   * workflow would save and then not appear in the list it was added from,
+   * which reads as a broken button. Offering the group's OTHER workflows here
+   * would mean a second query for a choice nobody makes on this screen — you
+   * are on this workflow's page — so the list is this one plus "Not part of a
+   * workflow", which is the opt-out and is worth keeping.
+   *
+   * `WorkflowDetail` already carries everything a `WorkflowOption` needs, so
+   * this costs nothing.
+   *
+   * **Not offered on finished work, and that is the point of the guard.** A
+   * complete or cancelled workflow cannot take a new note — filing one would
+   * quietly reopen closed work, which the modal already refuses by filtering it
+   * out of the select. But refusing it there just means the note is filed under
+   * NOTHING and never appears in the list it was added from. So the button goes
+   * instead of misleading: no control is better than one that saves something
+   * and then does not show it.
+   */
+  const takesNotes = w.status !== 'complete' && w.status !== 'cancelled'
+  const addNote = (variant: 'quiet' | 'primary') =>
+    takesNotes ? (
+      <AddNoteModal
+        groupId={w.group_id}
+        workflows={[
+          { id: w.id, name: w.name, workflow_type: w.workflow_type, status: w.status },
+        ]}
+        defaultWorkflowId={w.id}
+        triggerVariant={variant}
+      />
+    ) : undefined
+
   return (
     <>
       {/* Left — what the workflow is, headed by its name.
@@ -142,7 +178,13 @@ export function WorkflowWorkspace({
             {
               id: 'notes',
               label: 'File Notes',
-              panel: <WorkflowNotes notes={notes} />,
+              panel: (
+                <WorkflowNotes
+                  notes={notes}
+                  action={addNote('quiet')}
+                  emptyAction={addNote('primary')}
+                />
+              ),
             },
             {
               id: 'history',

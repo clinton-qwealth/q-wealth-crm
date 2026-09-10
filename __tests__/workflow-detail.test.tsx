@@ -25,6 +25,9 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   setWorkflowTaskStatus: vi.fn(async () => ({ ok: true as const })),
   setWorkflowTaskPriority: vi.fn(async () => ({ ok: true as const })),
   saveWorkflowTaskDetails: vi.fn(async () => ({ ok: true as const })),
+  /* The File Notes tab's Add file note modal carries this one, as of
+     10 September — the right column gained a real action. */
+  createFileNote: vi.fn(async () => ({ ok: true as const })),
 }))
 vi.mock('next/navigation', () => ({
   notFound: () => { throw NOT_FOUND },
@@ -232,6 +235,43 @@ describe('the workflow detail page', () => {
     const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
     expect(tabs).toEqual(['File Notes', 'Activity History'])
     expect(screen.getByRole('tab', { name: 'File Notes' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  /**
+   * The section's one action, wired from the page rather than built inside the
+   * panel — the panel stays a pure render because the modal carries a server
+   * action.
+   */
+  test('the File Notes tab offers Add file note, and the modal knows the workflow', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(screen.getByRole('button', { name: /add file note/i }))
+
+    /* Pre-selected, which is the point: a note added from this tab and NOT
+       filed under this workflow would save and then not appear in the list it
+       was added from. */
+    const select = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Workflow' })
+    expect(select.value).toBe('w1')
+    expect([...select.options].map((o) => o.textContent)).toEqual([
+      'Not part of a workflow',
+      'Annual review 2026',
+    ])
+  })
+
+  /**
+   * **Withheld on finished work.** A complete or cancelled workflow cannot take
+   * a new note, and the modal would file it under nothing — so the note would
+   * save and never appear in the list it was added from. No control beats one
+   * that misleads.
+   */
+  test('a completed workflow offers no Add file note at all', () => {
+    show({ ...card, status: 'complete' })
+    expect(screen.queryByRole('button', { name: /add file note/i })).toBeNull()
+  })
+
+  test('a cancelled workflow is treated the same way', () => {
+    show({ ...card, status: 'cancelled' })
+    expect(screen.queryByRole('button', { name: /add file note/i })).toBeNull()
   })
 
   /**

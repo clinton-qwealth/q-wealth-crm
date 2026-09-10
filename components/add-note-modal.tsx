@@ -40,10 +40,27 @@ function todayLocal() {
 export function AddNoteModal({
   groupId,
   workflows,
+  defaultWorkflowId,
   triggerVariant = 'primary',
 }: {
   groupId: string
   workflows: WorkflowOption[]
+  /**
+   * Which workflow the note is filed under before anybody touches the select.
+   *
+   * **Added for the workflow detail page's File Notes tab, and it is not a
+   * convenience.** A note added from that tab and NOT filed under that workflow
+   * would save successfully and then not appear in the list it was added from —
+   * which reads as a broken button rather than as a note filed elsewhere.
+   *
+   * It cannot pre-select something the select does not offer — a finished
+   * workflow cannot take a new note and is filtered out of the options, and a
+   * select ignores a value matching no option. The page that passes this
+   * withholds the whole button on finished work for the same reason: refusing
+   * the workflow here would file the note under nothing, and it would never
+   * appear in the list it was added from.
+   */
+  defaultWorkflowId?: string
   triggerVariant?: 'primary' | 'quiet'
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -82,6 +99,7 @@ export function AddNoteModal({
   const openWorkflows = workflows.filter(
     (w) => w.status !== 'complete' && w.status !== 'cancelled',
   )
+
 
   const trigger =
     triggerVariant === 'primary' ? (
@@ -164,7 +182,23 @@ export function AddNoteModal({
             {openWorkflows.length ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Workflow</span>
-                <select name="workflow_id" defaultValue="" className={FIELD}>
+                {/* `defaultValue` is passed straight through. It cannot select a
+                    workflow the list does not offer: the options are already
+                    filtered to open work above, and a DOM select ignores a
+                    value matching no option — leaving "Not part of a workflow"
+                    selected, which is the right answer for finished work.
+
+                    A guard here that re-checked the default against
+                    `openWorkflows` was written first and removed the same day:
+                    it changed the outcome in no case, and a branch that cannot
+                    be made to fail is not a safeguard. What actually holds the
+                    rule is the filter above, and a test asserts a finished
+                    workflow is dropped from the options. */}
+                <select
+                  name="workflow_id"
+                  defaultValue={defaultWorkflowId ?? ''}
+                  className={FIELD}
+                >
                   <option value="">Not part of a workflow</option>
                   {openWorkflows.map((w) => (
                     <option key={w.id} value={w.id}>

@@ -86,7 +86,47 @@ describe('the workflow’s file notes tab', () => {
     render(<WorkflowNotes notes={[]} />)
     expect(screen.queryByRole('list')).toBeNull()
     expect(screen.getByText(/No file notes filed here yet/)).toBeTruthy()
-    expect(document.body.textContent).toMatch(/group’s own file notes list/)
-    expect(document.body.textContent).toMatch(/Add to workflow/)
+    // Both routes: written here, or filed from the group's own list.
+    expect(document.body.textContent).toMatch(/filed under this workflow/)
+    expect(document.body.textContent).toMatch(/Add to\s+workflow/)
+  })
+
+  /**
+   * The action sits at the right of the header row, opposite the count — the
+   * same header shape `DataSection` gives every other list on the site.
+   */
+  test('the header carries its action on the right, opposite the count', () => {
+    render(<WorkflowNotes notes={[note()]} action={<button type="button">Add file note</button>} />)
+    const count = screen.getByText('1 note')
+    const row = count.parentElement!
+    expect(row.className).toContain('justify-between')
+    expect(within(row).getByRole('button', { name: 'Add file note' })).toBeTruthy()
+
+    // Above the sheet, not inside it — the list holds records, not controls.
+    expect(within(screen.getByRole('list')).queryByRole('button', { name: 'Add file note' })).toBeNull()
+  })
+
+  /**
+   * An empty section's only action is the one that fills it, so it takes the
+   * prominent variant rather than the quiet one — `DataSection`'s own rule,
+   * and the reason this takes two slots rather than one.
+   */
+  test('an empty tab offers its own action, so the section is never a dead end', () => {
+    render(
+      <WorkflowNotes
+        notes={[]}
+        action={<button type="button">quiet</button>}
+        emptyAction={<button type="button">Add file note</button>}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Add file note' })).toBeTruthy()
+    // The quiet one belongs to a header that is not rendered when empty.
+    expect(screen.queryByRole('button', { name: 'quiet' })).toBeNull()
+  })
+
+  test('with no action passed the section still renders, just without one', () => {
+    render(<WorkflowNotes notes={[note()]} />)
+    expect(screen.getByRole('list')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /add file note/i })).toBeNull()
   })
 })
