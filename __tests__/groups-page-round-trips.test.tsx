@@ -87,13 +87,17 @@ vi.mock('@/lib/staff', () => ({
   }),
 }))
 
-const { default: GroupsPage } = await import('@/app/(shell)/groups/page')
+const { default: GroupDetailPage } = await import('@/app/(shell)/groups/[id]/page')
+const { default: GroupsIndexPage } = await import('@/app/(shell)/groups/page')
 
-describe('/groups round-trip depth', () => {
+describe('/groups/[id] round-trip depth', () => {
   test('the page fetches in a shallow chain, not one call after another', async () => {
     calls.length = 0
     const started = Date.now()
-    await GroupsPage({ searchParams: Promise.resolve({ id: 'g1' }) })
+    /* `params`, not `searchParams`: the id became a path segment on
+       10 September when /groups became the index and the detail page moved
+       under it. */
+    await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) })
     const depth = Math.round((Date.now() - started) / LATENCY)
 
     /* Measured with this same harness: 15 round trips either way, but a depth
@@ -107,5 +111,21 @@ describe('/groups round-trip depth', () => {
     expect(calls).toContain('group_notes_summary')
     expect(calls).toContain('workflow_board')
     expect(depth).toBeLessThanOrEqual(5)
+  })
+})
+
+/**
+ * The index is empty, and "empty" includes making no queries.
+ *
+ * Worth pinning rather than assuming: the obvious next commit adds a group list
+ * to this page, and the obvious way to get it wrong is to fetch the groups one
+ * per row, or to fetch them here AND again in the detail page. This asserts the
+ * starting point so the first query added is a deliberate one.
+ */
+describe('/groups index', () => {
+  test('the empty index reaches the database not at all', async () => {
+    calls.length = 0
+    await GroupsIndexPage()
+    expect(calls).toEqual([])
   })
 })

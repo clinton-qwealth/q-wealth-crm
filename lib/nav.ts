@@ -11,6 +11,11 @@
  */
 export const NAV_ITEMS = [
   { href: '/', label: 'Home' },
+  /* Groups joined the bar on 10 September, ahead of Workflows. The page had
+     existed since July and NOTHING LINKED TO IT — no href anywhere in the app
+     pointed at /groups, so the largest page in the product was reachable only
+     by typing the URL. */
+  { href: '/groups', label: 'Groups' },
   { href: '/workflows', label: 'Workflows' },
   { href: '/reports', label: 'Reports' },
 ] as const

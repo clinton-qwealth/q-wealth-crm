@@ -17,6 +17,7 @@ describe('isCurrentNavItem', () => {
     expect(isCurrentNavItem('/workflows', '/')).toBe(false)
     expect(isCurrentNavItem('/reports', '/')).toBe(false)
     expect(isCurrentNavItem('/groups', '/')).toBe(false)
+    expect(isCurrentNavItem('/help', '/')).toBe(false)
   })
 
   test('a destination matches its own page', () => {
@@ -44,17 +45,33 @@ describe('isCurrentNavItem', () => {
     expect(isCurrentNavItem('/reports-archive', '/reports')).toBe(false)
   })
 
+  /* /groups is IN the bar since 10 September, so it is no longer an example of
+     a page outside it. Help and the account pages are. */
   test('a page that is not a nav destination lights nothing', () => {
     for (const { href } of NAV_ITEMS) {
-      expect(isCurrentNavItem('/groups', href)).toBe(false)
       expect(isCurrentNavItem('/help', href)).toBe(false)
       expect(isCurrentNavItem('/profile', href)).toBe(false)
+      expect(isCurrentNavItem('/preferences', href)).toBe(false)
     }
+  })
+
+  /**
+   * Groups has a child route as of 10 September: /groups is the index and
+   * /groups/[id] is a group's file. So the same rule that keeps Workflows lit
+   * on a workflow has to keep Groups lit on a group.
+   */
+  test('Groups stays lit on a group’s own page', () => {
+    expect(isCurrentNavItem('/groups', '/groups')).toBe(true)
+    expect(isCurrentNavItem('/groups/abc-1', '/groups')).toBe(true)
+    expect(isCurrentNavItem('/groups/abc-1', '/workflows')).toBe(false)
+    expect(isCurrentNavItem('/groups/abc-1', '/')).toBe(false)
   })
 
   /** Exactly one, at every route the bar is rendered on. */
   test('no path lights two destinations at once', () => {
-    for (const pathname of ['/', '/workflows', '/workflows/abc-1', '/reports']) {
+    for (const pathname of [
+      '/', '/groups', '/groups/abc-1', '/workflows', '/workflows/abc-1', '/reports',
+    ]) {
       const lit = NAV_ITEMS.filter(({ href }) => isCurrentNavItem(pathname, href))
       expect(lit).toHaveLength(1)
     }

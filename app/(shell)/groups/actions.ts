@@ -21,6 +21,23 @@ import {
 } from '@/lib/workflow-board'
 import type { WorkflowStatus } from '@/lib/notes'
 
+/**
+ * The group detail page's route, for revalidation.
+ *
+ * **`'page'` is not optional here.** The detail page moved from `/groups?id=`
+ * to `/groups/[id]` on 10 September, and `revalidatePath` REQUIRES the type
+ * argument once the path carries a dynamic segment — without it the call does
+ * not match the cache entry and every write to a group would appear to succeed
+ * while the screen kept showing the old figures.
+ *
+ * A route pattern rather than `/groups/${id}` because these actions change
+ * things reachable from more than one group's page — an account has owners, a
+ * note can name several parties — and refreshing every group's file is the
+ * cheap, correct answer at this size. It is also why the literal string is
+ * written once here instead of fifteen times.
+ */
+const GROUP_PAGE = '/groups/[id]' as const
+
 export type CreateAccountState = { error: string } | { ok: true } | null
 
 /**
@@ -76,7 +93,7 @@ export async function createAccount(
 
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -156,7 +173,7 @@ export async function createPolicy(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -229,7 +246,7 @@ export async function createMember(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -251,7 +268,7 @@ export async function linkMember(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -420,7 +437,7 @@ export async function patchMember(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -503,7 +520,7 @@ export async function startVerification(partyId: string, groupId: string | null)
 export async function checkVerification(id: string, code: string): Promise<VerifyOutcome> {
   const body = await callVerify('/check', { verification_id: id, code })
   if ('error' in body) return { error: body.error as string }
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true, passed: body.passed as boolean, outcome_source: body.outcome_source as string }
 }
 
@@ -511,14 +528,14 @@ export async function checkVerification(id: string, code: string): Promise<Verif
 export async function attestVerification(id: string, passed: boolean): Promise<VerifyOutcome> {
   const body = await callVerify('/attest', { verification_id: id, passed })
   if ('error' in body) return { error: body.error as string }
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true, passed: body.passed as boolean, outcome_source: body.outcome_source as string }
 }
 
 export async function abandonVerification(id: string, reason?: string) {
   const body = await callVerify('/abandon', { verification_id: id, status: 'cancelled', reason })
   if ('error' in body) return { error: body.error as string }
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true as const }
 }
 
@@ -578,7 +595,7 @@ export async function createFileNote(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -608,7 +625,7 @@ export async function startWorkflow(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   /* The board lists every workflow, so one started from either screen belongs
      on it — without this, a new workflow reached the board only on a reload. */
   revalidatePath('/workflows')
@@ -636,7 +653,7 @@ export async function attachNoteToWorkflow(
   })
   if (error) return { error: error.message }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -678,7 +695,7 @@ export async function fileNoteUnderNewWorkflow(
     return { error: `The workflow was created, but the note could not be filed under it: ${attachError.message}` }
   }
 
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   revalidatePath('/workflows')
   return { ok: true }
 }
@@ -711,7 +728,7 @@ export async function setWorkflowStatus(id: string, status: WorkflowStatus): Pro
   /* The workflow's own page, by path: a change made there must not leave a
      stale server render behind the optimistic one. */
   revalidatePath(`/workflows/${id}`)
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -731,7 +748,7 @@ export async function setWorkflowPriority(id: string, priority: Priority): Promi
   if (error) return { error: error.message }
   revalidatePath('/workflows')
   revalidatePath(`/workflows/${id}`)
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 
@@ -761,7 +778,7 @@ export async function saveWorkflowDetails(
 
   revalidatePath('/workflows')
   revalidatePath(`/workflows/${id}`)
-  revalidatePath('/groups')
+  revalidatePath(GROUP_PAGE, 'page')
   return { ok: true }
 }
 

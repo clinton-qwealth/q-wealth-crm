@@ -28,16 +28,34 @@ describe('the top nav marks where you are', () => {
     PATHNAME = '/'
   })
 
-  test('the three destinations are links, named exactly as the bar reads', () => {
+  test('the destinations are links, named exactly as the bar reads', () => {
     at('/')
     /* Exact names, because the e2e suite looks these up by accessible name. A
        visually-hidden "(current page)" inside the link would change the name
        and break it — which is why the current item is marked with
        `aria-current` and nothing else. */
     expect(link('Home')).toBeTruthy()
+    expect(link('Groups')).toBeTruthy()
     expect(link('Workflows')).toBeTruthy()
     expect(link('Reports')).toBeTruthy()
-    expect(screen.getAllByRole('link')).toHaveLength(3)
+    expect(screen.getAllByRole('link')).toHaveLength(4)
+  })
+
+  /* Groups sits between Home and Workflows, which is where it was asked for. */
+  test('Groups comes before Workflows in the bar', () => {
+    const nav = at('/')
+    const labels = Array.from(nav.querySelectorAll('a')).map((a) => a.textContent)
+    expect(labels).toEqual(['Home', 'Groups', 'Workflows', 'Reports'])
+  })
+
+  test('the Groups index marks Groups', () => {
+    at('/groups')
+    expect(current()).toEqual(['Groups'])
+  })
+
+  test('a group’s own page keeps Groups marked', () => {
+    at('/groups/abc-1')
+    expect(current()).toEqual(['Groups'])
   })
 
   test('the page you are on is the one marked, and only it', () => {
@@ -59,7 +77,7 @@ describe('the top nav marks where you are', () => {
   })
 
   test('a page outside the nav marks nothing', () => {
-    at('/groups')
+    at('/help')
     expect(current()).toEqual([])
   })
 
@@ -92,7 +110,7 @@ describe('the top nav marks where you are', () => {
 
   test('every link keeps the standard focus ring, marked or not', () => {
     at('/workflows')
-    for (const name of ['Home', 'Workflows', 'Reports']) {
+    for (const name of ['Home', 'Groups', 'Workflows', 'Reports']) {
       expect(link(name).className).toContain('focus-visible:ring-brand/30')
     }
   })

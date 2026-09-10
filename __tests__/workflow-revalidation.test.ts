@@ -31,6 +31,9 @@ const {
 )
 
 const paths = () => vi.mocked(revalidatePath).mock.calls.map((c) => c[0])
+/* The path AND its type. A dynamic route needs `'page'` or the call matches no
+   cache entry, so asserting the path alone would pass on a broken call. */
+const calls = () => vi.mocked(revalidatePath).mock.calls.map((c) => `${c[0]}|${c[1] ?? ''}`)
 
 const form = (entries: Record<string, string>) => {
   const fd = new FormData()
@@ -83,12 +86,33 @@ describe('a write revalidates every screen that shows it', () => {
   /**
    * The board lists every workflow across every group, so a workflow started
    * from either screen belongs on it. Until this was fixed, `startWorkflow`
-   * revalidated `/groups` alone and a new card reached the board only on a
+   * revalidated the group page alone and a new card reached the board only on a
    * reload.
+   *
+   * The group page is `/groups/[id]` since 10 September, when /groups became
+   * the index and the detail page moved under it.
    */
   test('starting a workflow refreshes both the group page and the board', async () => {
     await startWorkflow(null, form({ group_id: 'g1', name: 'Annual review 2027' }))
-    expect(paths()).toContain('/groups')
+    expect(paths()).toContain('/groups/[id]')
     expect(paths()).toContain('/workflows')
+  })
+
+  /**
+   * **A dynamic route must be revalidated WITH its type**, and this is the
+   * assertion that says so.
+   *
+   * `revalidatePath('/groups/[id]')` on its own matches no cache entry, so
+   * every write to a group would report success while the page kept showing
+   * the old figures — a silent staleness that no other test here would catch,
+   * because they all only look at the path. The literal `/groups` would fail
+   * the same way now: it is the index, which shows none of this.
+   */
+  test('the group page is revalidated as a route PATTERN, with its type', async () => {
+    await startWorkflow(null, form({ group_id: 'g1', name: 'Annual review 2027' }))
+    expect(calls()).toContain('/groups/[id]|page')
+    // Not the index, and not the pattern without its type.
+    expect(paths()).not.toContain('/groups')
+    expect(calls()).not.toContain('/groups/[id]|')
   })
 })
