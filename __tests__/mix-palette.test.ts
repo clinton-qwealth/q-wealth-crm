@@ -60,6 +60,13 @@ const contrast = (a: string, b: string) => {
  * existed for a few hours on 10 September while a dark surface was tried, and
  * went with it — the third dark surface this page has rejected.
  */
+/** Saturation, 0–1, as HSV — how far the colour is from grey. */
+const saturation = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const max = Math.max(r, g, b)
+  return max === 0 ? 0 : (max - Math.min(r, g, b)) / max
+}
+
 /** Hue in degrees, 0 = red. */
 const hue = (hex: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
@@ -71,76 +78,90 @@ const hue = (hex: string) => {
 }
 
 const GROUND = '#ffffff'
-const UI = readFileSync(resolve(process.cwd(), 'components/ui.tsx'), 'utf8')
+const RAMP = [1, 2, 3, 4].map((n) => token(`mix-${n}`))
 
-/**
- * Just `AccountTypeTile`'s own source, not the whole file.
- *
- * Scoped because the first version of these assertions searched all of
- * `ui.tsx` for `text-emerald-700` — and passed off the **success pill** on
- * another line entirely, so recolouring the tile to teal broke nothing. Found
- * by mutation; the lesson is that `toContain` against a whole module is a
- * search, not an assertion.
- */
-const TILE = (() => {
-  const start = UI.indexOf('export function AccountTypeTile')
-  if (start < 0) throw new Error('AccountTypeTile is gone from ui.tsx')
-  return UI.slice(start, UI.indexOf('\n}', start))
-})()
-
-/** The two arcs, keyed by account type — see `globals.css`. */
-const SUPER = token('mix-superannuation')
-/** Investment points at the existing gold token, so resolve one more hop. */
-const INVESTMENT = token('gold-700')
-
-describe('the mix arcs wear the tiles’ own colours', () => {
+describe('the investment-mix ramp', () => {
   /**
-   * The point of grouping by account type. The list beside the ring paints an
-   * emerald shield for superannuation and a gold rising line for investment;
-   * a per-account ring gave the same account a third, unrelated colour
-   * eighteen pixels away. These assertions are what keep the two in step.
+   * One hue, stepped — chosen on sight from six treatments drawn at real size.
+   * These arcs are the same kind of thing in different amounts, which is what a
+   * sequential ramp says; the categorical palettes that preceded it implied
+   * different kinds.
    */
-  test('the investment arc IS the gold token the tile glyph uses', () => {
-    expect(CSS).toMatch(/--mix-investment:\s*var\(--gold-700\)/)
-    expect(TILE, 'the tile still paints its glyph gold-700').toContain('text-gold-700')
+  test('the first three are one hue, and the fourth is neutral', () => {
+    const [a, b, c, tail] = RAMP
+    for (const [i, indigo] of [a, b, c].entries()) {
+      const h = hue(indigo)
+      expect(h, `--mix-${i + 1} (${indigo}) should be indigo`).toBeGreaterThan(225)
+      expect(h, `--mix-${i + 1} (${indigo}) should be indigo`).toBeLessThan(255)
+    }
+    /* Grey for "and the rest" — a fourth indigo would be either under the floor
+       or a near-twin of the third. */
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(tail.slice(i, i + 2), 16))
+    expect(Math.max(r, g, bl) - Math.min(r, g, bl), `--mix-4 (${tail}) should be neutral`).toBeLessThan(8)
   })
 
   /**
-   * Emerald has no project token — the tile uses Tailwind's `text-emerald-700`
-   * utility — so the value has to be copied. The guard is the pair: the token
-   * holds emerald-700's value AND the tile is asserted still to use that
-   * family, so recolouring the tile without the ring fails here.
+   * 3:1 is WCAG's floor for non-text graphics, which is what an arc is — the
+   * legend carries the text. Worth pinning because the obvious greys fail it:
+   * neutral-300 measures 1.5:1 against white and neutral-400 2.3:1, so the tail
+   * uses neutral-500 at 4.6:1.
    */
-  test('the superannuation arc is emerald-700, the shield’s own colour', () => {
-    expect(SUPER).toBe('#047857')
-    expect(TILE, 'the tile still paints its shield emerald-700').toContain('text-emerald-700')
-  })
-
-  test('both clear the 3:1 non-text floor on the white sheet', () => {
-    expect(contrast(SUPER, GROUND)).toBeGreaterThan(3)
-    expect(contrast(INVESTMENT, GROUND)).toBeGreaterThan(3)
-  })
-
-  /* Two arcs that touch, so they have to be told apart from each other as well
-     as from the sheet. Green against gold is a wide hue gap and a real
-     lightness difference. */
-  test('and are distinguishable from each other', () => {
-    expect(SUPER).not.toBe(INVESTMENT)
-    const gap = Math.min(
-      Math.abs(hue(SUPER) - hue(INVESTMENT)),
-      360 - Math.abs(hue(SUPER) - hue(INVESTMENT)),
-    )
-    expect(gap, `${SUPER} and ${INVESTMENT} are ${gap.toFixed(0)}° apart`).toBeGreaterThan(25)
+  test('every tone clears the 3:1 non-text floor against the white sheet', () => {
+    for (const [i, colour] of RAMP.entries()) {
+      expect(contrast(colour, GROUND), `--mix-${i + 1} (${colour})`).toBeGreaterThan(3)
+    }
   })
 
   /**
-   * No ramp any more. Six numbered tokens existed through three failed
-   * palettes; they are gone, and this asserts they have not crept back — a
-   * stray `--mix-1` would be a positional colour, which is exactly what made
-   * the ring disagree with the tiles.
+   * A ramp is judged on whether NEIGHBOURING steps can be told apart — and
+   * within one hue, only lightness does that work. Tailwind's adjacent steps
+   * are far too close: indigo-900 beside indigo-800 differ by 0.014 in relative
+   * luminance. Every other step is skipped so each indigo pair clears a real
+   * margin.
+   *
+   * **The last boundary is separated by chroma instead**, and the first version
+   * of this test failed on it for the right reason. Indigo-500 and neutral-500
+   * sit 0.014 apart in luminance — but one is a saturated indigo and the other
+   * a pure grey, which the eye separates easily. Lightness is the criterion
+   * inside the hue; saturation is the criterion at the step out of it.
    */
-  test('no numbered ramp survives, so colour cannot go back to being positional', () => {
-    expect(CSS).not.toMatch(/--mix-[1-6]\s*:/)
-    expect(CSS).not.toContain('--mix-ground')
+  test('consecutive steps are told apart by lightness, or by chroma where they leave the hue', () => {
+    for (let i = 0; i < RAMP.length - 1; i += 1) {
+      const [a, b] = [RAMP[i], RAMP[i + 1]]
+      const dLum = Math.abs(luminance(a) - luminance(b))
+      const dSat = Math.abs(saturation(a) - saturation(b))
+      expect(
+        dLum > 0.03 || dSat > 0.25,
+        `--mix-${i + 1} (${a}) and --mix-${i + 2} (${b}) are too close: Δluminance ${dLum.toFixed(
+          3,
+        )}, Δsaturation ${dSat.toFixed(2)}`,
+      ).toBe(true)
+    }
+  })
+
+  /* Darkest first, so the largest share is the heaviest arc. */
+  test('the indigo steps run darkest to lightest', () => {
+    const [a, b, c] = RAMP
+    expect(luminance(a)).toBeLessThan(luminance(b))
+    expect(luminance(b)).toBeLessThan(luminance(c))
+  })
+
+  test('all four are distinct, so a legend swatch identifies one arc', () => {
+    expect(new Set(RAMP).size).toBe(RAMP.length)
+  })
+
+  /**
+   * Indigo is the only family on this page with no job. Asserting the ramp
+   * stays clear of the hues that already mean something is what stops a later
+   * "nicer" colour from colliding with a state.
+   */
+  test('the ramp avoids every hue that already means something here', () => {
+    const taken = { 'brand orange (action)': 16, 'emerald (live / super tile)': 160, 'gold (investment tile)': 44, 'sky (insurance tile)': 200, 'red (wrong direction)': 0 }
+    for (const indigo of RAMP.slice(0, 3)) {
+      for (const [what, h] of Object.entries(taken)) {
+        const gap = Math.min(Math.abs(hue(indigo) - h), 360 - Math.abs(hue(indigo) - h))
+        expect(gap, `${indigo} sits ${gap.toFixed(0)}° from ${what}`).toBeGreaterThan(30)
+      }
+    }
   })
 })

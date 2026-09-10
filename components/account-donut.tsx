@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
-import { accountMix, sharePct, type MixAccount, type MixSlice } from '@/lib/account-mix'
+import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
 import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 
 /**
@@ -11,11 +11,12 @@ import { accountMoney, SECTION_HEADING, SHEET } from './ui'
  * **A trial, asked for on 10 September**, in the right half of the Accounts
  * tab — the space the two-column split reserved.
  *
- * It groups **by account type**, in the tiles' own two colours. The reasoning —
- * three palettes that did not work, and the two structural reasons why — is in
- * `lib/account-mix.ts`. The rows on the left answer "what is each account
- * worth"; this answers "how much of it is in super", which a column of figures
- * makes you compute in your head.
+ * One arc per account in a single indigo ramp, chosen on sight from six
+ * treatments drawn at real size — see `lib/account-mix.ts` for what was
+ * weighed, including the by-type version that was built and set aside. The rows
+ * on the left answer "what is each account worth"; this answers "which account
+ * is most of the money", which a column of figures makes you compute in your
+ * head.
  *
  * ## Recharts, and why it is not Chart.js
  *
@@ -61,26 +62,17 @@ import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 export type DonutAccount = MixAccount
 
 /**
- * The tone for each account type — **the tile's own colour**, keyed by meaning
- * rather than by rank.
+ * The ramp, darkest first — so the largest share is the heaviest arc and the
+ * ring reads in order before the legend is consulted.
  *
- * Keyed, not ordered, and that is the point: superannuation is emerald whether
- * it is the larger share or the smaller one, so the arc always matches the
- * shield in the row beside it. An ordered ramp would have made the biggest
- * slice green whatever it happened to be.
- *
- * The fallback is neutral rather than a guess. `account_type` is an enum with
- * two values today; a third would be drawn in grey and named by its raw type,
- * which is honest, rather than silently borrowing a colour that already means
- * something on this page.
+ * Four tones, because a single hue on white runs out at four: the fourth is a
+ * neutral carrying the grouped tail, since no fourth indigo both clears the
+ * 3:1 floor and reads as distinct from the third. Values and full reasoning are
+ * in `globals.css`.
  */
-const TYPE_TONE: Record<string, string> = {
-  superannuation: 'var(--mix-superannuation)',
-  investment: 'var(--mix-investment)',
-}
-const UNKNOWN_TONE = '#a3a3a3'
+const RAMP = ['var(--mix-1)', 'var(--mix-2)', 'var(--mix-3)', 'var(--mix-4)'] as const
 
-const toneFor = (slice: MixSlice) => TYPE_TONE[slice.key] ?? UNKNOWN_TONE
+const toneFor = (i: number) => RAMP[Math.min(i, RAMP.length - 1)]
 
 /**
  * The chart's LOGICAL size — a viewBox, not a rendered width.
@@ -140,6 +132,16 @@ const RING_BOX = 'aspect-square w-full max-w-[10rem]'
 const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
 
+/**
+ * The gap between arcs, in degrees — 11°, which is the 3%-of-circumference gap
+ * the comparison ring used.
+ *
+ * Charged once per arc on a closed ring, so four arcs spend 44° of the 360 on
+ * gaps. That is visible and deliberate; it is what the chosen treatment looked
+ * like.
+ */
+const GAP_DEGREES = 11
+
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   /*
    * `missing` is deliberately not read.
@@ -189,12 +191,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
         <div
           role="img"
           aria-label={ariaLabel(
-            slices.map(
-              (s) =>
-                `${s.label} ${sharePct(s.share)}, ${
-                  s.accounts === 1 ? '1 account' : `${s.accounts} accounts`
-                }`,
-            ),
+            slices.map((s) => `${s.label} ${sharePct(s.share)}`),
             total,
           )}
           className={`relative ${RING_BOX} ${FLUID}`}
@@ -215,23 +212,25 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
               innerRadius={`${INNER_RADIUS * 100}%`}
               outerRadius={`${OUTER_RADIUS * 100}%`}
               /*
-               * The gap between segments, asked for on 10 September. Recharts'
-               * own, so it scales with each arc rather than being subtracted
-               * from it — which is what used to threaten to eat a sliver whole.
+               * The gap and the roundness, matched to the comparison page the
+               * palette was chosen from — both were asked for as seen there,
+               * so both are derived rather than eyeballed.
                *
-               * Written first as `slices.length > 1 ? 3 : 0`, to spare a lone
-               * segment a notch in what should be a closed ring. A mutation
-               * showed that conditional was **dead**: for a single sector
-               * Recharts emits a byte-identical path whether the padding is 0
-               * or 3, because a full annulus has no neighbour to be separated
-               * from. Removed rather than kept, on the same reasoning as the
-               * zero-total guard in `account-mix.ts` — a branch that cannot
-               * change anything reads as a live rule.
+               * That ring was hand-drawn as a dashed circle with
+               * `stroke-linecap="round"`, which puts a semicircular cap on each
+               * end: the cap radius is exactly HALF THE BAND. Recharts reaches
+               * the same shape through `cornerRadius`, so it is half the band
+               * here too — 20.4 in viewBox units — rather than the arbitrary 7
+               * it started at. That ring's gap was 3% of the circumference,
+               * which is 10.8°, so `paddingAngle` is 11.
+               *
+               * No conditional for a lone segment: a mutation showed Recharts
+               * emits a byte-identical path for a single sector whether the
+               * padding is 0 or not, because a full annulus has no neighbour to
+               * be separated from.
                */
-              paddingAngle={3}
-              /* Rounded ends, also asked for. A number is in viewBox units, so
-                 it scales with SIZE like everything else here. */
-              cornerRadius={7}
+              paddingAngle={GAP_DEGREES}
+              cornerRadius={((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 4}
               stroke="none"
               /* Starts at twelve o'clock and fills clockwise, so the largest
                  share is where a reader looks first. */
@@ -261,7 +260,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
               {slices.map((s, i) => (
                 <Cell
                   key={s.key}
-                  fill={toneFor(s)}
+                  fill={toneFor(i)}
                   /* Dim the rest rather than move the hovered one: a segment
                      that pops outward changes the ring's silhouette, and the
                      thing being compared here is angle, not position. */
@@ -274,11 +273,6 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                   /* Hoverable, and named for anything reading the tree. */
                   data-slot="segment"
                   data-label={s.label}
-                  /* How many accounts fold into this arc, for anything reading
-                     the tree — a Recharts `Cell` takes no children, so it
-                     cannot carry a `<title>` the way the hand-rolled `<circle>`
-                     did. The ring's own `aria-label` says it in words. */
-                  data-accounts={s.accounts}
                 />
               ))}
             </Pie>
@@ -316,7 +310,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 <span
                   aria-hidden="true"
                   className="size-2.5 shrink-0 rounded-sm"
-                  style={{ background: toneFor(s) }}
+                  style={{ background: toneFor(i) }}
                 />
                 <span className="min-w-0 flex-1 truncate text-neutral-700">{s.label}</span>
                 <span className="shrink-0 font-medium tabular-nums text-neutral-900">

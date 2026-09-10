@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { ACCOUNT_TYPE_LABEL, accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
+import { ACCOUNT_TYPE_LABEL, accountMix, MAX_SLICES, sharePct, type MixAccount } from '@/lib/account-mix'
 
 /**
  * The arithmetic behind the investment mix donut, which since 10 September
@@ -17,80 +17,43 @@ import { ACCOUNT_TYPE_LABEL, accountMix, sharePct, type MixAccount } from '@/lib
  */
 const account = (o: Partial<MixAccount> & { latest_value: string | number | null }): MixAccount => ({
   account_id: `a${Math.random().toString(36).slice(2)}`,
-  account_type: 'investment',
+  label: 'An account',
   ...o,
 })
 
-const superannuation = (v: string | number | null) =>
-  account({ account_type: 'superannuation', latest_value: v })
-const investment = (v: string | number | null) =>
-  account({ account_type: 'investment', latest_value: v })
-
 describe('accountMix', () => {
-  test('one slice per type, largest share first, shares summing to one', () => {
+  test('one slice per account, largest share first, shares summing to one', () => {
     const { slices, total } = accountMix([
-      investment(200),
-      superannuation(700),
-      investment(100),
+      account({ label: 'Small', latest_value: 100 }),
+      account({ label: 'Large', latest_value: 700 }),
+      account({ label: 'Middle', latest_value: 200 }),
     ])
-    expect(slices.map((s) => s.label)).toEqual(['Superannuation', 'Investment'])
-    expect(slices.map((s) => s.share)).toEqual([0.7, 0.3])
+    expect(slices.map((s) => s.label)).toEqual(['Large', 'Middle', 'Small'])
+    expect(slices.map((s) => s.share)).toEqual([0.7, 0.2, 0.1])
     expect(slices.reduce((sum, s) => sum + s.share, 0)).toBeCloseTo(1, 10)
     expect(total).toBe(1000)
-  })
-
-  /** Every account of a type folds into its one arc, and the arc says how many. */
-  test('a type’s arc sums its accounts and counts them', () => {
-    const { slices } = accountMix([investment(100), investment(250), superannuation(400)])
-    const inv = slices.find((s) => s.key === 'investment')!
-    expect(inv.value).toBe(350)
-    expect(inv.accounts).toBe(2)
-    expect(slices.find((s) => s.key === 'superannuation')!.accounts).toBe(1)
-  })
-
-  /**
-   * The key is the TYPE, not the rank — which is what lets the colour be keyed
-   * by meaning. If this were positional, superannuation would be emerald only
-   * when it happened to be the bigger slice.
-   */
-  test('the key is the account type, whichever share is larger', () => {
-    expect(accountMix([superannuation(900), investment(100)]).slices.map((s) => s.key)).toEqual([
-      'superannuation',
-      'investment',
-    ])
-    // Reversed magnitudes: the order flips, the keys do not change meaning.
-    expect(accountMix([superannuation(100), investment(900)]).slices.map((s) => s.key)).toEqual([
-      'investment',
-      'superannuation',
-    ])
-  })
-
-  test('a single type is the whole ring', () => {
-    const { slices, counted } = accountMix([investment(300), investment(200)])
-    expect(slices).toHaveLength(1)
-    expect(slices[0]).toMatchObject({ key: 'investment', share: 1, value: 500, accounts: 2 })
-    expect(counted).toBe(2)
   })
 
   /* The view returns numerics as strings over PostgREST. Concatenation instead
      of addition would give "700200" — plausible-looking and very wrong. */
   test('string values from the database are added, not concatenated', () => {
-    expect(accountMix([investment('486210'), investment('212940')]).total).toBe(699150)
+    expect(accountMix([account({ latest_value: '486210' }), account({ latest_value: '212940' })]).total).toBe(699150)
   })
 
-  /**
-   * An unknown type is drawn and named rather than dropped. The enum holds two
-   * values; a third must not make money vanish from the ring.
-   */
-  test('an unrecognised type keeps its arc and falls back to its raw name', () => {
-    const { slices } = accountMix([account({ account_type: 'annuity', latest_value: 500 })])
+  test('a single account is the whole ring', () => {
+    const { slices, counted } = accountMix([account({ label: 'Only', latest_value: 500 })])
     expect(slices).toHaveLength(1)
-    expect(slices[0]).toMatchObject({ key: 'annuity', label: 'annuity' })
+    expect(slices[0]).toMatchObject({ label: 'Only', share: 1, value: 500, accounts: 1 })
+    expect(counted).toBe(1)
   })
 
   describe('what it cannot draw, it counts', () => {
     test('an account with no recorded value is missing, not dropped', () => {
-      const mix = accountMix([investment(500), investment(null), superannuation(null)])
+      const mix = accountMix([
+        account({ latest_value: 500 }),
+        account({ latest_value: null }),
+        account({ latest_value: null }),
+      ])
       expect(mix.slices).toHaveLength(1)
       expect(mix.missing).toBe(2)
       expect(mix.counted).toBe(1)
@@ -102,40 +65,31 @@ describe('accountMix', () => {
      * something the chart is not showing rather than as a segment of nothing.
      */
     test('an account recorded at exactly zero counts as missing', () => {
-      const mix = accountMix([investment(500), investment(0)])
+      const mix = accountMix([account({ latest_value: 500 }), account({ latest_value: 0 })])
       expect(mix.slices).toHaveLength(1)
       expect(mix.missing).toBe(1)
-      expect(mix.slices[0].accounts).toBe(1)
     })
 
     test('a value that is not a number counts as missing rather than poisoning the total', () => {
-      const mix = accountMix([investment(500), investment('not a number')])
+      const mix = accountMix([account({ latest_value: 500 }), account({ latest_value: 'nope' })])
       expect(mix.total).toBe(500)
       expect(mix.missing).toBe(1)
       expect(Number.isFinite(mix.total)).toBe(true)
     })
 
-    /* A type present only through unvalued accounts gets no arc at all, rather
-       than a zero-width one. */
-    test('a type with nothing valued is absent from the ring', () => {
-      const mix = accountMix([investment(500), superannuation(null), superannuation(0)])
-      expect(mix.slices.map((s) => s.key)).toEqual(['investment'])
-      expect(mix.missing).toBe(2)
-    })
-
     test('nothing is missing when every account has a value', () => {
-      expect(accountMix([investment(1), superannuation(2)]).missing).toBe(0)
+      expect(accountMix([account({ latest_value: 1 }), account({ latest_value: 2 })]).missing).toBe(0)
     })
   })
 
   describe('nothing to draw', () => {
     /**
-     * The invariant that replaced a guard. An explicit `total <= 0` early return
-     * was written and removed after a mutation showed it dead: the `> 0` filter
-     * upstream means `total` is positive whenever a slice exists.
+     * The invariant that replaced a guard. An explicit `total <= 0` early
+     * return was written and removed after a mutation showed it dead: the
+     * `> 0` filter upstream means `total` is positive whenever a slice exists.
      */
     test('all accounts at zero yields no slices and a zero total, not NaN', () => {
-      const mix = accountMix([investment(0), superannuation('0')])
+      const mix = accountMix([account({ latest_value: 0 }), account({ latest_value: '0' })])
       expect(mix.slices).toEqual([])
       expect(mix.total).toBe(0)
       expect(mix.missing).toBe(2)
@@ -145,8 +99,8 @@ describe('accountMix', () => {
     test('a zero total never produces a NaN share, however it arises', () => {
       for (const accounts of [
         [] as MixAccount[],
-        [investment(0)],
-        [investment(null), superannuation('x')],
+        [account({ latest_value: 0 })],
+        [account({ latest_value: null }), account({ latest_value: 'x' })],
       ]) {
         const mix = accountMix(accounts)
         expect(mix.slices).toEqual([])
@@ -159,11 +113,50 @@ describe('accountMix', () => {
       expect(accountMix([])).toEqual({ slices: [], total: 0, missing: 0, counted: 0 })
     })
   })
+
+  /**
+   * The ramp has four tones and no more, because a single hue on white runs
+   * out: indigo-400 and paler fall under the 3:1 floor and 900 beside 800 is
+   * indistinguishable. So a fifth account is grouped rather than given a
+   * colour that would be invisible or a near-twin.
+   */
+  describe('more accounts than the ramp has tones', () => {
+    test('the tail groups into one slice, and the shares still fill the ring', () => {
+      const mix = accountMix(
+        Array.from({ length: 9 }, (_, i) => account({ label: `Account ${i}`, latest_value: 100 - i })),
+      )
+      expect(mix.slices).toHaveLength(MAX_SLICES)
+      expect(mix.slices[MAX_SLICES - 1]).toMatchObject({ key: 'other', label: '6 smaller accounts', accounts: 6 })
+      expect(mix.slices.reduce((sum, s) => sum + s.share, 0)).toBeCloseTo(1, 10)
+      // Grouped, not discarded: every account is still represented.
+      expect(mix.counted).toBe(9)
+    })
+
+    test('the grouped slice carries the sum of the tail', () => {
+      const mix = accountMix(Array.from({ length: 6 }, (_, i) => account({ label: `A${i}`, latest_value: 10 })))
+      // Six equal accounts: three drawn, three grouped at 30 of 60.
+      expect(mix.slices[MAX_SLICES - 1]).toMatchObject({ value: 30, label: '3 smaller accounts' })
+    })
+
+    test('exactly four accounts are each drawn, with no grouping', () => {
+      const mix = accountMix(Array.from({ length: MAX_SLICES }, (_, i) => account({ label: `A${i}`, latest_value: 10 })))
+      expect(mix.slices).toHaveLength(MAX_SLICES)
+      expect(mix.slices.some((s) => s.key === 'other')).toBe(false)
+      expect(mix.slices.every((s) => s.accounts === 1)).toBe(true)
+    })
+
+    test('one over the limit groups rather than dropping the last', () => {
+      const mix = accountMix(Array.from({ length: MAX_SLICES + 1 }, (_, i) => account({ label: `A${i}`, latest_value: 10 })))
+      expect(mix.slices).toHaveLength(MAX_SLICES)
+      expect(mix.slices[MAX_SLICES - 1].label).toBe('2 smaller accounts')
+    })
+  })
 })
 
 describe('ACCOUNT_TYPE_LABEL', () => {
-  /* One map, shared with the accounts list, so the ring's legend and the row
-     beneath it cannot disagree about what an account type is called. */
+  /* Shared with the accounts list, which prints these words on each row. The
+     ring no longer groups by type, but the map stays one definition — and the
+     by-type grouping is a decision that could return. */
   test('names both types the enum holds', () => {
     expect(ACCOUNT_TYPE_LABEL).toMatchObject({
       investment: 'Investment',

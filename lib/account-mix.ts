@@ -1,31 +1,28 @@
 /**
- * How a group's investment value divides — **by account type**, not by account.
+ * How a group's investment value divides across its accounts.
  *
- * ## Why by type
+ * ## One arc per account, in one hue — chosen on sight
  *
- * The chart began as one segment per account and was recoloured three times
- * without ever looking right. The reason turned out to be structural rather
- * than a matter of hue, and it was found by measuring the page:
+ * Four palettes were tried in code and none read right. The fifth attempt put
+ * six treatments side by side at real size, beside the real account rows, and
+ * the choice was made by looking — which is how every other colour on this page
+ * was settled.
  *
- * 1. **The tiles beside it already colour these accounts.** An emerald shield
- *    is superannuation; a gold rising line is investment. A per-account ring
- *    gave the same account a third, unrelated colour, so "Joint Super" read
- *    green in the row and indigo in the ring — two encodings for one thing,
- *    eighteen pixels apart.
- * 2. **Area, not saturation.** This page's tile glyphs run 94–98% saturated,
- *    *more* than the fills that were replaced (69–82%) — so the page is not shy
- *    of strong colour. What it had never carried was a large *field* of it: a
- *    glyph is a dot inside a pale tile, where the ring was ~15,000px² of the
- *    stuff, the biggest patch of colour anywhere on the page.
+ * What won is **per account, in a single indigo ramp**. A by-type version was
+ * also built and is worth knowing about, because it answers a measured
+ * objection this one does not:
  *
- * Grouping by type answers both at once. The ring wears the tiles' own two
- * colours, adds no new colour language, and — because there are exactly two
- * account types — it is two calm arcs rather than six competing ones.
- *
- * **What it gives up, plainly:** per-account shares. The list immediately to the
- * left already prints every account's value, so that reading is a glance away;
- * what it could not do is answer "how much of this is in super", which is the
- * question a ring is good at.
+ * * **The tiles beside the ring already colour these accounts** — an emerald
+ *   shield for superannuation, a gold rising line for investment. So an account
+ *   is green in its row and indigo in the ring: two encodings for one thing,
+ *   eighteen pixels apart. That was the argument for grouping by type, and it
+ *   was overruled on sight in favour of keeping per-account shares.
+ * * **One hue, not six.** The palettes that failed were categorical — different
+ *   hues implying different kinds of thing. These are the same kind of thing in
+ *   different amounts, which is what a sequential ramp says. It also keeps the
+ *   ring clear of every colour that already means something here: green is a
+ *   live state, amber needs attention, red is the wrong direction, gold is an
+ *   investment tile, sky is insurance, brand orange is an action.
  *
  * Pure and renderer-free, because Recharts owns the arc geometry — so the
  * arithmetic is checkable without a DOM. Same reasoning as `wealthSummary()`.
@@ -34,8 +31,10 @@
 /**
  * The account types, and how they read.
  *
- * One map, shared with the accounts list — which prints the same words on each
- * row — so the ring's legend and the row beneath it cannot disagree.
+ * Shared with the accounts list, which prints the same words on each row. The
+ * ring no longer groups by type, but the map stays here rather than back in the
+ * page: it is account vocabulary, one definition, and the by-type grouping is a
+ * decision that could return.
  */
 export const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   investment: 'Investment',
@@ -45,18 +44,18 @@ export const ACCOUNT_TYPE_LABEL: Record<string, string> = {
 /** The shape the chart needs from an account row, and nothing more. */
 export type MixAccount = {
   account_id: string
-  account_type: string
+  label: string
   latest_value: string | number | null
 }
 
 export type MixSlice = {
-  /** The `account_type`, so a colour can be keyed by meaning rather than rank. */
+  /** Stable key. `other` for the grouped tail. */
   key: string
   label: string
   value: number
   /** Fraction of the drawn total, 0–1. */
   share: number
-  /** How many accounts fold into this arc. */
+  /** How many accounts fold into this arc — one, except for the tail. */
   accounts: number
 }
 
@@ -67,19 +66,32 @@ export type AccountMix = {
   total: number
   /** Accounts with no recorded value, or recorded at zero. Never hidden. */
   missing: number
-  /** How many accounts the ring represents, across every arc. */
+  /** How many accounts the ring represents, tail included. */
   counted: number
 }
 
+/**
+ * The most arcs drawn before the tail is grouped.
+ *
+ * **Four, and the ramp is why.** A single hue on a white sheet runs out of
+ * usable steps fast: indigo 400 and paler measure under the 3:1 non-text floor
+ * against white, and 900 beside 800 is a difference no reader can see. That
+ * leaves three indigos with real separation — 900, 700, 500 — plus one neutral
+ * for whatever is left. A fifth arc would have to be either invisible or a
+ * near-twin of its neighbour.
+ */
+export const MAX_SLICES = 4
+
 export function accountMix(accounts: MixAccount[]): AccountMix {
   const valued = accounts
-    .map((a) => ({ type: a.account_type, value: Number(a.latest_value) }))
+    .map((a) => ({ key: a.account_id, label: a.label, value: Number(a.latest_value) }))
     /* `latest_value` arrives as a string over PostgREST, so this is a Number()
        away from being a concatenation bug. A null becomes NaN and is dropped
        here rather than poisoning the total. An account recorded at exactly zero
        is a VALUED account that cannot be drawn — it counts as missing, because
        a zero-width arc is not something a reader can see or hover. */
     .filter((a) => Number.isFinite(a.value) && a.value > 0)
+    .sort((a, b) => b.value - a.value)
 
   const total = valued.reduce((sum, a) => sum + a.value, 0)
 
@@ -88,31 +100,25 @@ export function accountMix(accounts: MixAccount[]): AccountMix {
    * keeps only finite values greater than zero, so `total` is positive whenever
    * anything survives it, and when nothing does the map below produces an empty
    * array and the same figures a guard would have returned. One was written and
-   * a mutation proved it dead — see the equivalent note that used to sit here.
-   * The invariant it defended is upheld by the filter: **`total > 0` whenever
-   * `slices` is non-empty**, which is what makes the division safe.
+   * a mutation proved it dead. The invariant it defended is upheld by the
+   * filter: **`total > 0` whenever `slices` is non-empty**.
    */
-  const byType = new Map<string, { value: number; accounts: number }>()
-  for (const a of valued) {
-    const at = byType.get(a.type) ?? { value: 0, accounts: 0 }
-    byType.set(a.type, { value: at.value + a.value, accounts: at.accounts + 1 })
-  }
-
-  const slices = [...byType.entries()]
-    .map(([key, { value, accounts: n }]) => ({
-      key,
-      /* Falls back to the raw type rather than dropping the arc. The enum holds
-         two values today; a third would still be drawn and still be named,
-         which is better than a ring that quietly omits money. */
-      label: ACCOUNT_TYPE_LABEL[key] ?? key,
-      value,
-      share: value / total,
-      accounts: n,
-    }))
-    .sort((a, b) => b.value - a.value)
+  const head = valued.slice(0, valued.length > MAX_SLICES ? MAX_SLICES - 1 : MAX_SLICES)
+  const tail = valued.slice(head.length)
+  const drawn = tail.length
+    ? [
+        ...head.map((a) => ({ ...a, accounts: 1 })),
+        {
+          key: 'other',
+          label: `${tail.length} smaller accounts`,
+          value: tail.reduce((sum, a) => sum + a.value, 0),
+          accounts: tail.length,
+        },
+      ]
+    : head.map((a) => ({ ...a, accounts: 1 }))
 
   return {
-    slices,
+    slices: drawn.map((a) => ({ ...a, share: a.value / total })),
     total,
     missing: accounts.length - valued.length,
     counted: valued.length,

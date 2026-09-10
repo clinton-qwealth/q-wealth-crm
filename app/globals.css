@@ -31,30 +31,31 @@
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
 
-  /* The investment-mix chart: THE TILES' OWN TWO COLOURS, and no others.
-     Settled 10 Sep 2026 after three palettes that did not work — a single
-     violet ramp, luminous hues on a dark ground, then Tailwind's 600-step
-     purples, pinks and blues.
+  /* The investment-mix ring: ONE HUE, STEPPED, plus a neutral for the tail.
+     Chosen on sight 10 Sep 2026 from six treatments drawn at real size beside
+     the real account rows, after four palettes picked in code had all failed.
 
-     None of them failed on hue. Measuring the page showed two structural
-     reasons, and grouping the ring by ACCOUNT TYPE answers both:
+     One hue rather than several, because these arcs are the same kind of thing
+     in different amounts — six hues implied six kinds. Indigo because it is the
+     only family on this page with no job: green is a live state, amber needs
+     attention, red is the wrong direction, gold is the investment tile, sky is
+     the insurance tile and brand orange is an action.
 
-     1. The tiles in the list beside the ring already colour these very
-        accounts — an emerald shield for superannuation, a gold rising line for
-        investment. A per-account ring gave the same account a third, unrelated
-        colour eighteen pixels away. Now the arc IS the tile's colour.
-     2. It is area, not saturation. This page's tile glyphs run 94-98%
-        saturated, MORE than the fills they replaced, so the page is not shy of
-        strong colour — it had simply never carried a large FIELD of it. Two
-        arcs in colours already on screen add no new colour at all.
+     THE STEPS ARE WIDE APART ON PURPOSE. A single hue runs out of room quickly
+     on white: indigo-400 and paler fall under the 3:1 non-text floor, and
+     900 beside 800 is a difference nobody can see (0.014 apart in relative
+     luminance). Every other step is skipped so consecutive arcs are genuinely
+     tellable apart — 900, 700, 500, at 0.042 / 0.083 / 0.185 luminance.
 
-     So there is nothing new here to keep in step: the investment arc points at
-     the existing `--gold-700` token, the same value the tile's glyph uses, and
-     the superannuation arc is Tailwind's emerald-700, which is what
-     `AccountTypeTile` paints its shield with. A test asserts the tile still
-     uses those two families, so recolouring a tile without the ring fails. */
-  --mix-superannuation: #047857; /* emerald-700 — the tile's shield  5.48:1 */
-  --mix-investment: var(--gold-700); /* the tile's rising line       5.32:1 */
+     The fourth is NEUTRAL, not a fourth indigo, for the same reason: there is
+     no fourth indigo that both clears the floor and reads as distinct. It
+     carries the grouped tail, where grey is the honest colour for "and the
+     rest". neutral-500 is the lightest grey that still clears 3:1 — the 300 and
+     400 steps measure 1.5:1 and 2.3:1 and would be invisible as a segment. */
+  --mix-1: #312e81; /* indigo-900  11.42:1 */
+  --mix-2: #4338ca; /* indigo-700   7.90:1 */
+  --mix-3: #6366f1; /* indigo-500   4.47:1 */
+  --mix-4: #737373; /* neutral-500  4.60:1 — the grouped tail */
 }
 
 @theme inline {
@@ -73,8 +74,10 @@
   --color-gold-100: var(--gold-100);
   --color-gold-700: var(--gold-700);
 
-  --color-mix-superannuation: var(--mix-superannuation);
-  --color-mix-investment: var(--mix-investment);
+  --color-mix-1: var(--mix-1);
+  --color-mix-2: var(--mix-2);
+  --color-mix-3: var(--mix-3);
+  --color-mix-4: var(--mix-4);
 
 
   --font-sans: var(--font-geist-sans);
