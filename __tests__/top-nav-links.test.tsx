@@ -8,6 +8,15 @@ import { render, screen } from '@testing-library/react'
 let PATHNAME = '/'
 vi.mock('next/navigation', () => ({ usePathname: () => PATHNAME }))
 
+/* useLinkStatus reports the in-flight window of a navigation. The real hook
+   reads a context the router provides; jsdom has no router, so it is driven
+   here. `...mod` keeps the real default Link, which every test renders. */
+let PENDING = false
+vi.mock('next/link', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('next/link')>()
+  return { ...mod, useLinkStatus: () => ({ pending: PENDING }) }
+})
+
 const { TopNavLinks } = await import('@/components/top-nav-links')
 
 const at = (pathname: string) => {
@@ -26,6 +35,7 @@ const current = () =>
 describe('the top nav marks where you are', () => {
   beforeEach(() => {
     PATHNAME = '/'
+    PENDING = false
   })
 
   test('the destinations are links, named exactly as the bar reads', () => {
@@ -112,6 +122,47 @@ describe('the top nav marks where you are', () => {
     at('/workflows')
     for (const name of ['Home', 'Groups', 'Workflows', 'Reports']) {
       expect(link(name).className).toContain('focus-visible:ring-brand/30')
+    }
+  })
+
+  /**
+   * The pending mark, added 10 September so a click is acknowledged before the
+   * navigation commits. Always in the DOM and toggled by opacity — a mark that
+   * mounted only while pending would shift the label when it appeared.
+   */
+  test('each link carries one hidden pending mark, present and invisible at idle', () => {
+    at('/')
+    for (const name of ['Home', 'Groups', 'Workflows', 'Reports']) {
+      const marks = link(name).querySelectorAll('[aria-hidden="true"]')
+      expect(marks).toHaveLength(1)
+      const mark = classes(marks[0] as HTMLElement)
+      expect(mark).toContain('opacity-0')
+      expect(mark).not.toContain('opacity-100')
+      // Empty and hidden, so the accessible name is still exactly the label.
+      expect(marks[0].textContent).toBe('')
+    }
+    expect(link('Groups').textContent).toBe('Groups')
+  })
+
+  test('while a navigation is in flight the mark shows, and shows as the tabs’ brand bar', () => {
+    PENDING = true
+    at('/')
+    const mark = classes(link('Workflows').querySelector('[aria-hidden="true"]') as HTMLElement)
+    expect(mark).toContain('opacity-100')
+    expect(mark).not.toContain('opacity-0')
+    expect(mark).toContain('h-0.5')
+    expect(mark).toContain('bg-brand')
+    expect(mark).toContain('motion-reduce:transition-none')
+    /* The fill does NOT move early: pending is not "here". The current item is
+       still Home and only Home. */
+    expect(link('Workflows').getAttribute('aria-current')).toBeNull()
+    expect(current()).toEqual(['Home'])
+  })
+
+  test('the anchor is positioned, so the mark has something to sit in', () => {
+    at('/')
+    for (const name of ['Home', 'Groups', 'Workflows', 'Reports']) {
+      expect(classes(link(name))).toContain('relative')
     }
   })
 })

@@ -108,47 +108,80 @@ export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask
  * cannot become the only thing standing between a chip and a disclosure. See
  * the rule at the top of the entities migration.
  *
- * Two round trips rather than one join: members are parties, and the label
- * worth showing is the one `clients` gives — which also filters out a party in
- * the group that is not an active client. A join through PostgREST would have
- * to pick one or the other.
+ * ONE read, since 10 September. This used to be three chained round trips —
+ * the board row, then members and siblings together, then `clients` for the
+ * members' labels — and it was one of the two loaders holding the workflow
+ * page's wave at depth 3 (~510ms of network wait; see
+ * workflow-page-round-trips.test.tsx). PostgREST embeds the whole shape from
+ * the workflow row: its group, the group's current members with each member's
+ * `clients` row, and the group's workflows. The `clients` embed was checked
+ * against live PostgREST before this was written — a view embeds through its
+ * base table's keys, and a member who is not an active client comes back with
+ * `clients: null`, which is the same filter the `.in()` used to apply.
+ *
+ * Rooted on `workflows` rather than the board view because an embed needs a
+ * foreign key to follow and a view has none; the visibility rule is the same,
+ * because `workflows` is under RLS and the board view is security_invoker over
+ * it. The same base tables are read as before, so nothing is exposed that the
+ * three reads did not already expose.
  */
 export async function getWorkflowEntityChoices(
   workflowId: string,
 ): Promise<EntityChoice[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const { data: workflow } = await supabase
-    .from('workflow_board')
-    .select('group_id, group_name')
+  const { data } = await supabase
+    .from('workflows')
+    .select(
+      'group_id, client_groups!inner(name, members:client_group_members(party_id, end_date, clients(display_name)), siblings:workflows(id, name, updated_at))',
+    )
     .eq('id', workflowId)
     .maybeSingle()
-  if (!workflow?.group_id) return []
 
-  const groupId = workflow.group_id as string
-  const [{ data: members }, { data: siblings }] = await Promise.all([
-    supabase.from('client_group_members').select('party_id').eq('group_id', groupId).is('end_date', null),
-    supabase.from('workflow_board').select('id, name').eq('group_id', groupId).order('updated_at', { ascending: false }),
-  ])
+  const group = one((data as Record<string, unknown> | null)?.client_groups) as
+    | {
+        name?: string | null
+        members?: { party_id: string; end_date: string | null; clients: unknown }[] | null
+        siblings?: { id: string; name: string | null; updated_at: string | null }[] | null
+      }
+    | null
+  const groupId = data?.group_id as string | undefined
+  if (!groupId || !group) return []
 
-  const partyIds = (members ?? []).map((m) => m.party_id as string).filter(Boolean)
-  const { data: clients } = partyIds.length
-    ? await supabase.from('clients').select('party_id, display_name').in('party_id', partyIds)
-    : { data: [] }
+  /* Current members only — `end_date is null` — applied here rather than as an
+     embed filter because a filter on an embedded to-many resource would drop
+     rows silently and the rule is worth being able to read. */
+  const clients = (group.members ?? [])
+    .filter((m) => m.end_date === null)
+    .map((m) => ({ party_id: m.party_id, client: one(m.clients) as { display_name?: string | null } | null }))
+    .filter((m) => m.client)
+
+  const siblings = [...(group.siblings ?? [])].sort((a, b) =>
+    (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
+  )
 
   return [
-    { kind: 'group' as const, id: groupId, label: (workflow.group_name as string) ?? 'This group' },
-    ...(clients ?? []).map((c) => ({
+    { kind: 'group' as const, id: groupId, label: group.name ?? 'This group' },
+    ...clients.map((m) => ({
       kind: 'client' as const,
-      id: c.party_id as string,
-      label: (c.display_name as string) ?? 'Unnamed',
+      id: m.party_id,
+      label: m.client?.display_name ?? 'Unnamed',
     })),
     /* The post's own workflow is left out: a post naming the thing it is
        already on says nothing. */
-    ...(siblings ?? [])
-      .filter((w) => (w.id as string) !== workflowId)
-      .map((w) => ({ kind: 'workflow' as const, id: w.id as string, label: (w.name as string) ?? 'Untitled' })),
+    ...siblings
+      .filter((w) => w.id !== workflowId)
+      .map((w) => ({ kind: 'workflow' as const, id: w.id, label: w.name ?? 'Untitled' })),
   ]
+}
+
+/**
+ * A to-one embed comes back from PostgREST as an object; this tolerates an
+ * array in case relationship detection ever changes — the same guard the group
+ * page uses on its own embeds.
+ */
+function one(raw: unknown): unknown {
+  return Array.isArray(raw) ? raw[0] ?? null : raw ?? null
 }
 
 /**
@@ -237,6 +270,17 @@ export async function getWorkflowTaskActions(workflowId: string): Promise<TaskAc
  * them together would mean one function that fetches both for callers wanting
  * either.
  *
+ * ONE read, since 10 September, where it was three chained round trips
+ * (workflow, then group, then contact points) — the other loader that held the
+ * page's wave at depth 3. PostgREST embeds group → primary contact → their
+ * email contact points from the workflow row.
+ *
+ * **The `!primary_contact_party_id` hint is required, not decorative.**
+ * `client_groups` reaches `parties` by two paths — the direct foreign key on
+ * `primary_contact_party_id`, and the `client_group_members` junction — and
+ * PostgREST refuses an embed it cannot disambiguate. The hint names the direct
+ * key. Verified against the live schema before this was written.
+ *
  * Returns null rather than throwing when there is nobody to write to: a group
  * with no primary contact, or a contact with no email, is an ordinary state,
  * and the modal says so rather than failing to open.
@@ -246,42 +290,32 @@ export async function getWorkflowRecipient(
 ): Promise<{ email: string; name: string | null } | null> {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const { data: workflow } = await supabase
+  const { data } = await supabase
     .from('workflows')
-    .select('group_id')
+    .select(
+      'group_id, client_groups!inner(primary_contact_party_id, contact:parties!primary_contact_party_id(display_name, contact_points(value, is_preferred, kind)))',
+    )
     .eq('id', workflowId)
     .maybeSingle()
-  if (!workflow?.group_id) return null
 
-  const { data: group } = await supabase
-    .from('client_groups')
-    .select('primary_contact_party_id, parties(display_name)')
-    .eq('id', workflow.group_id)
-    .maybeSingle()
-
-  const partyId = group?.primary_contact_party_id
-  if (!partyId) return null
-
-  // The embed is to-one, so PostgREST returns an object; tolerate an array in
-  // case relationship detection changes — the same guard the group page uses.
-  const rawParty = (group as Record<string, unknown>).parties
-  const party = (Array.isArray(rawParty) ? rawParty[0] : rawParty) as
-    | { display_name?: string }
+  const group = one((data as Record<string, unknown> | null)?.client_groups) as
+    | { primary_contact_party_id?: string | null; contact?: unknown }
     | null
-    | undefined
+  if (!group?.primary_contact_party_id) return null
 
-  const { data: emails } = await supabase
-    .from('contact_points')
-    .select('value, is_preferred')
-    .eq('party_id', partyId)
-    .eq('kind', 'email')
-
-  if (!emails?.length) return null
+  const contact = one(group.contact) as
+    | { display_name?: string | null; contact_points?: { value: string | null; is_preferred: boolean | null; kind: string }[] | null }
+    | null
+  /* Emails only — the embed carries every contact point, phones included, and
+     the kind filter lives here rather than on the embed for the reason given
+     in getWorkflowEntityChoices. */
+  const emails = (contact?.contact_points ?? []).filter((c) => c.kind === 'email')
+  if (!emails.length) return null
 
   // Their own stated preference wins; otherwise the first on file.
   const best = emails.find((e) => e.is_preferred) ?? emails[0]
-  const email = (best?.value as string | null) ?? null
+  const email = best?.value ?? null
   if (!email) return null
 
-  return { email, name: party?.display_name ?? null }
+  return { email, name: contact?.display_name ?? null }
 }

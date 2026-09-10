@@ -57,9 +57,10 @@ vi.mock('@/lib/supabase/server', () => ({
            of them — due date, then created_at as the tie-break. The chain is
            thenable instead, so `await`ing it ends the query. */
         order: () => chain,
-        /* `is` for the null check on a group member's end_date, and `in` for
-           looking clients up by the party ids that come back — both used by
-           getWorkflowEntityChoices, which the page loads for the `#` menu. */
+        /* `is` and `in` were for getWorkflowEntityChoices' member and client
+           reads; since 10 September that loader is one embedded read of the
+           workflow row and uses neither. Kept on the chain so a loader that
+           starts using them does not fail the whole wave for want of a stub. */
         is: () => chain,
         in: () => chain,
         /* `limit` for the file-notes query, which caps a workflow's notes at

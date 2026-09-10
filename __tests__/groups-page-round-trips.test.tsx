@@ -56,10 +56,17 @@ function stubClient() {
   }
 
   const builder = (table: string) => {
-    const data = fixtures[table] ?? []
+    let data = fixtures[table] ?? []
     const chain: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'is', 'in', 'neq', 'order', 'limit', 'gte', 'lte', 'not']) {
+    for (const m of ['select', 'is', 'in', 'neq', 'order', 'limit', 'gte', 'lte', 'not']) {
       chain[m] = () => chain
+    }
+    /* The one filter the fixtures honour: the group row by id, so an unknown
+       id finds no group and the 404 path can be exercised. Every other filter
+       is a pass-through — it is depth being measured here, not selection. */
+    chain.eq = (col: string, v: unknown) => {
+      if (table === 'group_summary' && col === 'group_id') data = data.filter((r) => (r as { group_id: string }).group_id === v)
+      return chain
     }
     const settle = () => wait(table).then(() => ({ data, error: null }))
     chain.maybeSingle = () => ({ then: (res: never) => settle().then((v) => ({ ...v, data: data[0] ?? null })).then(res) })
@@ -75,7 +82,10 @@ function stubClient() {
 }
 
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: () => {} }) }))
-vi.mock('next/navigation', () => ({ redirect: () => { throw new Error('unexpected redirect') } }))
+vi.mock('next/navigation', () => ({
+  redirect: () => { throw new Error('unexpected redirect') },
+  notFound: () => { throw new Error('notFound') },
+}))
 vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => stubClient() }))
 /* The shell layout's auth pair is measured separately — getCurrentStaff is
    memoised with React cache(), which only memoises inside a request scope and
@@ -101,16 +111,30 @@ describe('/groups/[id] round-trip depth', () => {
     const depth = Math.round((Date.now() - started) / LATENCY)
 
     /* Measured with this same harness: 15 round trips either way, but a depth
-       of 12 before the fetches were grouped and 4 after — roughly 2.0s of
-       network wait reduced to 0.7s. The ceiling is set at 5 to leave room for
-       one more wave without failing, while still catching a fetch that gets
-       chained onto the end of the sequence instead of joining a wave. */
+       of 12 before the fetches were grouped, 4 after, and 3 once the group row
+       itself joined the wave on 10 September instead of being awaited alone
+       ahead of it — roughly 2.0s of network wait reduced to 0.5s. The ceiling
+       is exact now: getAccountsData is the floor at 3 (owners → accounts →
+       summary), and a fetch chained onto the end rather than joining a wave
+       reads 4 and fails. */
     expect(calls.length).toBeGreaterThanOrEqual(10)
     // The notes pair must actually have been reached, or the depth below is
     // measuring a page that never fetched them.
     expect(calls).toContain('group_notes_summary')
     expect(calls).toContain('workflow_board')
-    expect(depth).toBeLessThanOrEqual(5)
+    expect(depth).toBe(3)
+  })
+
+  /**
+   * The group row is no longer checked before the siblings start, so the 404
+   * has to be shown to still happen — after the wave, not instead of it.
+   */
+  test('an unknown group is still a 404, one wave later', async () => {
+    calls.length = 0
+    await expect(GroupDetailPage({ params: Promise.resolve({ id: 'nope' }) })).rejects.toThrow('notFound')
+    // The siblings did run: that is the trade the comment on the page records.
+    expect(calls).toContain('group_summary')
+    expect(calls).toContain('group_notes_summary')
   })
 })
 

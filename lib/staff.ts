@@ -32,25 +32,46 @@ export type Staff = {
  * the caller — the bug that broke the MCP server's add_note in August.
  *
  * Memoised for the life of one request. The shell layout and the page inside it
- * both need the current staff member, and each call costs two round trips —
- * auth.getUser() against GoTrue plus the staff_users select. Without this the
- * pair is paid twice on every render, including the re-render that follows
- * every save.
+ * both need the current staff member; without this the staff_users select is
+ * paid twice on a hard navigation, and again on the re-render that follows
+ * every save. It does NOT help a tab click: the shell layout segment is
+ * unchanged on a soft navigation so it does not re-execute, and the page's
+ * call is the first in a fresh cache scope. That is why the auth step itself
+ * has to be cheap — see below.
+ *
+ * **One round trip, not two, since 10 September.** This used to call
+ * `auth.getUser()` — a network call to GoTrue on every page render, ~170ms —
+ * before the staff_users select. It now calls `getClaims()`, which verifies the
+ * ES256 token locally against a process-wide JWKS cache (~1ms warm) and yields
+ * the same `sub`. Two route handlers made this switch first, for the same
+ * reason; the reasoning is at their call sites and on proxy.ts.
+ *
+ * **What that gives up, stated plainly for whoever reads this next.** GoTrue is
+ * no longer asked whether the session still exists, so a session revoked in
+ * Supabase — "sign out everywhere", or a banned account — stays usable in the
+ * web app until its access token expires (one JWT lifetime). Postgres evaluates
+ * the token the same way, so the app now has the database's own view of
+ * validity rather than a stricter one. **To remove somebody NOW, set their
+ * staff_users.status to anything but 'active'**: this function re-reads that
+ * row on every request, and every RLS policy requires it, so that lock-out is
+ * instant everywhere.
+ *
+ * With no session `getClaims()` returns null data and no error, so the gate is
+ * on `sub`, never on `error`.
  */
 export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return null
+  const { data: verified } = await supabase.auth.getClaims()
+  const sub = verified?.claims.sub
+  if (!sub) return null
 
   const { data, error } = await supabase
     .from('staff_users')
     .select(
       'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
-    .eq('auth_user_id', user.id)
+    .eq('auth_user_id', sub)
     .maybeSingle()
 
   if (error || !data) return null

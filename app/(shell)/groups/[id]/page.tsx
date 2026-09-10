@@ -281,29 +281,34 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   if (!staff) redirect('/login')
 
   const { id } = await params
-  const group = await getGroup(id)
+  /* ONE wave of five, since 10 September. The group row used to be awaited on
+     its own first, so that `notFound()` could run before anything else was
+     asked for — and that lone await was a whole round trip (~170ms) on every
+     visit to this page, the slowest in the app. Every sibling takes the id
+     from the URL, not from the row, so nothing here needs the row to start.
+
+     The trade: on a WRONG url the four siblings run for nothing and return
+     empties under RLS — a wrong url is rare, and every real visit saves a
+     round trip. The 404 still happens, one wave later; it was already a
+     streamed 200 carrying the not-found UI once the page went behind a loading
+     boundary. The workflow page checks after its wave the same way.
+
+     memberDetail exists because the panel needs the whole record, not the
+     rolled-up name string the card used before — individuals only, since a
+     trust or company in the group has no persons row and those keep rendering
+     from `members`. */
+  const [group, { phone, adviser }, memberDetail, accountsData, notesData] = await Promise.all([
+    getGroup(id),
+    getGroupContacts(id),
+    getGroupMemberDetail(id),
+    getAccountsData(id),
+    getGroupNotes(id),
+  ])
   /* 404 rather than an empty shell. The page moved from `/groups?id=` to
      `/groups/[id]` on 10 September, and with the id in the path an unknown
      group is a wrong URL, not a state the screen should try to render. Same
      treatment as the workflow detail page. */
   if (!group) notFound()
-
-  /* All three need the group id and nothing from each other, so they run
-     together rather than one after another. memberDetail exists because the
-     panel needs the whole record, not the rolled-up name string the card used
-     before — individuals only, since a trust or company in the group has no
-     persons row and those keep rendering from `members`. */
-  /* No empty-group branch any more. `notFound()` above means `group` is a real
-     row by the time this runs, so the four fetches are unconditional and the
-     explicit tuple annotation that existed to type the empty side is gone with
-     it. That annotation was the only reason PersonDetail was imported as a
-     type here. */
-  const [{ phone, adviser }, memberDetail, accountsData, notesData] = await Promise.all([
-    getGroupContacts(group.group_id),
-    getGroupMemberDetail(group.group_id),
-    getAccountsData(group.group_id),
-    getGroupNotes(group.group_id),
-  ])
   const { accounts, policies, members: ownerOptions, providers } = accountsData
   const { notes, workflows } = notesData
 

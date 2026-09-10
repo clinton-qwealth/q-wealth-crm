@@ -1,8 +1,47 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NAV_ITEMS, isCurrentNavItem } from '@/lib/nav'
+
+/**
+ * The mark that says "this click is in flight", before the navigation commits.
+ *
+ * The brand fill moves when `usePathname()` changes, and that happens at
+ * COMMIT — which, now that every page has a loading boundary, is usually the
+ * first frame after the click. But not always: after any server action the
+ * prefetch cache is invalidated and the next click has to fetch the loading
+ * segment through the proxy first, and in development nothing is prefetched at
+ * all. In that window the click would otherwise look ignored.
+ *
+ * `useLinkStatus()` reports pending for exactly that window: set inside the
+ * navigation's transition, cleared when it commits — the same instant the fill
+ * moves, so the two hand over cleanly.
+ *
+ * **Why not move the fill early.** An optimistic fill would claim you are
+ * already somewhere you are not, and would have to snap back on a failed or
+ * modifier-click navigation. So this is the tabs component's own "here" idiom
+ * instead — a 2px brand bar — always rendered and toggled by opacity, so it can
+ * never shift layout. `aria-hidden` and empty, so the link's accessible name
+ * stays exactly its label: the e2e suite looks these up by name. On the current
+ * item it is brand on brand and invisible, which is right — that click goes
+ * nowhere.
+ *
+ * Must be a descendant of the Link it reports on; that is the hook's contract.
+ */
+function PendingMark() {
+  const { pending } = useLinkStatus()
+  return (
+    <span
+      aria-hidden="true"
+      className={[
+        'pointer-events-none absolute inset-x-2.5 bottom-0.5 h-0.5 rounded-full bg-brand',
+        'transition-opacity duration-150 motion-reduce:transition-none',
+        pending ? 'opacity-100' : 'opacity-0',
+      ].join(' ')}
+    />
+  )
+}
 
 /**
  * The top bar's destinations, with the current one filled.
@@ -56,7 +95,8 @@ export function TopNavLinks() {
                the same thing to a screen reader and nothing to the name. */
             aria-current={current ? 'page' : undefined}
             className={[
-              'rounded-md px-2.5 py-1.5 text-sm outline-none transition-colors',
+              /* `relative` anchors the pending mark's absolute position. */
+              'relative rounded-md px-2.5 py-1.5 text-sm outline-none transition-colors',
               'focus-visible:ring-2 focus-visible:ring-brand/30',
               /* The two branches are mutually exclusive rather than additive.
                  Leaving the grey hover on the current item would turn it grey
@@ -69,6 +109,7 @@ export function TopNavLinks() {
             ].join(' ')}
           >
             {item.label}
+            <PendingMark />
           </Link>
         )
       })}
