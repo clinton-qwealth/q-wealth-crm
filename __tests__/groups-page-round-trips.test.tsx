@@ -19,10 +19,26 @@ import { describe, expect, test, vi } from 'vitest'
 const LATENCY = 25
 
 const calls: string[] = []
+/* Which wave each table was FIRST read in, from the clock the test started. A
+   whole-page depth cannot see a loader that chains two reads while another
+   loader is already two deep — the chain hides under the floor. The issue wave
+   can: a read that belongs in the first wave and is issued in the second has
+   been chained onto something. Only meaningful for a table ONE loader reads
+   (client_group_members is read by three, in different waves, and says
+   nothing). */
+let clock = 0
+const issuedIn: Record<string, number> = {}
+const startClock = () => {
+  calls.length = 0
+  for (const k of Object.keys(issuedIn)) delete issuedIn[k]
+  clock = Date.now()
+  return clock
+}
 
 function stubClient() {
   const wait = (label: string) => {
     calls.push(label)
+    issuedIn[label] = Math.min(issuedIn[label] ?? Infinity, Math.round((Date.now() - clock) / LATENCY))
     return new Promise((r) => setTimeout(r, LATENCY))
   }
 
@@ -38,6 +54,12 @@ function stubClient() {
     ],
     persons: [{ party_id: 'p1', first_name: 'Janet', last_name: 'Testsmith' }],
     party_roles: [{ party_id: 'p1', role: 'client', status: 'active', start_date: '2026-01-01', parties: { display_name: 'A Provider' } }],
+    group_financial_accounts: [{ group_id: 'g1', account_id: 'a1', label: 'Super' }],
+    group_insurance_policies: [{ group_id: 'g1', policy_id: 'i1', label: 'Life' }],
+    /* The tables the accounts loader walked before the two group views
+       replaced its chain on 10 September. Kept populated so a loader that
+       regresses to chaining still finds rows and reaches its full depth,
+       rather than returning early and hiding the regression. */
     financial_account_owners: [{ account_id: 'a1' }],
     financial_accounts_summary: [{ account_id: 'a1', label: 'Super' }],
     insurance_policy_parties: [{ policy_id: 'i1' }],
@@ -102,27 +124,45 @@ const { default: GroupsIndexPage } = await import('@/app/(shell)/groups/page')
 
 describe('/groups/[id] round-trip depth', () => {
   test('the page fetches in a shallow chain, not one call after another', async () => {
-    calls.length = 0
-    const started = Date.now()
+    const started = startClock()
     /* `params`, not `searchParams`: the id became a path segment on
        10 September when /groups became the index and the detail page moved
        under it. */
     await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) })
     const depth = Math.round((Date.now() - started) / LATENCY)
 
-    /* Measured with this same harness: 15 round trips either way, but a depth
-       of 12 before the fetches were grouped, 4 after, and 3 once the group row
-       itself joined the wave on 10 September instead of being awaited alone
-       ahead of it — roughly 2.0s of network wait reduced to 0.5s. The ceiling
-       is exact now: getAccountsData is the floor at 3 (owners → accounts →
-       summary), and a fetch chained onto the end rather than joining a wave
-       reads 4 and fails. */
+    /* Measured with this same harness: a depth of 12 before the fetches were
+       grouped; 4 after; 3 once the group row joined the wave on 10 September
+       instead of being awaited alone ahead of it; and 2 the same day, when the
+       accounts loader's three-step chain (members → owners → summary) became
+       one read each of the two group views — roughly 2.0s of network wait
+       reduced to 0.35s. The number is exact: getGroupMemberDetail is the floor
+       at 2 and is inherently two-phase (members, then their person rows), and
+       a fetch chained onto the end rather than joining a wave reads 3 and
+       fails. */
     expect(calls.length).toBeGreaterThanOrEqual(10)
     // The notes pair must actually have been reached, or the depth below is
     // measuring a page that never fetched them.
     expect(calls).toContain('group_notes_summary')
     expect(calls).toContain('workflow_board')
-    expect(depth).toBe(3)
+    // The accounts and policies come from the group views, and the tables the
+    // old chain walked are not read on their own.
+    expect(calls).toContain('group_financial_accounts')
+    expect(calls).toContain('group_insurance_policies')
+    expect(calls).not.toContain('financial_account_owners')
+    expect(calls).not.toContain('financial_accounts_summary')
+    expect(calls).not.toContain('insurance_policy_parties')
+    expect(calls).not.toContain('insurance_policies_summary')
+    expect(depth).toBe(2)
+
+    /* The accounts loader is ONE wave of four, and the wave is the first: none
+       of its reads waits for another. Caught here because the page depth alone
+       cannot see it — a loader chained to depth 2 sits under the member-detail
+       floor of 2 and the total still reads 2. (Found by mutation: re-chaining
+       the members read ahead of the other three passed the depth assertion.) */
+    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_summary', 'group_notes_summary']) {
+      expect(issuedIn[first], `${first} issued in wave`).toBe(0)
+    }
   })
 
   /**

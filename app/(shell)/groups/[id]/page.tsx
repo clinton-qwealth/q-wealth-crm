@@ -133,20 +133,33 @@ type AccountRow = {
 }
 
 /**
- * The group's members, its accounts, and the providers on file.
+ * The group's members, its accounts, its policies, and the providers on file.
  *
  * Accounts have no group column by design — an account belongs to the group(s)
- * its owners belong to. So the path is members -> owned accounts -> summary.
- * Three round trips; worth folding into a view if this page gets busier.
+ * its owners belong to, and a policy to the group(s) of anyone with a role on
+ * it. Until 10 September this function honoured that by asking three times in
+ * a row: members, then the accounts and policies those parties are attached
+ * to, then the two summary views for those ids. Each ask is a round trip of
+ * about 170ms whatever it carries, and once the group row and the notes had
+ * joined the page's first wave this chain was the deepest thing left and set
+ * the page's load time on its own.
+ *
+ * `group_financial_accounts` and `group_insurance_policies` answer all three
+ * questions in one: the summary rows keyed by group_id, for CURRENT members,
+ * once each, with a policy counted through any role (a life insured on a
+ * policy someone else owns still belongs on this tab). Both are
+ * security_invoker over the same tables the three asks read, so a staff member
+ * sees exactly the rows they saw before. Proved equivalent on a branch over
+ * 3,000 accounts before the app was changed; see the migration.
+ *
+ * ONE wave of four. Members and providers were always independent of each
+ * other; now the accounts and the policies are independent of the members
+ * too, because the view finds the members itself.
  */
 async function getAccountsData(groupId: string) {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  /* Wave one: the group's members and the provider list have nothing to do with
-     each other, so they go together. Every round trip to Supabase costs about
-     170ms regardless of how small the query is, so the depth of this chain
-     matters far more than the shape of any single query in it. */
-  const [{ data: memberRows }, { data: providerRows }] = await Promise.all([
+  const [{ data: memberRows }, { data: providerRows }, accountsRes, policiesRes] = await Promise.all([
     supabase
       .from('client_group_members')
       .select('party_id, parties(display_name)')
@@ -157,6 +170,8 @@ async function getAccountsData(groupId: string) {
       .select('party_id, parties(display_name)')
       .eq('role', 'product_provider')
       .eq('status', 'active'),
+    supabase.from('group_financial_accounts').select('*').eq('group_id', groupId).order('label'),
+    supabase.from('group_insurance_policies').select('*').eq('group_id', groupId).order('label'),
   ])
 
   const members = (memberRows ?? []).map((m) => {
@@ -171,42 +186,9 @@ async function getAccountsData(groupId: string) {
     return { id: r.party_id as string, name: party?.display_name ?? 'Unnamed' }
   })
 
-  if (members.length === 0) {
-    return { accounts: [] as AccountRow[], policies: [] as PolicyRow[], members, providers }
-  }
-  const partyIds = members.map((m) => m.id)
-
-  /* Accounts and policies are fetched independently: a group can hold cover
-     without holding an investment account, and vice versa. Returning early from
-     one path would silently empty the other.
-
-     Wave two finds which accounts and policies these parties are attached to —
-     the second is through any policy role, since a person whose life is insured
-     on a policy someone else owns still belongs to this list. */
-  const [{ data: ownerRows }, { data: policyPartyRows }] = await Promise.all([
-    supabase.from('financial_account_owners').select('account_id').in('party_id', partyIds),
-    supabase.from('insurance_policy_parties').select('policy_id').in('party_id', partyIds),
-  ])
-
-  const accountIds = [...new Set((ownerRows ?? []).map((o) => o.account_id as string))]
-  const policyIds = [...new Set((policyPartyRows ?? []).map((r) => r.policy_id as string))]
-
-  // Wave three: the two summary views. An empty id list is resolved locally
-  // rather than sent, so a group with no cover pays nothing for the policy half.
-  const [accountsRes, policiesRes] = await Promise.all([
-    accountIds.length
-      ? supabase.from('financial_accounts_summary').select('*').in('account_id', accountIds).order('label')
-      : Promise.resolve({ data: [] as unknown[] }),
-    policyIds.length
-      ? supabase.from('insurance_policies_summary').select('*').in('policy_id', policyIds).order('label')
-      : Promise.resolve({ data: [] as unknown[] }),
-  ])
-  const accounts = accountsRes.data ?? []
-  const policies = policiesRes.data ?? []
-
   return {
-    accounts: accounts as AccountRow[],
-    policies: policies as PolicyRow[],
+    accounts: (accountsRes.data ?? []) as AccountRow[],
+    policies: (policiesRes.data ?? []) as PolicyRow[],
     members,
     providers,
   }
