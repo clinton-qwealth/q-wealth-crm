@@ -166,10 +166,20 @@ export function EmailTool({
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
           {/* From is text, not an input. An email that could claim to come from
-              a colleague is what the rest of this app refuses by construction. */}
+              a colleague is what the rest of this app refuses by construction.
+
+              GREY GROUND, and the same geometry as the two fields under it:
+              `px-2.5 py-1.5` inside a 1px border, so the sender's name starts
+              on exactly the left edge that To and Subject start on. The label
+              stays OUTSIDE the box, as theirs do. The effect is that From reads
+              as the same kind of row as its neighbours while looking plainly
+              unavailable, which is the honest signal — it is not that this
+              field has been switched off, it is that the sender is never a
+              choice. `bg-neutral-50` is the house read-only ground, the same
+              one the History tab boxes a recorded message in. */}
           <div className="flex flex-col gap-1.5">
             <span className={LABEL}>From</span>
-            <p className="text-sm text-neutral-900">
+            <p className="rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-sm text-neutral-900">
               {senderName} <span className="text-neutral-500">· {sender}</span>
             </p>
           </div>

@@ -765,6 +765,18 @@ describe('the task panel', () => {
       // colleague is what the rest of this app refuses by construction.
       expect(dialog.textContent).toContain('clinton@qwealth.com.au')
       expect(within(dialog).queryByRole('textbox', { name: /^From$/ })).toBeNull()
+
+      /* And it LOOKS unavailable: the house read-only ground, with the same
+         padding as the two fields below it so all three share a left edge. A
+         grey box that did not line up would read as a mistake rather than as a
+         field nobody may change. */
+      const from = within(dialog).getByText(/^From$/).parentElement!.querySelector('p')!
+      expect(from.className).toContain('bg-neutral-50')
+      const subject = within(dialog).getByRole('textbox', { name: /^Subject$/ })
+      for (const geometry of ['rounded-md', 'px-2.5', 'py-1.5', 'border']) {
+        expect(from.className).toContain(geometry)
+        expect(subject.className).toContain(geometry)
+      }
     })
 
     /**

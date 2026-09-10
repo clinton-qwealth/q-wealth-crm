@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { NAV_ITEMS } from '@/lib/nav'
 
 /**
  * Every internal link must point at a route that exists.
@@ -58,5 +59,21 @@ describe('internal links', () => {
       }
     }
     expect(dead).toEqual([])
+  })
+
+  /**
+   * The nav's own destinations, which the scan above cannot see.
+   *
+   * It matches `href="/…"` as literal source text, and the top bar renders its
+   * links as `href={item.href}` from a list — so the three destinations people
+   * actually click were the one set of links with no dead-link cover at all.
+   * Importing the list closes that: a mistyped destination now fails here
+   * rather than 404-ing in the bar.
+   */
+  test('every top-nav destination points at a route that exists', () => {
+    expect(NAV_ITEMS.length).toBeGreaterThan(0)
+    for (const { href } of NAV_ITEMS) {
+      expect(routes.has(href), `${href} is in the top nav but is not a route`).toBe(true)
+    }
   })
 })

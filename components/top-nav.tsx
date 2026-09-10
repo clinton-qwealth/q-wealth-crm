@@ -3,17 +3,17 @@ import { BrandMark } from './brand-mark'
 import { HelpIcon } from './icons'
 import { ProfileMenu } from './profile-menu'
 import { SearchCommand } from './search-command'
-
-const NAV_ITEMS = [
-  { href: '/', label: 'Home' },
-  { href: '/workflows', label: 'Workflows' },
-  { href: '/reports', label: 'Reports' },
-]
+import { TopNavLinks } from './top-nav-links'
 
 /**
  * Thin top bar: mark and navigation on the left, search then help then the
  * account menu on the right. Deliberately 48px tall — this is a working tool,
  * and vertical space belongs to client data rather than to chrome.
+ *
+ * **Still a server component.** The destinations moved to TopNavLinks on
+ * 10 September, because marking the current one needs the pathname and the
+ * pathname needs a client boundary. Only that list crossed it; the mark, the
+ * Help icon and the bar itself did not.
  */
 export function TopNav({ staffName, staffEmail }: { staffName?: string; staffEmail?: string }) {
   return (
@@ -27,17 +27,7 @@ export function TopNav({ staffName, staffEmail }: { staffName?: string; staffEma
           <BrandMark className="h-7 w-7 text-neutral-900" />
         </Link>
 
-        <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md px-2.5 py-1.5 text-sm text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <TopNavLinks />
 
         {/* Search takes the slack, so it grows with the window rather than
             leaving a gap between the nav and the right-hand controls. */}
