@@ -24,12 +24,19 @@ export type WorkflowOption = {
 }
 
 /**
- * A note's HEADER. There is no body here and there is none in the view either.
+ * A note's HEADER, plus the first 255 characters of what it says.
  *
- * The list this backs shows a title, a date and a name. Sending the content of
- * a client meeting to the browser to render that would be putting the most
- * sensitive thing on the page into the markup of a component that never
- * displays it.
+ * **The full body is still not here, and neither is the transcript.** The rule
+ * this type used to state — that the content of a client meeting should not
+ * travel to the browser to render a date and an author — held while the list
+ * showed only a date and an author. Since 10 September the list opens onto the
+ * note's first words, so an excerpt is now something it displays; the rest of
+ * the body is not, and a group with sixty meeting summaries still ships sixty
+ * excerpts rather than sixty meetings.
+ *
+ * The excerpt is computed in the database by `note_excerpt()`, not here:
+ * truncating in TypeScript would mean the whole body had crossed the wire to
+ * be thrown away, which is the thing being avoided.
  */
 export type NoteHeader = {
   note_id: string
@@ -42,6 +49,14 @@ export type NoteHeader = {
   workflow_id: string | null
   workflow_name: string | null
   workflow_status: WorkflowStatus | null
+  /**
+   * Up to 255 characters of the body, whitespace collapsed and cut at a word
+   * boundary. Empty string for a note whose body is blank — never null, so the
+   * caller has one case fewer to handle.
+   */
+  body_excerpt: string
+  /** True when there is more body than the excerpt shows. Drives Read more. */
+  body_is_truncated: boolean
 }
 
 /**
@@ -73,7 +88,7 @@ export async function getGroupNotes(groupId: string): Promise<{
     supabase
       .from('group_notes_summary')
       .select(
-        'note_id, note_type, title, occurred_at, author_name, source, workflow_id, workflow_name, workflow_status',
+        'note_id, note_type, title, occurred_at, author_name, source, workflow_id, workflow_name, workflow_status, body_excerpt, body_is_truncated',
       )
       .eq('group_id', groupId)
       /* Newest first: a file note list is read from the top, and the thing

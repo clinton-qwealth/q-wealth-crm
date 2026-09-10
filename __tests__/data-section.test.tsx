@@ -32,6 +32,26 @@ describe('DataSection', () => {
     expect(screen.queryByText('Nothing here')).toBeNull()
   })
 
+  /**
+   * Meta sits opposite the text, and that is the only placement.
+   *
+   * A `metaBelow` option was added and removed on 10 September — the file notes
+   * list, which was its only caller, became its own disclosure row instead. The
+   * assertion that survives is the one that matters: a figure belongs at the
+   * right edge so a column of them lines up.
+   */
+  test('meta sits opposite the text, for a column of figures', () => {
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="Super" meta="$4.00" />
+      </DataSection>,
+    )
+    const meta = screen.getByText('$4.00')
+    expect(meta.className).toContain('ml-auto')
+    expect(meta.className).toContain('shrink-0')
+    expect(meta.className).not.toContain('basis-full')
+  })
+
   test('a row carries its leading tile before the text', () => {
     render(
       <DataSection addLabel="Add" empty={empty}>

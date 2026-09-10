@@ -542,6 +542,19 @@ export function NoteTypeTile({ type }: { type: string }) {
   )
 }
 
+/**
+ * The kind's glyph alone, for a pill rather than a tile.
+ *
+ * Exported instead of NOTE_GLYPH itself, so the map stays the one place a kind
+ * is mapped to a mark and a caller cannot pick a different fallback. The file
+ * notes list wears this inside its kind pill; NoteTypeTile is the same glyph
+ * with a tile around it.
+ */
+export function NoteTypeGlyph({ type, className = 'h-3 w-3' }: { type: string; className?: string }) {
+  const Glyph = NOTE_GLYPH[type] ?? NoteIcon
+  return <Glyph className={className} />
+}
+
 const coverMoney = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',

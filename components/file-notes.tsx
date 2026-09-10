@@ -6,10 +6,10 @@ import {
   fileNoteUnderNewWorkflow,
 } from '@/app/(shell)/groups/actions'
 import type { NoteHeader, WorkflowOption, WorkflowType } from '@/lib/notes'
-import { DataRow, DataSection } from './data-section'
+import { DataSection } from './data-section'
 import { AddNoteModal, NOTE_TYPE_LABEL } from './add-note-modal'
-import { NoteTypeTile, Pill } from './ui'
-import { PlusIcon } from './icons'
+import { NoteTypeGlyph, Pill } from './ui'
+import { ChevronDownIcon, PlusIcon } from './icons'
 import { WORKFLOW_STATUS_LABEL, WORKFLOW_TYPE_LABEL } from '@/lib/workflow-board'
 import { formatNoteDate } from '@/lib/note-date'
 
@@ -32,10 +32,12 @@ function byline(note: NoteHeader) {
 /**
  * The workflow a note belongs to, or the way to give it one.
  *
- * Both states occupy the same slot on the row, so the list does not reflow as
- * notes get filed. The pill is a button in both cases: without that, a note
- * filed under the wrong workflow could never be moved, and set_note_workflow
- * accepts null precisely so it can be taken back out.
+ * Both states occupy the same slot, so the list does not reflow as notes get
+ * filed — and since 10 September that slot is a line of its own beneath the
+ * tile and the title, which is what lets a long workflow name show in full.
+ * The pill is a button in both cases: without that, a note filed under the
+ * wrong workflow could never be moved, and set_note_workflow accepts null
+ * precisely so it can be taken back out.
  */
 function WorkflowCell({ note, onPick }: { note: NoteHeader; onPick: () => void }) {
   if (note.workflow_id && note.workflow_name) {
@@ -48,7 +50,11 @@ function WorkflowCell({ note, onPick }: { note: NoteHeader; onPick: () => void }
         type="button"
         onClick={onPick}
         title={`Workflow: ${note.workflow_name}. Change or remove.`}
-        className="max-w-[10rem] rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+        /* `max-w-full`, not the 10rem this carried while it shared the row with
+           the title. On its own line the constraint is the column, so the cap
+           is the column — and `truncate` inside the pill stays as the backstop
+           for a name longer than even that. */
+        className="max-w-full rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >
         <Pill tone={finished ? 'neutral' : 'brand'}>
           <span className="truncate">{note.workflow_name}</span>
@@ -66,6 +72,115 @@ function WorkflowCell({ note, onPick }: { note: NoteHeader; onPick: () => void }
       <PlusIcon className="h-3 w-3" />
       Add to workflow
     </button>
+  )
+}
+
+/**
+ * One file note, CLOSED by default.
+ *
+ * The same shape as a task's History entry, deliberately: kind as a pill with
+ * its glyph, the moment opposite it, the title under that, and a disclosure
+ * onto what the note says. Two lists in the same product showing the same kind
+ * of record should not be two designs, and the History tab's version had
+ * already been through the argument.
+ *
+ * **The summary is three facts and the gate holds the words.** A column of
+ * notes is scanned for the one somebody wants, so the closed row carries only
+ * what identifies it. A file note's body is a paragraph or several; left open
+ * it would mean one note fills the column and the list stops being a list.
+ *
+ * **The excerpt is 255 characters and it is not the note.** The database cuts
+ * it, at a word boundary, and says separately whether there is more. Where
+ * there is, the row offers Read more — and says plainly that reading a note in
+ * full is not built yet, rather than pretending the excerpt is the whole thing.
+ * See `note_excerpt()` and the 10 September migration for what does and does
+ * not travel.
+ *
+ * **The workflow pill stays OUTSIDE the gate.** It is the row's one action, and
+ * an action hidden behind a disclosure is an action nobody finds. It also has
+ * to be outside the gate's own button, because a button inside a button is not
+ * valid HTML.
+ */
+function NoteRecord({ note, onPick }: { note: NoteHeader; onPick: () => void }) {
+  const [open, setOpen] = useState(false)
+  const bodyId = `note-${note.note_id}-body`
+  /* An untitled note is not nameless — its kind is the next most useful thing
+     to read, and every note has one. */
+  const title = note.title ?? NOTE_TYPE_LABEL[note.note_type] ?? 'Note'
+  const hasWords = note.body_excerpt.length > 0
+
+  return (
+    <li className="px-3.5 py-3">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-controls={open ? bodyId : undefined}
+        className="group flex w-full items-start gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        <ChevronDownIcon
+          className={`mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:text-neutral-600 ${
+            open ? '' : '-rotate-90'
+          }`}
+        />
+        <span className="min-w-0 flex-1">
+          {/* Kind on the left, the moment on the right, on one row. */}
+          <span className="flex items-center justify-between gap-2">
+            <Pill tone="neutral">
+              <NoteTypeGlyph type={note.note_type} className="-ml-0.5 mr-1 h-3 w-3" />
+              {NOTE_TYPE_LABEL[note.note_type] ?? note.note_type}
+            </Pill>
+            <span className="shrink-0 text-[11px] text-neutral-400">
+              {formatNoteDate(note.occurred_at)}
+            </span>
+          </span>
+
+          {/* Truncated, not clamped: a column of records only lines up if each
+              summary takes exactly one row. */}
+          <span className="mt-1 block truncate text-sm font-semibold text-neutral-900">
+            {title}
+          </span>
+
+          <span className="mt-0.5 block truncate text-xs text-neutral-500">{byline(note)}</span>
+        </span>
+      </button>
+
+      {/* The row's one action, outside the gate so it is always reachable. */}
+      <div className="mt-1.5 pl-6">
+        <WorkflowCell note={note} onPick={onPick} />
+      </div>
+
+      {open ? (
+        <div id={bodyId} className="mt-2 pl-6">
+          {hasWords ? (
+            <>
+              {/* No `whitespace-pre-line`: note_flat() has already collapsed every run
+                  of whitespace to a single space, so the excerpt is one line by
+                  construction and the class would only imply otherwise. */}
+              <p className="rounded-md border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-xs leading-relaxed text-neutral-700">
+                {note.body_excerpt}
+                {note.body_is_truncated ? <span className="text-neutral-400">…</span> : null}
+              </p>
+              {note.body_is_truncated ? (
+                /* Dashed and disabled, the same treatment the Tools tab gives a
+                   tile that has no action yet. A live-looking control that did
+                   nothing would be worse than one that says what it is. */
+                <button
+                  type="button"
+                  disabled
+                  title="Not built yet — reading a note in full is its own path"
+                  className="mt-1.5 cursor-not-allowed rounded-full border border-dashed border-neutral-300 px-2 py-0.5 text-[11px] font-medium text-neutral-400"
+                >
+                  Read more — not built yet
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-xs text-neutral-400">This note has no written body.</p>
+          )}
+        </div>
+      ) : null}
+    </li>
   )
 }
 
@@ -270,11 +385,17 @@ function WorkflowPicker({
 /**
  * The group's file notes: header and metadata only.
  *
- * Built from the same DataSection and DataRow as the accounts and insurance
- * lists, so the third column reads as the same kind of thing as the second
- * rather than as a different design that happens to sit beside it.
+ * Built on the same DataSection as the accounts and insurance lists, so the
+ * sheet, the header and the empty state are the same furniture. The ROWS are
+ * not DataRows any more: a note record is a disclosure, and DataRow's primary
+ * and secondary are strings with nowhere to put one.
  *
- * There is no note body here, and there is none in the view behind it either.
+ * The rows follow a task's History entry instead — see NoteRecord — so the two
+ * places this product lists a record of something that happened look like one
+ * design rather than two.
+ *
+ * There is no full note body here, and none in the view behind it either. There
+ * is a 255-character excerpt, as of 10 September.
  */
 export function FileNotes({
   groupId,
@@ -303,15 +424,7 @@ export function FileNotes({
       >
         {notes.length
           ? notes.map((n) => (
-              <DataRow
-                key={n.note_id}
-                leading={<NoteTypeTile type={n.note_type} />}
-                /* An untitled note is not nameless — its kind is the next most
-                   useful thing to read, and every note has one. */
-                primary={n.title ?? NOTE_TYPE_LABEL[n.note_type] ?? 'Note'}
-                secondary={`${formatNoteDate(n.occurred_at)} · ${byline(n)}`}
-                meta={<WorkflowCell note={n} onPick={() => setPicking(n)} />}
-              />
+              <NoteRecord key={n.note_id} note={n} onPick={() => setPicking(n)} />
             ))
           : null}
       </DataSection>

@@ -208,6 +208,15 @@ export function DataRow({
         ) : null}
       </span>
       {meta ? (
+        /* Opposite the text, at the right edge, where a column of figures lines
+           up and can be read downward.
+
+           A `metaBelow` placement existed here for a few hours on 10 September,
+           added so the file notes list could put a workflow name on its own
+           line. It was removed the same day: the note row became a disclosure
+           of its own and stopped using DataRow at all, which left the prop with
+           no caller. An unused option with tests around it reads as a supported
+           feature. */
         <span className="ml-auto shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
           {meta}
         </span>

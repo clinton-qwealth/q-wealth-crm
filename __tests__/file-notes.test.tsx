@@ -36,6 +36,8 @@ const filed: NoteHeader = {
   workflow_id: 'w1',
   workflow_name: 'Annual review 2026',
   workflow_status: 'in_progress',
+  body_excerpt: 'Discussed the superannuation rollover and the insurance review',
+  body_is_truncated: true,
 }
 
 const unfiled: NoteHeader = {
@@ -48,6 +50,10 @@ const unfiled: NoteHeader = {
   workflow_id: null,
   workflow_name: null,
   workflow_status: null,
+  /* Short enough to be the whole body, so this fixture is the not-truncated
+     case and `filed` is the truncated one. */
+  body_excerpt: 'Client rang about the paperwork.',
+  body_is_truncated: false,
 }
 
 function show(notes: NoteHeader[]) {
@@ -87,13 +93,107 @@ describe('file notes list', () => {
     expect(row.textContent).not.toContain('Annual review 2026')
   })
 
-  test('a note row leads with a glyph tile for its kind, ahead of the text', () => {
-    show([unfiled]) // a phone call
-    const first = rows()[0].firstElementChild!
-    expect(first.getAttribute('aria-hidden')).toBe('true')
-    expect(first.querySelector('svg')).toBeTruthy()
-    // Decorative: the tile adds nothing to the row's text.
-    expect(first.textContent).toBe('')
+  /**
+   * The record's summary is three facts: what kind of note it is, what it is
+   * called, and who wrote it — with the moment opposite the kind. The same
+   * shape as a task's History entry, on purpose.
+   */
+  test('the summary is a kind pill with a glyph, the date opposite, then title and byline', () => {
+    show([filed])
+    const gate = within(rows()[0]).getByRole('button', { expanded: false })
+
+    const pill = Array.from(gate.querySelectorAll('span')).find((el) =>
+      el.className.includes('rounded-full'),
+    )!
+    expect(pill.textContent).toContain('Meeting summary')
+    expect(pill.querySelector('svg')).toBeTruthy()
+
+    // Kind and moment share a row, pushed to opposite ends.
+    const row = pill.parentElement!
+    expect(row.className).toContain('justify-between')
+    expect(row.textContent).toContain('Jul 2026')
+
+    // Title and byline are below that row, not in it.
+    expect(row.textContent).not.toContain('Annual review meeting')
+    expect(gate.textContent).toContain('Annual review meeting')
+    expect(gate.textContent).toContain('Sarah Chen')
+  })
+
+  /**
+   * The gate. A file note's body is a paragraph or several, so an entry left
+   * open means one note fills the column and the list stops being a list.
+   */
+  test('a note opens CLOSED, and its words are not on screen until it is opened', async () => {
+    const user = userEvent.setup()
+    show([filed])
+    const row = rows()[0]
+
+    expect(row.textContent).not.toContain('Discussed the superannuation rollover')
+    await user.click(within(row).getByRole('button', { expanded: false }))
+    expect(row.textContent).toContain('Discussed the superannuation rollover')
+
+    // And it closes again.
+    await user.click(within(row).getByRole('button', { expanded: true }))
+    expect(row.textContent).not.toContain('Discussed the superannuation rollover')
+  })
+
+  /**
+   * Read more is offered only where there IS more, and it says plainly that
+   * reading a note in full is not built. A live-looking control that did
+   * nothing would be worse than one that admits what it is.
+   */
+  test('a truncated note offers Read more, disabled and named as unbuilt', async () => {
+    const user = userEvent.setup()
+    show([filed])
+    const row = rows()[0]
+    await user.click(within(row).getByRole('button', { expanded: false }))
+
+    const more = within(row).getByRole('button', { name: /read more/i })
+    expect((more as HTMLButtonElement).disabled).toBe(true)
+    expect(more.textContent).toMatch(/not built yet/i)
+    expect(more.className).toContain('border-dashed')
+  })
+
+  test('a note that fits offers no Read more at all', async () => {
+    const user = userEvent.setup()
+    show([unfiled])
+    const row = rows()[0]
+    await user.click(within(row).getByRole('button', { expanded: false }))
+
+    expect(row.textContent).toContain('Client rang about the paperwork.')
+    expect(within(row).queryByRole('button', { name: /read more/i })).toBeNull()
+    // No trailing ellipsis either: nothing was cut.
+    expect(row.textContent).not.toContain('…')
+  })
+
+  test('a note with no written body says so rather than opening onto nothing', async () => {
+    const user = userEvent.setup()
+    show([{ ...unfiled, body_excerpt: '', body_is_truncated: false }])
+    const row = rows()[0]
+    await user.click(within(row).getByRole('button', { expanded: false }))
+    expect(row.textContent).toContain('no written body')
+  })
+
+  /**
+   * The workflow control is the row's one ACTION, so it stays out of the gate.
+   * An action behind a disclosure is an action nobody finds — and a button
+   * inside the gate's button would not be valid HTML either.
+   */
+  test('the workflow control is visible while the note is closed, outside the gate', () => {
+    show([unfiled])
+    const row = rows()[0]
+    const gate = within(row).getByRole('button', { expanded: false })
+    const add = within(row).getByRole('button', { name: /add to workflow/i })
+
+    expect(gate.contains(add)).toBe(false)
+    expect(row.contains(add)).toBe(true)
+  })
+
+  test('a filed note shows its workflow without being opened', () => {
+    show([filed])
+    const row = rows()[0]
+    expect(within(row).getByRole('button', { expanded: false })).toBeTruthy()
+    expect(within(row).getByText('Annual review 2026')).toBeTruthy()
   })
 
   test('an untitled note falls back to its kind rather than rendering nameless', () => {

@@ -16,6 +16,7 @@ const at = (pathname: string) => {
   return screen.getByRole('navigation', { name: 'Main' })
 }
 const link = (name: string) => screen.getByRole('link', { name })
+const classes = (el: HTMLElement) => el.className.split(/\s+/).filter(Boolean)
 const current = () =>
   screen
     .getAllByRole('link')
@@ -68,18 +69,25 @@ describe('the top nav marks where you are', () => {
    * turns it grey under the pointer, so the highlight would vanish exactly when
    * somebody reaches for it.
    */
-  test('the marked link is filled with the brand colour and keeps it on hover', () => {
+  test('the marked link is filled with brand-500 and keeps it on hover', () => {
     at('/workflows')
-    const on = link('Workflows')
-    expect(on.className).toContain('bg-brand-600')
-    expect(on.className).toContain('text-white')
-    expect(on.className).toContain('font-medium')
-    expect(on.className).not.toContain('hover:bg-neutral-100')
+    const on = classes(link('Workflows'))
 
-    // And an unmarked link is untouched: no fill, and its grey hover intact.
-    const off = link('Reports')
-    expect(off.className).not.toContain('bg-brand')
-    expect(off.className).toContain('hover:bg-neutral-100')
+    /* WHOLE TOKENS, not substrings. `toContain('bg-brand')` on the class
+       string would also pass for `bg-brand-600`, so a change of step would
+       slip through — and the step is the thing this test is here to pin. It
+       shipped at 600 for its contrast and was deliberately moved to 500. */
+    expect(on).toContain('bg-brand')
+    expect(on).not.toContain('bg-brand-600')
+    expect(on).toContain('hover:bg-brand-600')
+    expect(on).toContain('text-white')
+    expect(on).toContain('font-medium')
+    expect(on).not.toContain('hover:bg-neutral-100')
+
+    // And an unmarked link is untouched: no fill of any step, grey hover intact.
+    const off = classes(link('Reports'))
+    expect(off.some((c) => c.startsWith('bg-brand'))).toBe(false)
+    expect(off).toContain('hover:bg-neutral-100')
   })
 
   test('every link keeps the standard focus ring, marked or not', () => {
