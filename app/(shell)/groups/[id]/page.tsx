@@ -435,7 +435,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 panel: (
                   <div className="flex flex-col gap-6">
                     {/* Two columns, exactly the split the Workflows tab uses —
-                        records left, the other 40% reserved. Asked for on
+                        records left, the other 35% reserved. Asked for on
                         10 September; `TAB_SPLIT` is shared with that tab rather
                         than copied, so the two cannot drift apart. The Insurance
                         section below is deliberately still full width: only the
