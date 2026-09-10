@@ -157,7 +157,7 @@ const investmentSection = (accounts: HTMLElement) => {
 }
 
 describe('the Accounts tab’s investment section', () => {
-  test('sits in a two-column split, records on the left and the reserved half on the right', async () => {
+  test('sits in a two-column split, records on the left and the donut on the right', async () => {
     const { accounts } = await panels()
     const grid = accounts.querySelector(`[class="${TAB_SPLIT}"]`)
     expect(grid, 'the shared split is applied verbatim').toBeTruthy()
@@ -169,11 +169,32 @@ describe('the Accounts tab’s investment section', () => {
     expect(within(left).getByText('Investment Accounts')).toBeTruthy()
     expect(within(left).getByText('Joint Super')).toBeTruthy()
 
-    // The right half is the reserved column: dashed, empty, unannounced.
-    expect(right.getAttribute('aria-hidden')).toBe('true')
+    /* The right half held a dashed `ReservedColumn` until 10 September and now
+       holds the mix donut — a trial. What is pinned is that it is the RIGHT
+       half: the records must not end up beside it in the other order. */
+    expect(within(right).getByText('Mix by value')).toBeTruthy()
+    /* `hidden: true` because `Tabs` renders every panel and marks the inactive
+       ones `hidden` — which takes their contents out of the accessibility tree,
+       so a plain `getByRole` finds nothing here. Workflows is the tab that
+       opens, so the Accounts panel is always the hidden one in this file.
+       `getByText` above is unaffected, which is why only this query failed. */
+    expect(within(right).getByRole('img', { hidden: true })).toBeTruthy()
+  })
+
+  /**
+   * The two tabs share the SPLIT and nothing else. The Workflows tab still
+   * reserves its right half, and this is what keeps "shared measurements, own
+   * content" true rather than a sentence in a comment.
+   */
+  test('the Workflows tab still reserves its right half', async () => {
+    const { workflows } = await panels()
+    const grid = workflows.querySelector(`[class="${TAB_SPLIT}"]`)!
+    const right = grid.children[1] as HTMLElement
     expect(right.getAttribute('data-slot')).toBe('placeholder')
-    expect(right.className).toContain('border-dashed')
+    expect(right.getAttribute('aria-hidden')).toBe('true')
     expect(right.textContent).toBe('')
+    // And it is not carrying the accounts tab's chart.
+    expect(within(workflows).queryByText('Mix by value')).toBeNull()
   })
 
   /**

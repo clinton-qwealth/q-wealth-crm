@@ -2,9 +2,10 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { coverSummary, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, PolicyTile, ReservedColumn, StatTile, TAB_SPLIT } from '@/components/ui'
+import { coverSummary, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
 import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
+import { AccountDonut } from '@/components/account-donut'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
@@ -498,7 +499,12 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                             ))
                           : undefined}
                       </DataSection>
-                      <ReservedColumn />
+                      {/* The reserved half, no longer reserved — a trial as of
+                          10 September. The Workflows tab still shows
+                          `ReservedColumn` there, which is the point of sharing
+                          only the SPLIT: the two tabs agree on the measurements
+                          and each decides its own content. */}
+                      <AccountDonut accounts={accounts} />
                     </div>
                     <DataSection
                       title="Insurance Policies"
