@@ -991,13 +991,21 @@ function EditableSection({
  * same facts were laid out two different ways on one tab, and the group you
  * were actually in was the only one whose name never appeared.
  *
- * **It carries no heading of its own.** The box sat under a "Groups" title with
- * a "Group" column header directly beneath it, which read as the same word
- * twice; the column header is the one that earns its place, because it labels
- * something.
+ * **No heading of its own.** The box sat under a "Groups" title with a "Group"
+ * column header directly beneath, which read as the same word twice; the column
+ * header is the one that earns its place, because it labels something.
  *
  * Each row leads with a tile, the way a member row does on the group page —
  * these are records, and a record in this app has something to land on.
+ *
+ * ## The vertical rhythm is owned here, not by the box
+ *
+ * The wrapping section carries NO vertical padding. It used to, and stacking it
+ * on top of the header's own space made the gap above the first record visibly
+ * bigger than the gap below the last one — reported 11 September. Now the
+ * header supplies the space at the top and the final row supplies it at the
+ * bottom, both at `ROW_EDGE`, so the two ends match by construction rather than
+ * by arithmetic that has to be redone whenever either changes.
  */
 function MembershipRows({
   groupId,
@@ -1012,6 +1020,10 @@ function MembershipRows({
    *  to. Already loaded for the panel, so this costs nothing. */
   members: PersonDetail[]
 }) {
+  /* One row can be edited, and it is always this group's, so the state lives
+     here rather than in a row: there is nothing to key it by. */
+  const [editing, setEditing] = useState(false)
+
   const rows = [
     {
       key: 'this-group',
@@ -1035,7 +1047,8 @@ function MembershipRows({
           can read. Hidden from assistive technology because each cell below
           carries its own words. */}
       <div
-        className="grid grid-cols-[minmax(0,1fr)_7rem_7rem_3rem] gap-3 border-b border-neutral-200 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        data-slot="membership-header"
+        className={`grid ${MEMBERSHIP_COLS} gap-3 border-b border-neutral-200 px-1 ${ROW_EDGE_TOP} pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500`}
         aria-hidden="true"
       >
         <span>Group</span>
@@ -1050,9 +1063,9 @@ function MembershipRows({
             key={r.key}
             data-slot="membership-row"
             data-here={r.here ? 'true' : 'false'}
-            className="border-b border-neutral-100 last:border-0"
+            className={`border-b border-neutral-100 last:border-0 ${ROW_EDGE_BOTTOM}`}
           >
-            <div className="grid grid-cols-[minmax(0,1fr)_7rem_7rem_3rem] items-center gap-3 px-1 py-2.5">
+            <div className={`grid ${MEMBERSHIP_COLS} items-center gap-3 px-1 py-2.5`}>
               <span className="flex min-w-0 items-center gap-2.5">
                 <GroupTile />
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1065,15 +1078,38 @@ function MembershipRows({
               </span>
               <span className="text-sm text-neutral-700">{r.contact ? 'Yes' : 'No'}</span>
               <span className="justify-self-end">
-                {/* Only this group's row can be edited or left. The panel is
-                    opened from one group's page and acts on that group; a
-                    control that changed a group the reader is not looking at
-                    would act where they cannot see the consequence. */}
+                {/* Only this group's row can be edited. The panel is opened from
+                    one group's page and acts on that group; a control that
+                    changed a group the reader is not looking at would act where
+                    they cannot see the consequence. */}
                 {r.here ? (
-                  <ThisGroupRow groupId={groupId} person={person} members={members} />
+                  <button
+                    type="button"
+                    onClick={() => setEditing((v) => !v)}
+                    aria-label="Edit this membership"
+                    aria-expanded={editing}
+                    className="rounded-md p-1 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+                  >
+                    <PencilIcon className="h-3.5 w-3.5" />
+                  </button>
                 ) : null}
               </span>
             </div>
+
+            {/* **Below the row, at the row's own width.** It was inside the
+                4th column until 11 September, where a `col-span-full` could not
+                reach the grid — `display: contents` on a child of a grid ITEM
+                promotes its children into that item, not into the grid — so a
+                form with two selects in it was being laid out inside a 3rem
+                track. Here it has the whole row. */}
+            {r.here && editing ? (
+              <ThisGroupEditor
+                groupId={groupId}
+                person={person}
+                members={members}
+                onDone={() => setEditing(false)}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
@@ -1081,25 +1117,49 @@ function MembershipRows({
   )
 }
 
+/** The four tracks, named once so the header and every row cannot drift apart. */
+const MEMBERSHIP_COLS = 'grid-cols-[minmax(0,1fr)_7rem_7rem_3rem]'
+
 /**
- * The edit and remove controls for the group the panel was opened from.
+ * The space above the first record and below the last one — **one step, spelled
+ * out at both ends.**
  *
- * A pencil, matching every other editable section in this panel, opening the
- * row into a small form beneath it. Role is a plain select. **The primary
- * contact is not a checkbox**, because it cannot be turned off — a group must
- * always have one, so the only move available is handing it to somebody else.
- * The form says exactly that, and offers the people it could go to.
+ * The complaint this fixes was that they did not match: the wrapping box's own
+ * `py-4` sat on top of the header's space, so the gap above the first record
+ * read as larger than the gap below the last. The box now has no vertical
+ * padding at all and these two supply it.
+ *
+ * Written as two literals rather than one value flipped from `pt-` to `pb-`.
+ * A first attempt did exactly that and would have emitted nothing: Tailwind
+ * scans source text, so a class assembled at runtime is never generated — the
+ * same rule that keeps `Tabs`' gutter a closed set of steps.
  */
-function ThisGroupRow({
+const ROW_EDGE_TOP = 'pt-4'
+/* The variant is part of the constant on purpose. `last:${ROW_EDGE_BOTTOM}`
+   would put `last:pb-4` nowhere in the source, and Tailwind only emits what it
+   can read. */
+const ROW_EDGE_BOTTOM = 'last:pb-4'
+
+/**
+ * The edit form for the group the panel was opened from.
+ *
+ * Role is a plain select. **The primary contact is not a checkbox**, because it
+ * cannot be turned off — a group must always have one, so the only move
+ * available is handing it to somebody else. The form says exactly that and
+ * offers the people it could go to, rather than offering an action the database
+ * would refuse.
+ */
+function ThisGroupEditor({
   groupId,
   person,
   members,
+  onDone,
 }: {
   groupId: string
   person: PersonDetail
   members: PersonDetail[]
+  onDone: () => void
 }) {
-  const [editing, setEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, start] = useTransition()
 
@@ -1109,7 +1169,7 @@ function ThisGroupRow({
    * A save does NOT close the form. Role and primary contact are two changes
    * somebody may well want to make in one sitting, and closing after the first
    * would make the second a second trip through the pencil. The page
-   * revalidates underneath, so the row behind the form is already correct; Done
+   * revalidates underneath, so the row above the form is already correct; Done
    * is what dismisses it.
    */
   const run = (fn: () => Promise<MemberState>) =>
@@ -1118,30 +1178,15 @@ function ThisGroupRow({
       setError(result && 'error' in result ? result.error : null)
     })
 
-  if (!editing) {
-    return (
-      <span className="flex items-center justify-end gap-0.5">
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(true)
-            setError(null)
-          }}
-          aria-label="Edit this membership"
-          className="rounded-md p-1 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
-        >
-          <PencilIcon className="h-3.5 w-3.5" />
-        </button>
-      </span>
-    )
-  }
-
   return (
-    <span className="contents">
-      {/* Spans the whole row rather than sitting in the 3rem control column,
-          which could not hold a select. `col-span-full` crosses the grid
-          whatever its track count, the same reason `Field` uses it. */}
-      <span className="col-span-full flex flex-col gap-3 rounded-md bg-neutral-50 p-3">
+    <div
+      data-slot="membership-editor"
+      className="mb-3 flex flex-col gap-3 rounded-md bg-neutral-50 p-3 ring-1 ring-neutral-200"
+    >
+      {/* Two across where there is room, stacked where there is not. The panel
+          is 480px of content at its narrowest, so a single column below `sm`
+          is the honest answer rather than two 140px selects. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-neutral-600">Role in this group</span>
           <select
@@ -1166,39 +1211,28 @@ function ThisGroupRow({
           <span className="text-xs font-medium text-neutral-600">Primary contact</span>
           {person.is_primary_contact ? (
             others.length ? (
-              <>
-                {/* Not a checkbox: every group must have a primary contact, so
-                    this one cannot simply be switched off — it can only be
-                    handed over. The control says so rather than offering an
-                    action that would be refused. */}
-                <p className="text-xs leading-relaxed text-neutral-500">
-                  {person.display_name} is this group’s primary contact. A group always has
-                  one, so choose who takes it instead.
-                </p>
-                <select
-                  defaultValue=""
-                  disabled={busy}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    if (!next) return
-                    setError(null)
-                    run(() => setPrimaryContact(groupId, next))
-                  }}
-                  className={FIELD}
-                  aria-label="Hand the primary contact to"
-                >
-                  <option value="">Hand it to…</option>
-                  {others.map((m) => (
-                    <option key={m.party_id} value={m.party_id}>
-                      {m.display_name}
-                    </option>
-                  ))}
-                </select>
-              </>
+              <select
+                defaultValue=""
+                disabled={busy}
+                onChange={(e) => {
+                  const next = e.target.value
+                  if (!next) return
+                  setError(null)
+                  run(() => setPrimaryContact(groupId, next))
+                }}
+                className={FIELD}
+                aria-label="Hand the primary contact to"
+              >
+                <option value="">Hand it to…</option>
+                {others.map((m) => (
+                  <option key={m.party_id} value={m.party_id}>
+                    {m.display_name}
+                  </option>
+                ))}
+              </select>
             ) : (
               <p className="text-xs leading-relaxed text-neutral-500">
-                {person.display_name} is this group’s primary contact, and its only member.
-                Add somebody else before handing it over.
+                Also this group’s only member. Add somebody else before handing it over.
               </p>
             )
           ) : (
@@ -1209,47 +1243,43 @@ function ThisGroupRow({
                 setError(null)
                 run(() => setPrimaryContact(groupId, person.party_id))
               }}
-              className="self-start rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+              className="self-start rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/30"
             >
-              Make {person.display_name} the primary contact
+              Make this person the primary contact
             </button>
           )}
         </div>
+      </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-3">
-          <RemoveMember groupId={groupId} person={person} />
-          <button
-            type="button"
-            onClick={() => setEditing(false)}
-            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
-          >
-            Done
-          </button>
-        </div>
+      {/* Said once, under the control it explains, rather than inside the
+          column where it would set that column's width. */}
+      {person.is_primary_contact && others.length ? (
+        <p className="text-xs leading-relaxed text-neutral-500">
+          {person.display_name} is this group’s primary contact. A group always has one, so
+          it can only be handed over, not switched off.
+        </p>
+      ) : null}
 
-        {error ? (
-          <p role="alert" className="text-xs leading-snug text-red-700">
-            {error}
-          </p>
-        ) : null}
-      </span>
-    </span>
+      <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-3">
+        <RemoveMember groupId={groupId} person={person} />
+        <button
+          type="button"
+          onClick={onDone}
+          className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          Done
+        </button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="text-xs leading-snug text-red-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
-/**
- * Take this person out of this group.
- *
- * **Two presses, not one, and not a native confirm.** The panel is already a
- * `<dialog>`, and `window.confirm` inside one is a second modal over a modal —
- * it also cannot be styled or read by a test. So the button becomes its own
- * confirmation in place, keeping the question next to the row it is about.
- *
- * The refusal is shown verbatim. `end_group_membership()` names who the primary
- * contact is and what to do instead, and a generic "could not remove" would
- * throw that away — the more so now that the edit form above can actually do
- * the thing the message asks for.
- */
 function RemoveMember({ groupId, person }: { groupId: string; person: PersonDetail }) {
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1869,7 +1899,15 @@ export function MemberPanel({
                         {/* Boxed like the other tabs' sections, but with no
                             title of its own — "Groups" above a "Group" column
                             header read as the same word twice. */}
-                        <section className="rounded-lg border border-neutral-200 px-4 py-4">
+                        {/* No vertical padding: the header supplies the space
+                            at the top and the last row supplies it at the
+                            bottom, so the two ends match. Stacking the box's
+                            own `py-4` on the header's made the gap above the
+                            first record read as larger. See `ROW_EDGE_TOP`. */}
+                        <section
+                          data-slot="memberships-box"
+                          className="rounded-lg border border-neutral-200 px-4"
+                        >
                           <MembershipRows
                             groupId={groupId}
                             groupName={groupName}

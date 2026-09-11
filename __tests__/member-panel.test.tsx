@@ -308,6 +308,32 @@ describe('MemberPanel', () => {
       expect(box.textContent).not.toContain('GroupsGroup')
     })
 
+    /**
+     * **The space above the first record equals the space below the last.**
+     *
+     * They did not match, and the cause was the wrapping box's own vertical
+     * padding stacking on top of the header's. The box now has none and the two
+     * ends supply it — so this asserts both halves: that the box is clear, and
+     * that the header's top step and the last row's bottom step are the same.
+     */
+    test('the top and bottom of the list are padded the same', async () => {
+      await openTab()
+      const box = document.querySelector('[data-slot="memberships-box"]')!
+      const header = document.querySelector('[data-slot="membership-header"]')!
+      const last = rows()[rows().length - 1]
+
+      // The box contributes nothing vertically.
+      expect(box.className, 'the box is padding the list again').not.toMatch(/\bp[yt b]?-\d/)
+      expect(box.className).toContain('px-4')
+
+      const step = (el: Element, side: 'pt' | 'pb') =>
+        (el.getAttribute('class') ?? '').match(new RegExp(`(?:^|[\\s:])${side}-(\\d+)`))?.[1]
+
+      expect(step(header, 'pt'), 'the header supplies no top space').toBeDefined()
+      expect(step(last, 'pb'), 'the last row supplies no bottom space').toBeDefined()
+      expect(step(last, 'pb'), 'the two ends are different sizes').toBe(step(header, 'pt'))
+    })
+
     test('the section is boxed, like the other tabs’', async () => {
       await openTab()
       const box = rows()[0].closest('section')
@@ -412,6 +438,31 @@ describe('MemberPanel', () => {
       await user.click(screen.getByRole('button', { name: 'Edit this membership' }))
       return { user, ...rendered }
     }
+
+    /**
+     * **The form sits under the row, not inside a cell.**
+     *
+     * It was inside the 4th column until this was reported: `display: contents`
+     * on a child of a grid ITEM promotes its children into that item, not into
+     * the grid, so a `col-span-full` never reached the tracks and a form with
+     * two selects was being laid out inside a 3rem column.
+     *
+     * Asserted structurally — the editor is a SIBLING of the row's grid, both
+     * inside the same list item — because that is the thing that was wrong, and
+     * a width assertion is meaningless in a runtime with no layout engine.
+     */
+    test('the form is laid out under the row rather than inside a column', async () => {
+      await openEdit()
+      const editor = document.querySelector('[data-slot="membership-editor"]')!
+      const row = document.querySelector('[data-slot="membership-row"]')!
+
+      expect(row.contains(editor), 'the editor left the row it belongs to').toBe(true)
+      // A direct child of the <li>, after the grid — not nested inside a cell.
+      expect(editor.parentElement).toBe(row)
+      expect(editor.previousElementSibling!.className).toContain('grid')
+      // And nothing between it and the row is a grid cell.
+      expect(editor.className).not.toContain('col-span')
+    })
 
     test('the role is a select of every role, on the one the person holds', async () => {
       await openEdit()
