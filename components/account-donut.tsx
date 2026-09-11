@@ -261,15 +261,39 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 <Cell
                   key={s.key}
                   fill={toneFor(i)}
-                  /* Dim the rest rather than move the hovered one: a segment
-                     that pops outward changes the ring's silhouette, and the
-                     thing being compared here is angle, not position. */
-                  fillOpacity={active === null || active === i ? 1 : 0.4}
-                  /* `Cell` merges a className onto the sector — verified — so
-                     the fade is CSS and `motion-reduce:` reaches it, the same
-                     idiom the loading skeleton and the modals use. That is why
-                     no JavaScript here reads the preference at all. */
-                  className="transition-[fill-opacity] duration-150 motion-reduce:transition-none"
+                  /*
+                   * **The hovered arc is what moves.**
+                   *
+                   * This dimmed the others and left the hovered one untouched,
+                   * which inverted the feedback: the eye tracks change, so the
+                   * arcs that faded read as the selection and the one under the
+                   * pointer read as inert. Reported as "it feels like I am
+                   * selecting them".
+                   *
+                   * So the hovered arc now grows out of the ring, and the dim
+                   * on the rest is lifted from 0.4 to 0.6 — present enough to
+                   * focus, quiet enough that the pop is plainly the subject.
+                   *
+                   * A CSS transform rather than Recharts' `activeShape`:
+                   * Recharts 3 has no controlled `activeIndex`, so an active
+                   * shape cannot be driven from this component's own state.
+                   * `Cell` does forward `style` and `className` onto the sector
+                   * (verified), so the scale is ordinary CSS — which also means
+                   * `motion-reduce:` reaches it and the state still changes for
+                   * a reader who asked for no motion, it simply does not glide.
+                   *
+                   * `transform-box: view-box` makes 50% 50% the ring's centre
+                   * rather than the arc's own bounding box, so every segment
+                   * grows outward along its own radius instead of drifting
+                   * toward wherever its box happens to be.
+                   */
+                  fillOpacity={active === null || active === i ? 1 : 0.6}
+                  style={{
+                    transformBox: 'view-box',
+                    transformOrigin: '50% 50%',
+                    transform: active === i ? 'scale(1.05)' : 'scale(1)',
+                  }}
+                  className="transition-[fill-opacity,transform] duration-150 motion-reduce:transition-none"
                   /* Hoverable, and named for anything reading the tree. */
                   data-slot="segment"
                   data-label={s.label}

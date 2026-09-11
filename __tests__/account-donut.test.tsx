@@ -372,8 +372,48 @@ describe('the investment mix donut', () => {
 
       expect(rows()[1].getAttribute('data-active')).toBe('true')
       expect(rows()[1].className).toContain('bg-neutral-100')
-      // The hovered segment keeps its strength; the rest recede.
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '1', '0.4'])
+      // The hovered segment keeps its strength; the rest recede a little.
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.6', '1', '0.6'])
+    })
+
+    /**
+     * **The arc under the pointer has to be the thing that moves.** This is the
+     * assertion that says so, and it is the reason the fade above was softened
+     * from 0.4 to 0.6.
+     *
+     * The first version changed only the OTHER arcs. That inverts the feedback:
+     * the eye tracks change, so the arcs that faded read as the selection and
+     * the one under the pointer read as inert. Reported as "the only element
+     * that changes is the sections that arent in the hover so it feels like i
+     * am selecting them".
+     *
+     * Dimming alone still satisfies every opacity assertion in this block, so
+     * the pop needs a test of its own or it can be deleted without a failure.
+     */
+    test('and the hovered segment itself grows, rather than only its neighbours fading', () => {
+      render(<AccountDonut accounts={three} />)
+      const scaleOf = (i: number) => (segments()[i] as unknown as SVGElement).style.transform
+
+      expect([0, 1, 2].map(scaleOf), 'at rest').toEqual(['scale(1)', 'scale(1)', 'scale(1)'])
+
+      fireEvent.mouseEnter(rows()[1])
+      expect(scaleOf(1), 'the hovered arc').toBe('scale(1.05)')
+      expect(scaleOf(0), 'a neighbour').toBe('scale(1)')
+      expect(scaleOf(2), 'a neighbour').toBe('scale(1)')
+
+      fireEvent.mouseLeave(rows()[1])
+      expect(scaleOf(1), 'after the pointer leaves').toBe('scale(1)')
+    })
+
+    /* Scaled about the RING's centre, not each arc's own bounding box, so a
+       segment grows outward along its own radius instead of drifting toward
+       wherever its box happens to sit. Without `view-box` the browser measures
+       an SVG child's own bbox and the arcs slide inward. */
+    test('the pop grows outward from the ring’s centre', () => {
+      render(<AccountDonut accounts={three} />)
+      const style = (segments()[0] as unknown as SVGElement).style
+      expect(style.transformBox).toBe('view-box')
+      expect(style.transformOrigin).toBe('50% 50%')
     })
 
     test('and pointing at a segment activates its legend row', () => {
@@ -381,7 +421,7 @@ describe('the investment mix donut', () => {
       fireEvent.mouseEnter(segments()[2])
       expect(activeRows()).toHaveLength(1)
       expect(rows()[2].getAttribute('data-active')).toBe('true')
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.4', '0.4', '1'])
+      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.6', '0.6', '1'])
     })
 
     test('leaving puts everything back, rather than latching on the last one', () => {
@@ -633,10 +673,12 @@ describe('the investment mix donut', () => {
     expect(segments()[0].getAttribute('d')).toBeTruthy()
   })
 
-  test('the hover fade is CSS, and stands still under reduced motion', () => {
+  test('the hover fade and the pop are both CSS, and stand still under reduced motion', () => {
     render(<AccountDonut accounts={three} />)
     for (const seg of segments()) {
-      expect(seg.getAttribute('class')).toContain('transition-[fill-opacity]')
+      // Naming `transform` here matters: the property list is exhaustive, so a
+      // pop left out of it would snap while the fade eased.
+      expect(seg.getAttribute('class')).toContain('transition-[fill-opacity,transform]')
       expect(seg.getAttribute('class')).toContain('motion-reduce:transition-none')
     }
   })
