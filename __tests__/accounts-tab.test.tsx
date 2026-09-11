@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { render, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 
 /**
  * The Accounts tab's investment section: two columns, and no total.
@@ -11,8 +11,8 @@ import { render, within } from '@testing-library/react'
  * wiring: the split has to be the same object the Workflows tab uses, and the
  * total has to be absent from the section a person actually sees.
  *
- * `Tabs` renders every panel and hides the inactive ones, so the Accounts panel
- * is in the document without being clicked.
+ * `Tabs` builds a panel when its tab is first opened and keeps it after that,
+ * so the helper below opens Accounts and then reads both panels.
  */
 const ACCOUNTS = [
   {
@@ -132,6 +132,11 @@ const { TAB_SPLIT } = await import('@/components/ui')
 
 const panels = async () => {
   render(await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) }))
+  /* Opened, not merely present. Since 11 September a panel is built the first
+     time its tab is chosen — so that the investment ring draws on the click
+     rather than invisibly at page load — and Workflows is the tab that opens
+     first. Workflows stays mounted once left, so both are readable after this. */
+  fireEvent.click(screen.getByRole('tab', { name: 'Accounts' }))
   const get = (id: string) => {
     const el = document.getElementById(`panel-${id}`)
     if (!el) throw new Error(`no panel-${id}`)
@@ -176,11 +181,9 @@ describe('the Accounts tab’s investment section', () => {
        10 September so the chart lines up with the first record rather than
        sitting under a label of its own. */
     expect(right.getAttribute('data-slot')).toBe('mix-chart')
-    /* `hidden: true` because `Tabs` renders every panel and marks the inactive
-       ones `hidden` — which takes their contents out of the accessibility tree,
-       so a plain `getByRole` finds nothing here. Workflows is the tab that
-       opens, so the Accounts panel is always the hidden one in this file. */
-    expect(within(right).getByRole('img', { hidden: true })).toBeTruthy()
+    /* The Accounts tab is open by the time `panels()` returns, so the ring is
+       in the accessibility tree and no `hidden` option is needed. */
+    expect(within(right).getByRole('img')).toBeTruthy()
   })
 
   /**

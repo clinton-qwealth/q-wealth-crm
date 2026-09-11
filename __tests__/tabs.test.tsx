@@ -16,15 +16,73 @@ describe('Tabs', () => {
     expect(screen.getByRole('tab', { name: 'Workflows' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: 'Accounts' }).getAttribute('aria-selected')).toBe('false')
 
-    /* Every panel stays mounted and inactive ones carry `hidden`, so state and
-       scroll position survive a tab switch. `hidden` keeps them out of the
-       accessibility tree, which is why exactly one tabpanel has a role. */
+    /* Every panel has a box in the DOM and the inactive ones carry `hidden`,
+       which keeps them out of the accessibility tree — hence exactly one
+       element with the tabpanel role. */
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
     expect(screen.getByRole('tabpanel').textContent).toBe('workflow content')
-    expect(screen.getByText('account content').closest('[role="tabpanel"]')).toHaveProperty(
-      'hidden',
-      true,
-    )
+    expect(document.querySelectorAll('[role="tabpanel"]')).toHaveLength(items.length)
+  })
+
+  describe('a panel is built when its tab is first opened, and kept after that', () => {
+    /**
+     * **The unopened panels are EMPTY, not merely hidden.**
+     *
+     * Every panel used to render at once, inactive ones behind `hidden`. That
+     * is harmless for text and wrong for a panel that does something on mount:
+     * the investment ring played its draw animation at page load inside a
+     * hidden box, so it was already finished by the time the Accounts tab was
+     * reached. Reported on 11 September as the chart drawing on page load
+     * rather than on tab selection.
+     *
+     * Asserting on the panel's own box rather than on `queryByText` alone, so
+     * this cannot be satisfied by the panel disappearing altogether.
+     */
+    test('an unopened panel is an empty box, so nothing in it has mounted', () => {
+      render(<Tabs items={items} label="Group sections" />)
+
+      const boxes = Array.from(document.querySelectorAll('[role="tabpanel"]'))
+      expect(boxes.map((b) => b.textContent)).toEqual(['workflow content', '', ''])
+      expect(screen.queryByText('account content')).toBeNull()
+    })
+
+    test('opening a tab builds its panel', async () => {
+      const user = userEvent.setup()
+      render(<Tabs items={items} label="Group sections" />)
+
+      await user.click(screen.getByRole('tab', { name: 'Accounts' }))
+
+      expect(screen.getByText('account content')).toBeTruthy()
+      // Still untouched, because it has never been opened.
+      expect(screen.queryByText('detail content')).toBeNull()
+    })
+
+    /**
+     * Mount on first open and KEEP. Unmounting on the way out would restart the
+     * ring's draw on every visit and throw away anything typed into a panel's
+     * form — the property the all-mounted version existed for, and the half of
+     * it worth keeping.
+     */
+    test('and leaving it again keeps it, rather than tearing it down', async () => {
+      const user = userEvent.setup()
+      render(<Tabs items={items} label="Group sections" />)
+
+      await user.click(screen.getByRole('tab', { name: 'Accounts' }))
+      await user.click(screen.getByRole('tab', { name: 'Workflows' }))
+
+      const kept = screen.getByText('account content')
+      expect(kept.closest('[role="tabpanel"]')).toHaveProperty('hidden', true)
+    })
+
+    test('the keyboard opens a panel too, not only the mouse', async () => {
+      const user = userEvent.setup()
+      render(<Tabs items={items} label="Group sections" />)
+
+      screen.getByRole('tab', { name: 'Workflows' }).focus()
+      await user.keyboard('{ArrowRight}')
+
+      expect(screen.getByText('account content')).toBeTruthy()
+    })
   })
 
   test('clicking a tab switches the panel', async () => {

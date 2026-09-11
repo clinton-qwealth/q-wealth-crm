@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
-import { accountMix, sharePct, type MixAccount } from '@/lib/account-mix'
+import { accountMix, sharePct, type AccountMix, type MixAccount } from '@/lib/account-mix'
 import { accountMoney, SECTION_HEADING, SHEET } from './ui'
 
 /**
@@ -107,6 +107,7 @@ const toneFor = (i: number) => RAMP[Math.min(i, RAMP.length - 1)]
  */
 const HOVER_EASE = 'duration-300 ease-out'
 
+
 const SIZE = 240
 
 /**
@@ -177,7 +178,13 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
    * prop, and this is the first thing to reach for if the count discrepancy
    * ever wants explaining again.
    */
-  const { slices, total, counted } = accountMix(accounts)
+  /*
+   * Memoised because its identity, not just its contents, is load-bearing:
+   * `slices` is the ring's `data`, and a fresh array on every render is one of
+   * the two things that used to remount every arc. See `Ring` below.
+   */
+  const mix = useMemo(() => accountMix(accounts), [accounts])
+  const { slices } = mix
 
   /**
    * Which segment the pointer is on, shared by the ring and the legend so
@@ -185,6 +192,9 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
    * the same as index 0 — hence a nullable number rather than a -1 sentinel.
    */
   const [active, setActive] = useState<number | null>(null)
+
+  /* Stable, so `Ring`'s memo comparison passes on a hover. */
+  const onActivate = useCallback((i: number | null) => setActive(i), [])
 
   if (!slices.length) {
     return (
@@ -204,135 +214,9 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   }
 
   return (
-    <Frame>
+    <Frame active={active}>
       <div className="flex flex-col items-center gap-3 px-3.5 py-4">
-        <div
-          role="img"
-          aria-label={ariaLabel(
-            slices.map((s) => `${s.label} ${sharePct(s.share)}`),
-            total,
-          )}
-          className={`relative ${RING_BOX} ${FLUID}`}
-        >
-          {/* Zero margin, stated rather than inherited: Recharts defaults to 5,
-              and the ghost ring's radii are computed from SIZE. */}
-          <PieChart width={SIZE} height={SIZE} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-            <Pie
-              data={slices}
-              dataKey="value"
-              nameKey="label"
-              cx="50%"
-              cy="50%"
-              /* Percentages, not pixels, so the ring's proportions hold at
-                 every column width rather than the band getting fatter as the
-                 chart shrinks. 60/94 leaves the rounded ends room to sit inside
-                 the viewBox instead of being clipped by it. */
-              innerRadius={`${INNER_RADIUS * 100}%`}
-              outerRadius={`${OUTER_RADIUS * 100}%`}
-              /*
-               * The gap and the roundness, matched to the comparison page the
-               * palette was chosen from — both were asked for as seen there,
-               * so both are derived rather than eyeballed.
-               *
-               * That ring was hand-drawn as a dashed circle with
-               * `stroke-linecap="round"`, which puts a semicircular cap on each
-               * end: the cap radius is exactly HALF THE BAND. Recharts reaches
-               * the same shape through `cornerRadius`, so it is half the band
-               * here too — 20.4 in viewBox units — rather than the arbitrary 7
-               * it started at. That ring's gap was 3% of the circumference,
-               * which is 10.8°, so `paddingAngle` is 11.
-               *
-               * No conditional for a lone segment: a mutation showed Recharts
-               * emits a byte-identical path for a single sector whether the
-               * padding is 0 or not, because a full annulus has no neighbour to
-               * be separated from.
-               */
-              paddingAngle={GAP_DEGREES}
-              cornerRadius={((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 4}
-              stroke="none"
-              /* Starts at twelve o'clock and fills clockwise, so the largest
-                 share is where a reader looks first. */
-              startAngle={90}
-              endAngle={-270}
-              /*
-               * `"auto"`, NOT `true`, and the difference is the whole point.
-               *
-               * Recharts consults `prefers-reduced-motion` only for `"auto"` —
-               * `JavascriptAnimate` resolves `isActiveProp === 'auto' ? !isSsr
-               * && !prefersReducedMotion : isActiveProp`, so a bare
-               * `isAnimationActive` (which is `true`) animates for a reader who
-               * asked not to be animated at. This was written as `true` first
-               * and caught by a test.
-               *
-               * `"auto"` is also Pie's own default, so this is stating the
-               * default rather than changing it — deliberately, because the
-               * value carries a decision that a missing prop would hide. With
-               * it, the library reads the query SSR-safely and subscribes to
-               * changes, which is more than a hand-rolled read here did.
-               */
-              isAnimationActive="auto"
-              animationDuration={650}
-              onMouseEnter={(_, index: number) => setActive(index)}
-              onMouseLeave={() => setActive(null)}
-            >
-              {slices.map((s, i) => (
-                <Cell
-                  key={s.key}
-                  fill={toneFor(i)}
-                  /*
-                   * **The hovered arc is what moves.**
-                   *
-                   * This dimmed the others and left the hovered one untouched,
-                   * which inverted the feedback: the eye tracks change, so the
-                   * arcs that faded read as the selection and the one under the
-                   * pointer read as inert. Reported as "it feels like I am
-                   * selecting them".
-                   *
-                   * So the hovered arc now grows out of the ring, and the dim
-                   * on the rest is lifted from 0.4 to 0.6 — present enough to
-                   * focus, quiet enough that the pop is plainly the subject.
-                   *
-                   * A CSS transform rather than Recharts' `activeShape`:
-                   * Recharts 3 has no controlled `activeIndex`, so an active
-                   * shape cannot be driven from this component's own state.
-                   * `Cell` does forward `style` and `className` onto the sector
-                   * (verified), so the scale is ordinary CSS — which also means
-                   * `motion-reduce:` reaches it and the state still changes for
-                   * a reader who asked for no motion, it simply does not glide.
-                   *
-                   * `transform-box: view-box` makes 50% 50% the ring's centre
-                   * rather than the arc's own bounding box, so every segment
-                   * grows outward along its own radius instead of drifting
-                   * toward wherever its box happens to be.
-                   */
-                  fillOpacity={active === null || active === i ? 1 : 0.6}
-                  style={{
-                    transformBox: 'view-box',
-                    transformOrigin: '50% 50%',
-                    transform: active === i ? 'scale(1.05)' : 'scale(1)',
-                  }}
-                  className={`transition-[fill-opacity,transform] ${HOVER_EASE} motion-reduce:transition-none`}
-                  /* Hoverable, and named for anything reading the tree. */
-                  data-slot="segment"
-                  data-label={s.label}
-                />
-              ))}
-            </Pie>
-          </PieChart>
-
-          {/* The count, centred over the ring. Absolutely positioned rather
-              than an SVG <text>: Recharts owns the svg's contents, and a label
-              inside it would be re-created on every animation frame. */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
-          >
-            <span className="text-2xl font-semibold text-neutral-900">{counted}</span>
-            <span className="mt-0.5 text-[11px] text-neutral-500">
-              {counted === 1 ? 'account' : 'accounts'}
-            </span>
-          </span>
-        </div>
+        <Ring mix={mix} onActivate={onActivate} />
 
         <ul className="flex w-full flex-col gap-0.5">
           {slices.map((s, i) => (
@@ -370,6 +254,158 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
     </Frame>
   )
 }
+
+
+/**
+ * The ring itself, and the one component in this file that must not re-render.
+ *
+ * ## Why it is memoised, and why nothing inside depends on the hover
+ *
+ * Recharts keys its whole sector subtree on an animation id, and that id is
+ * regenerated whenever the Pie's resolved props object changes by reference —
+ * `useAnimationId` compares with `===`, and `AnimatedItems` passes the id as a
+ * React `key`. A new key is a remount, so ANY re-render of the Pie replaces
+ * every arc with a fresh DOM node.
+ *
+ * That is fatal to a CSS transition, which needs the same element to move from
+ * one computed value to another: a newly inserted node simply starts at its
+ * final value. It is why the hover read as instant even though the stylesheet
+ * carried a correct `transition-property: fill-opacity,transform`. Proved by
+ * comparing node identity across a hover, which is now a test.
+ *
+ * So the hover is expressed two removes away from here:
+ *
+ * | Piece | Where |
+ * | --- | --- |
+ * | Which arc is pointed at | `data-active` on the frame |
+ * | Which arc is which | a static `data-index` on each Cell |
+ * | The dim, the pop and the tempo | `globals.css` |
+ *
+ * The frame re-renders on a hover; this does not, because `mix` is memoised
+ * and `onActivate` is a stable callback, so the arcs survive and the browser
+ * animates them. Add a prop here that changes with the hover and the remount
+ * comes straight back.
+ */
+const Ring = memo(function Ring({
+  mix,
+  onActivate,
+}: {
+  mix: AccountMix
+  onActivate: (i: number | null) => void
+}) {
+  const { slices, total, counted } = mix
+  return (
+      <div
+        role="img"
+        aria-label={ariaLabel(
+          slices.map((s) => `${s.label} ${sharePct(s.share)}`),
+          total,
+        )}
+        className={`relative ${RING_BOX} ${FLUID}`}
+      >
+        {/* Zero margin, stated rather than inherited: Recharts defaults to 5,
+            and the ghost ring's radii are computed from SIZE. */}
+        <PieChart width={SIZE} height={SIZE} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <Pie
+            data={slices}
+            dataKey="value"
+            nameKey="label"
+            cx="50%"
+            cy="50%"
+            /* Percentages, not pixels, so the ring's proportions hold at
+               every column width rather than the band getting fatter as the
+               chart shrinks. 60/94 leaves the rounded ends room to sit inside
+               the viewBox instead of being clipped by it. */
+            innerRadius={`${INNER_RADIUS * 100}%`}
+            outerRadius={`${OUTER_RADIUS * 100}%`}
+            /*
+             * The gap and the roundness, matched to the comparison page the
+             * palette was chosen from — both were asked for as seen there,
+             * so both are derived rather than eyeballed.
+             *
+             * That ring was hand-drawn as a dashed circle with
+             * `stroke-linecap="round"`, which puts a semicircular cap on each
+             * end: the cap radius is exactly HALF THE BAND. Recharts reaches
+             * the same shape through `cornerRadius`, so it is half the band
+             * here too — 20.4 in viewBox units — rather than the arbitrary 7
+             * it started at. That ring's gap was 3% of the circumference,
+             * which is 10.8°, so `paddingAngle` is 11.
+             *
+             * No conditional for a lone segment: a mutation showed Recharts
+             * emits a byte-identical path for a single sector whether the
+             * padding is 0 or not, because a full annulus has no neighbour to
+             * be separated from.
+             */
+            paddingAngle={GAP_DEGREES}
+            cornerRadius={((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 4}
+            stroke="none"
+            /* Starts at twelve o'clock and fills clockwise, so the largest
+               share is where a reader looks first. */
+            startAngle={90}
+            endAngle={-270}
+            /*
+             * `"auto"`, NOT `true`, and the difference is the whole point.
+             *
+             * Recharts consults `prefers-reduced-motion` only for `"auto"` —
+             * `JavascriptAnimate` resolves `isActiveProp === 'auto' ? !isSsr
+             * && !prefersReducedMotion : isActiveProp`, so a bare
+             * `isAnimationActive` (which is `true`) animates for a reader who
+             * asked not to be animated at. This was written as `true` first
+             * and caught by a test.
+             *
+             * `"auto"` is also Pie's own default, so this is stating the
+             * default rather than changing it — deliberately, because the
+             * value carries a decision that a missing prop would hide. With
+             * it, the library reads the query SSR-safely and subscribes to
+             * changes, which is more than a hand-rolled read here did.
+             */
+            isAnimationActive="auto"
+            animationDuration={650}
+            /* Recharts' own default is a 400ms delay before the draw begins.
+               That was invisible while the ring mounted with the page; now
+               that it mounts when the Accounts tab is first opened, it is
+               400ms of empty column after a click. Start at once. */
+            animationBegin={0}
+            onMouseEnter={(_, index: number) => onActivate(index)}
+            onMouseLeave={() => onActivate(null)}
+          >
+            {slices.map((s, i) => (
+              <Cell
+                key={s.key}
+                fill={toneFor(i)}
+                /*
+                 * **Every prop here is static.** Nothing on a `Cell` may depend
+                 * on which arc is hovered — see the note on `Ring` above for
+                 * what happens if it does.
+                 *
+                 * `data-index` is what the stylesheet matches on, and it is the
+                 * arc's own position, not recharts' `data-recharts-item-index`,
+                 * which is internal and would tie the CSS to a library detail.
+                 */
+                data-index={i}
+                /* Hoverable, and named for anything reading the tree. */
+                data-slot="segment"
+                data-label={s.label}
+              />
+            ))}
+          </Pie>
+        </PieChart>
+
+        {/* The count, centred over the ring. Absolutely positioned rather
+            than an SVG <text>: Recharts owns the svg's contents, and a label
+            inside it would be re-created on every animation frame. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none"
+        >
+          <span className="text-2xl font-semibold text-neutral-900">{counted}</span>
+          <span className="mt-0.5 text-[11px] text-neutral-500">
+            {counted === 1 ? 'account' : 'accounts'}
+          </span>
+        </span>
+      </div>
+  )
+})
 
 /**
  * The donut's silhouette in light grey, for when there is nothing to draw.
@@ -443,9 +479,15 @@ function GhostRing() {
  * A `div`, not an `h3`: an invisible heading would still sit in the document
  * outline, which is a claim about structure this no longer makes.
  */
-function Frame({ children }: { children: React.ReactNode }) {
+function Frame({ active, children }: { active?: number | null; children: React.ReactNode }) {
   return (
-    <div data-slot="mix-chart">
+    /*
+     * `data-active` is the hover, and it is carried HERE rather than on each
+     * arc on purpose — see `Ring`. Absent when nothing is pointed at, because
+     * the stylesheet keys the dim off the attribute merely existing, and an
+     * empty string would still match.
+     */
+    <div data-slot="mix-chart" data-active={active == null ? undefined : String(active)}>
       <div aria-hidden="true" className={`${SECTION_HEADING} invisible`}>
         &nbsp;
       </div>

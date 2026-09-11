@@ -29,6 +29,9 @@ const three = [
 ]
 
 const segments = () => Array.from(document.querySelectorAll('[data-slot="segment"]'))
+/* The frame carries the hover as `data-active`, because the arcs cannot — see
+   the node-identity test below. */
+const frame = () => document.querySelector('[data-slot="mix-chart"]')!
 const rows = () => Array.from(document.querySelectorAll('[data-slot="legend-row"]'))
 const activeRows = () =>
   rows()
@@ -362,58 +365,58 @@ describe('the investment mix donut', () => {
   })
 
   describe('hovering highlights the ring and the legend together', () => {
-    test('pointing at a legend row activates that row and dims the other segments', () => {
+    test('pointing at a legend row marks the ring and shades that row', () => {
       render(<AccountDonut accounts={three} />)
       expect(activeRows()).toEqual([])
-      // Every segment starts at full strength.
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1', '1'])
+      expect(frame().getAttribute('data-active'), 'at rest').toBeNull()
 
       fireEvent.mouseEnter(rows()[1])
 
       expect(rows()[1].getAttribute('data-active')).toBe('true')
       expect(rows()[1].className).toContain('bg-neutral-100')
-      // The hovered segment keeps its strength; the rest recede a little.
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.6', '1', '0.6'])
+      expect(frame().getAttribute('data-active'), 'the ring knows which arc').toBe('1')
     })
 
     /**
-     * **The arc under the pointer has to be the thing that moves.** This is the
-     * assertion that says so, and it is the reason the fade above was softened
-     * from 0.4 to 0.6.
+     * **The whole reason the hover works at all**, and the assertion that
+     * would have caught the bug on 11 September.
      *
-     * The first version changed only the OTHER arcs. That inverts the feedback:
-     * the eye tracks change, so the arcs that faded read as the selection and
-     * the one under the pointer read as inert. Reported as "the only element
-     * that changes is the sections that arent in the hover so it feels like i
-     * am selecting them".
+     * Reported twice as instant, the second time after a correct
+     * `transition-property: fill-opacity,transform` had been added and
+     * verified in the built stylesheet. The stylesheet was never the problem.
+     * Recharts keys its sector subtree on an animation id regenerated whenever
+     * the Pie's props change by reference, and passes that id as a React key —
+     * so a `fillOpacity` that moved with the hover remounted every arc, and a
+     * transition cannot run on a node that has only just been inserted. It
+     * starts at its final value.
      *
-     * Dimming alone still satisfies every opacity assertion in this block, so
-     * the pop needs a test of its own or it can be deleted without a failure.
+     * Node identity is therefore the thing to assert, not the styling: if the
+     * arcs are replaced, no amount of correct CSS will animate.
      */
-    test('and the hovered segment itself grows, rather than only its neighbours fading', () => {
+    test('the arcs survive a hover as the same DOM nodes, so the browser can animate them', () => {
       render(<AccountDonut accounts={three} />)
-      const scaleOf = (i: number) => (segments()[i] as unknown as SVGElement).style.transform
-
-      expect([0, 1, 2].map(scaleOf), 'at rest').toEqual(['scale(1)', 'scale(1)', 'scale(1)'])
+      const before = segments()
+      expect(before).toHaveLength(3)
 
       fireEvent.mouseEnter(rows()[1])
-      expect(scaleOf(1), 'the hovered arc').toBe('scale(1.05)')
-      expect(scaleOf(0), 'a neighbour').toBe('scale(1)')
-      expect(scaleOf(2), 'a neighbour').toBe('scale(1)')
+      const during = segments()
+      expect(during).toHaveLength(3)
+      during.forEach((node, i) => {
+        expect(node, `arc ${i} while hovered`).toBe(before[i])
+      })
 
       fireEvent.mouseLeave(rows()[1])
-      expect(scaleOf(1), 'after the pointer leaves').toBe('scale(1)')
+      segments().forEach((node, i) => {
+        expect(node, `arc ${i} after the pointer leaves`).toBe(before[i])
+      })
     })
 
-    /* Scaled about the RING's centre, not each arc's own bounding box, so a
-       segment grows outward along its own radius instead of drifting toward
-       wherever its box happens to sit. Without `view-box` the browser measures
-       an SVG child's own bbox and the arcs slide inward. */
-    test('the pop grows outward from the ring’s centre', () => {
+    /* The stylesheet pairs `[data-active="n"]` on the frame with
+       `[data-index="n"]` on an arc, so the index has to be on the arc and has
+       to be its position in the ring. */
+    test('each arc carries its own index, which is what the stylesheet matches on', () => {
       render(<AccountDonut accounts={three} />)
-      const style = (segments()[0] as unknown as SVGElement).style
-      expect(style.transformBox).toBe('view-box')
-      expect(style.transformOrigin).toBe('50% 50%')
+      expect(segments().map((s) => s.getAttribute('data-index'))).toEqual(['0', '1', '2'])
     })
 
     test('and pointing at a segment activates its legend row', () => {
@@ -421,7 +424,7 @@ describe('the investment mix donut', () => {
       fireEvent.mouseEnter(segments()[2])
       expect(activeRows()).toHaveLength(1)
       expect(rows()[2].getAttribute('data-active')).toBe('true')
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['0.6', '0.6', '1'])
+      expect(frame().getAttribute('data-active')).toBe('2')
     })
 
     test('leaving puts everything back, rather than latching on the last one', () => {
@@ -430,14 +433,17 @@ describe('the investment mix donut', () => {
       expect(activeRows()).toHaveLength(1)
       fireEvent.mouseLeave(rows()[0])
       expect(activeRows()).toEqual([])
-      expect(segments().map((s) => s.getAttribute('fill-opacity'))).toEqual(['1', '1', '1'])
+      expect(frame().getAttribute('data-active')).toBeNull()
     })
 
     /* `null` is "nothing hovered" and index 0 is the largest segment. A -1 or 0
-       sentinel would make the first slice permanently highlighted. */
+       sentinel would make the first slice permanently highlighted — and on the
+       frame, an EMPTY string would too, because the dim rule keys off the
+       attribute merely being present. */
     test('nothing is highlighted before the pointer arrives, including the first slice', () => {
       render(<AccountDonut accounts={three} />)
       expect(rows()[0].getAttribute('data-active')).toBe('false')
+      expect(frame().hasAttribute('data-active')).toBe(false)
     })
   })
 
@@ -673,43 +679,20 @@ describe('the investment mix donut', () => {
     expect(segments()[0].getAttribute('d')).toBeTruthy()
   })
 
-  test('the hover fade and the pop are both CSS, and stand still under reduced motion', () => {
-    render(<AccountDonut accounts={three} />)
-    for (const seg of segments()) {
-      // Naming `transform` here matters: the property list is exhaustive, so a
-      // pop left out of it would snap while the fade eased.
-      expect(seg.getAttribute('class')).toContain('transition-[fill-opacity,transform]')
-      expect(seg.getAttribute('class')).toContain('motion-reduce:transition-none')
-    }
-  })
-
   /**
-   * **The tempo is stated, and it is the same on both halves of the hover.**
+   * The legend row's half of the tempo. The ring's half is in `globals.css`
+   * and is asserted in `mix-hover-css.test.ts`, which also checks the two
+   * agree — pointing at either moves both, so a mismatch would be on screen
+   * every time.
    *
-   * Neither part is decoration. Left unstated, the duration falls back to
-   * Tailwind's 150ms, which across a 5% scale reads as a snap rather than a
-   * glide — reported as the hover having no transition at all, even though the
-   * built stylesheet did carry `transition-property: fill-opacity,transform`.
-   *
-   * And pointing at either half moves BOTH, so if the arc and the row ran on
-   * different clocks the mismatch would be on screen every time. Deriving the
-   * row's expectation from the arc's own class is what makes changing one
-   * alone a failure; the explicit `toContain`s above it stop the comparison
-   * passing when both are simply absent.
+   * Stated rather than left to Tailwind's 150ms default, which across this
+   * highlight reads as a snap rather than a glide.
    */
-  test('the arc and the legend row are given one stated tempo, not the default', () => {
+  test('the legend row states its tempo rather than taking the default', () => {
     render(<AccountDonut accounts={three} />)
-    const arc = segments()[0].getAttribute('class')!
-    const row = rows()[0].className
-
-    const tempo = (cls: string) =>
-      (cls.match(/\b(duration-\d+|ease-[a-z]+)\b/g) ?? []).sort()
-
-    expect(tempo(arc), 'the arc states a duration and a curve').toEqual([
-      'duration-300',
-      'ease-out',
-    ])
-    expect(tempo(row), 'and the legend row runs on the same clock').toEqual(tempo(arc))
+    expect(rows()[0].className).toContain('transition-colors')
+    expect(rows()[0].className).toContain('duration-300')
+    expect(rows()[0].className).toContain('ease-out')
   })
 
 })

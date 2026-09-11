@@ -90,6 +90,36 @@ export function Tabs({
   ground?: boolean
 }) {
   const [active, setActive] = useState(items[0]?.id)
+
+  /**
+   * Which tabs have been opened, in order of first opening. The first tab is
+   * seeded because it is selected before anyone clicks anything.
+   *
+   * ## Why panels are not all mounted up front
+   *
+   * They used to be: every panel rendered, the inactive ones carrying `hidden`.
+   * That is cheap for text, and it is wrong for a panel that DOES something on
+   * mount. The investment ring is the case that forced this — it played its
+   * draw animation at page load, inside a hidden div, and was therefore already
+   * finished by the time anyone reached the Accounts tab. Asked for on
+   * 11 September: draw it when the tab is selected.
+   *
+   * Mount on first open and KEEP, rather than mounting only the active panel.
+   * Unmounting on the way out would restart the draw on every visit, throw away
+   * anything typed in a panel's form, and lose its scroll position — the
+   * property the all-mounted version was there for. Keeping is the half of it
+   * worth having; mounting everything up front was the half that was not.
+   *
+   * An array rather than a Set: state has to be replaced, not mutated, for
+   * React to see the change, and an array of at most a handful of ids says the
+   * order too.
+   */
+  const [opened, setOpened] = useState<string[]>(() => (items[0] ? [items[0].id] : []))
+
+  const select = useCallback((id: string) => {
+    setActive(id)
+    setOpened((seen) => (seen.includes(id) ? seen : [...seen, id]))
+  }, [])
   const [indicator, setIndicator] = useState({ left: 0, width: 0 })
   // Suppresses the transition for the very first measurement, so the bar does
   // not slide in from the left edge on load. Derived rather than held in its own
@@ -139,7 +169,7 @@ export function Tabs({
             ? 0
             : items.length - 1
 
-    setActive(items[next].id)
+    select(items[next].id)
     tabRefs.current[next]?.focus()
   }
 
@@ -209,7 +239,7 @@ export function Tabs({
               aria-selected={selected}
               aria-controls={`panel-${tab.id}`}
               tabIndex={selected ? 0 : -1}
-              onClick={() => setActive(tab.id)}
+              onClick={() => select(tab.id)}
               className={[
                 'shrink-0 rounded-t px-3 py-2 text-sm font-medium outline-none transition-colors',
                 'focus-visible:bg-brand-50 focus-visible:text-brand-700',
@@ -249,7 +279,7 @@ export function Tabs({
             panelGround,
           ].join(' ')}
         >
-          {tab.panel}
+          {opened.includes(tab.id) ? tab.panel : null}
         </div>
       ))}
     </div>

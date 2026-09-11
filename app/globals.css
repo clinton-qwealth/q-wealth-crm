@@ -339,3 +339,55 @@ dialog.qw-drawer[open]::backdrop {
 .qw-post u {
   text-decoration: underline;
 }
+
+/* ---------------------------------------------------------------------------
+   The investment ring's hover
+
+   Here, and not on the arcs themselves, because an arc cannot carry it.
+   Recharts keys its sector subtree on an animation id regenerated whenever the
+   Pie's props change by reference, and passes that id as a React key — so any
+   prop that moves with the hover remounts every arc, and a CSS transition
+   cannot run on a node that was only just inserted. That is what made the
+   hover instant on 11 September despite a correct transition being in place.
+
+   So the arcs are rendered once and never again. The component puts the
+   pointed-at index on the frame as `data-active`, each arc carries a static
+   `data-index`, and the whole effect is the three rules below.
+
+   One rule per index, and there are MAX_SLICES of them (`lib/account-mix.ts`)
+   because that is how many arcs the ring can ever draw. A test asserts the
+   count matches, so adding a fifth slice cannot silently leave it unpoppable.
+--------------------------------------------------------------------------- */
+[data-slot='mix-chart'] [data-slot='segment'] {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  /* 300ms on Tailwind's ease-out curve, matching the legend row beside it —
+     the two halves of one highlight, so they move on one clock. */
+  transition:
+    fill-opacity 300ms cubic-bezier(0, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* Pointing anywhere recedes the whole ring... */
+[data-slot='mix-chart'][data-active] [data-slot='segment'] {
+  fill-opacity: 0.6;
+}
+
+/* ...and the one under the pointer comes back and grows out of it. The pop is
+   the subject: dimming alone inverted the feedback, because the eye tracks
+   change and the arcs that faded read as the selection. */
+[data-slot='mix-chart'][data-active='0'] [data-slot='segment'][data-index='0'],
+[data-slot='mix-chart'][data-active='1'] [data-slot='segment'][data-index='1'],
+[data-slot='mix-chart'][data-active='2'] [data-slot='segment'][data-index='2'],
+[data-slot='mix-chart'][data-active='3'] [data-slot='segment'][data-index='3'] {
+  fill-opacity: 1;
+  transform: scale(1.05);
+}
+
+/* The state still changes for a reader who asked for no motion; it just does
+   not glide. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='mix-chart'] [data-slot='segment'] {
+    transition: none;
+  }
+}

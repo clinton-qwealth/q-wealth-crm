@@ -97,8 +97,10 @@ describe('MemberPanel', () => {
     await user.click(screen.getByRole('button', { name: 'trigger' }))
 
     expect(screen.getByText('Ms Priya Anne Drawertest')).toBeDefined()
-    // Contact lives on its own tab now. Inactive panels stay mounted with
-    // `hidden`, so the value is present in the DOM either way.
+    /* Contact lives on its own tab, and since 11 September a panel is built
+       the first time its tab is opened rather than rendered hidden at mount —
+       so it has to be opened to be read. */
+    await user.click(screen.getByRole('tab', { name: 'Contact' }))
     expect(screen.getByText('priya@example.com')).toBeDefined()
     expect(screen.getByText('12 Bay Street')).toBeDefined()
     expect(screen.getByText('Mosman')).toBeDefined()
@@ -148,6 +150,7 @@ describe('MemberPanel', () => {
     const user = userEvent.setup()
     open('view')
     await user.click(screen.getByRole('button', { name: 'trigger' }))
+    await user.click(screen.getByRole('tab', { name: 'Contact' }))
     // phone_other is null on the fixture.
     expect(screen.getByText('Other phone')).toBeDefined()
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
