@@ -89,6 +89,24 @@ const toneFor = (i: number) => RAMP[Math.min(i, RAMP.length - 1)]
  * roughly 174px of content width at 1440 and ~101px at 1024. Fluid covers both;
  * the cap stops it becoming a dinner plate if the column ever widens.
  */
+/**
+ * **One tempo for the whole hover**, shared by the arc that pops and the legend
+ * row that shades, because pointing at either one moves both and a mismatch
+ * between them is visible.
+ *
+ * 300ms and an ease-out curve, up from Tailwind's unstated 150ms default. The
+ * transition was there from the start, and the built stylesheet proves it
+ * (`transition-property: fill-opacity,transform`) — but 150ms across a 5%
+ * scale is under the threshold where the eye reads a glide rather than a snap,
+ * and it was reported as no transition at all. Ease-out puts most of the
+ * movement in the first half, so the response still feels immediate while the
+ * settle is visible.
+ *
+ * NOT longer than this: the pointer sweeps down the legend, and a highlight
+ * that is still catching up with the row you left reads as lag.
+ */
+const HOVER_EASE = 'duration-300 ease-out'
+
 const SIZE = 240
 
 /**
@@ -293,7 +311,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                     transformOrigin: '50% 50%',
                     transform: active === i ? 'scale(1.05)' : 'scale(1)',
                   }}
-                  className="transition-[fill-opacity,transform] duration-150 motion-reduce:transition-none"
+                  className={`transition-[fill-opacity,transform] ${HOVER_EASE} motion-reduce:transition-none`}
                   /* Hoverable, and named for anything reading the tree. */
                   data-slot="segment"
                   data-label={s.label}
@@ -327,7 +345,10 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
                 data-active={active === i ? 'true' : 'false'}
                 onMouseEnter={() => setActive(i)}
                 onMouseLeave={() => setActive(null)}
-                className={`flex items-center gap-2 rounded px-1 py-1 text-xs transition-colors ${
+                /* Colour only, so no `motion-reduce` guard: a shade change is
+                   not motion, and a reader who asked for no motion still wants
+                   to see which row they are on. */
+                className={`flex items-center gap-2 rounded px-1 py-1 text-xs transition-colors ${HOVER_EASE} ${
                   active === i ? 'bg-neutral-100' : ''
                 }`}
               >

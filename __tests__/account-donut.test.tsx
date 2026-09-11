@@ -683,4 +683,33 @@ describe('the investment mix donut', () => {
     }
   })
 
+  /**
+   * **The tempo is stated, and it is the same on both halves of the hover.**
+   *
+   * Neither part is decoration. Left unstated, the duration falls back to
+   * Tailwind's 150ms, which across a 5% scale reads as a snap rather than a
+   * glide — reported as the hover having no transition at all, even though the
+   * built stylesheet did carry `transition-property: fill-opacity,transform`.
+   *
+   * And pointing at either half moves BOTH, so if the arc and the row ran on
+   * different clocks the mismatch would be on screen every time. Deriving the
+   * row's expectation from the arc's own class is what makes changing one
+   * alone a failure; the explicit `toContain`s above it stop the comparison
+   * passing when both are simply absent.
+   */
+  test('the arc and the legend row are given one stated tempo, not the default', () => {
+    render(<AccountDonut accounts={three} />)
+    const arc = segments()[0].getAttribute('class')!
+    const row = rows()[0].className
+
+    const tempo = (cls: string) =>
+      (cls.match(/\b(duration-\d+|ease-[a-z]+)\b/g) ?? []).sort()
+
+    expect(tempo(arc), 'the arc states a duration and a curve').toEqual([
+      'duration-300',
+      'ease-out',
+    ])
+    expect(tempo(row), 'and the legend row runs on the same clock').toEqual(tempo(arc))
+  })
+
 })
