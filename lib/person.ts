@@ -43,6 +43,16 @@ export type PersonDetail = {
   hints: Record<string, string>
   member_role: string | null
   is_primary_group: boolean | null
+  /**
+   * Whether this person is THIS group's primary contact.
+   *
+   * Not the same idea as `is_primary_group` beside it, and the difference is
+   * the reason this exists: that flag is per PERSON — several members of one
+   * household each have it, because the household is their own main group —
+   * while a group has exactly one primary contact, always. The Memberships tab
+   * shows this one, chosen on 11 September over the other two candidates.
+   */
+  is_primary_contact: boolean
   email: string | null
   mobile: string | null
   phone_other: string | null
@@ -66,7 +76,13 @@ export type PersonDetail = {
    * could show every group on one set of columns instead of describing this
    * group in a different vocabulary from the rest.
    */
-  other_groups: { name: string; member_role: string; is_primary_group: boolean }[]
+  other_groups: {
+    name: string
+    member_role: string
+    is_primary_group: boolean
+    /** Whether they are that group's primary contact — see `is_primary_contact`. */
+    is_primary_contact: boolean
+  }[]
   /** Identity-verification history, newest first. Read from the masked summary
    *  view, so the client's mobile number is never carried in this object. */
   verifications: VerificationEntry[]
@@ -108,14 +124,26 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
 
   const { data: memberships } = await supabase
     .from('client_group_members')
-    .select('party_id, member_role, is_primary_group, parties(id, display_name, status, notes, party_type)')
+    /* The group is embedded rather than read separately: the contact is a fact
+       about the group, the query is already filtered to it, and an embed on a
+       query that is already running costs nothing. */
+    .select(
+      'party_id, member_role, is_primary_group, parties(id, display_name, status, notes, party_type), client_groups(primary_contact_party_id)',
+    )
     .eq('group_id', groupId)
     .is('end_date', null)
 
   const rows = (memberships ?? []).map((m) => {
     const raw = (m as Record<string, unknown>).parties
     const party = (Array.isArray(raw) ? raw[0] : raw) as Record<string, unknown> | null
+    /* To-one embeds come back as objects; an array is tolerated in case
+       PostgREST's relationship detection ever changes, as it is for `parties`. */
+    const rawGroup = (m as Record<string, unknown>).client_groups
+    const group = (Array.isArray(rawGroup) ? rawGroup[0] : rawGroup) as
+      | { primary_contact_party_id?: string | null }
+      | null
     return {
+      is_primary_contact: group?.primary_contact_party_id === (m.party_id as string),
       party_id: m.party_id as string,
       member_role: m.member_role as string,
       is_primary_group: m.is_primary_group as boolean,
@@ -144,6 +172,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       occupation: null, company_name: null, hin: null, chess_pid: null,
       coffee_preference: null, hints: {},
       member_role: r.member_role, is_primary_group: r.is_primary_group,
+      is_primary_contact: false,
       email: null, mobile: null, phone_other: null,
       address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
       postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
@@ -166,7 +195,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       supabase.from('party_roles').select('party_id, role, status, start_date').in('party_id', ids).is('end_date', null),
       supabase
         .from('client_group_members')
-        .select('party_id, member_role, is_primary_group, client_groups(name)')
+        .select('party_id, member_role, is_primary_group, client_groups(name, primary_contact_party_id)')
         .in('party_id', ids)
         .is('end_date', null)
         .neq('group_id', groupId),
@@ -246,6 +275,8 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       }
       return {
         party_id: m.party_id,
+        /* Carried from the first query, where the group was embedded. */
+        is_primary_contact: m.is_primary_contact,
         display_name: (m.party?.display_name as string) ?? 'Unnamed',
         is_person: true,
         status: (m.party?.status as string) ?? 'active',
@@ -295,11 +326,14 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
           .filter((g) => g.party_id === m.party_id)
           .map((g) => {
             const raw = (g as Record<string, unknown>).client_groups
-            const grp = (Array.isArray(raw) ? raw[0] : raw) as { name?: string } | null
+            const grp = (Array.isArray(raw) ? raw[0] : raw) as
+              | { name?: string; primary_contact_party_id?: string | null }
+              | null
             return {
               name: grp?.name ?? 'Unnamed group',
               member_role: g.member_role as string,
               is_primary_group: (g.is_primary_group as boolean) ?? false,
+              is_primary_contact: grp?.primary_contact_party_id === (g.party_id as string),
             }
           }),
       }

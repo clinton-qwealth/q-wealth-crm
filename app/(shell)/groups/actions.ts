@@ -301,6 +301,56 @@ export async function removeMember(groupId: string, partyId: string): Promise<Me
   return { ok: true }
 }
 
+/**
+ * Change a member's role within this group.
+ *
+ * A role was set when somebody was added and never afterwards — the gap this
+ * closes. The guards live in `set_member_role()` so they bind every caller.
+ */
+export async function setMemberRole(
+  groupId: string,
+  partyId: string,
+  role: string,
+): Promise<MemberState> {
+  if (!groupId || !partyId || !role) return { error: 'No member selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_member_role', {
+    p_group_id: groupId,
+    p_party_id: partyId,
+    p_member_role: role,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
+/**
+ * Hand a group's primary contact to another of its current members.
+ *
+ * **It moves the contact rather than clearing it**, which is what keeps "every
+ * group has one" true by construction — there is no state in between. The
+ * database refuses anybody who is not a current member, so the group can never
+ * be left pointing at a stranger.
+ */
+export async function setPrimaryContact(
+  groupId: string,
+  partyId: string,
+): Promise<MemberState> {
+  if (!groupId || !partyId) return { error: 'Choose who takes it.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_group_primary_contact', {
+    p_group_id: groupId,
+    p_party_id: partyId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export type PersonMatch = { party_id: string; display_name: string; detail: string }
 
 /**

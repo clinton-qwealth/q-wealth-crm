@@ -15,6 +15,8 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   revealSensitiveField: vi.fn(async () => ({ error: 'not in this test' })),
   searchPeople: vi.fn(async () => []),
   removeMember: vi.fn(async () => ({ ok: true as const })),
+  setMemberRole: vi.fn(async () => ({ ok: true as const })),
+  setPrimaryContact: vi.fn(async () => ({ ok: true as const })),
   startVerification: vi.fn(),
   checkVerification: vi.fn(),
   attestVerification: vi.fn(),
@@ -57,22 +59,46 @@ const person: PersonDetail = {
   hints: {} as Record<string, string>,
   member_role: 'spouse_partner',
   is_primary_group: true,
+  is_primary_contact: true,
   email: 'priya@example.com',
   mobile: '0412 555 901',
   phone_other: null,
   address: { line1: '12 Bay Street', line2: null, suburb: 'Mosman', state: 'NSW', postcode: '2088' },
   roles: [{ role: 'client', status: 'active', start_date: '2026-09-02' }],
   other_groups: [
-    { name: 'Faketrade Pty Ltd Group', member_role: 'director', is_primary_group: false },
+    {
+      name: 'Faketrade Pty Ltd Group',
+      member_role: 'director',
+      is_primary_group: false,
+      is_primary_contact: false,
+    },
   ],
   postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
   postal_same_as_residential: true,
   verifications: [],
 }
 
+/* A second member, so the primary contact has somewhere to go. The group's
+   sole-member case gets its own test by leaving this one out. */
+const second: PersonDetail = {
+  ...person,
+  party_id: 'p2',
+  display_name: 'Mr Rohan Testsmith',
+  member_role: 'primary',
+  is_primary_group: false,
+  is_primary_contact: false,
+  other_groups: [],
+}
+
 function open(mode: 'view' | 'search' = 'view') {
   return render(
-    <MemberPanel groupId="g1" groupName="Testsmith Household" members={[person]} initialMode={mode} initialPartyId="p1">
+    <MemberPanel
+      groupId="g1"
+      groupName="Testsmith Household"
+      members={[person, second]}
+      initialMode={mode}
+      initialPartyId="p1"
+    >
       trigger
     </MemberPanel>,
   )
@@ -173,7 +199,7 @@ describe('MemberPanel', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Memberships' }))
     expect(screen.getByRole('tab', { name: 'Memberships' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tabpanel').textContent).toContain('Primary group')
+    expect(screen.getByRole('tabpanel').textContent).toContain('Primary contact')
   })
 
   /* Group standing and record history are different questions asked by
@@ -246,13 +272,40 @@ describe('MemberPanel', () => {
        list and the others' were a right-aligned run of words. */
     test('role and primary group read the same way on every row', async () => {
       await openTab()
-      // The fixture is a spouse here and primary, a director elsewhere and not.
+      // The fixture is a spouse and the contact here, a director and not elsewhere.
       expect(rows()[0].textContent).toContain('Spouse')
       expect(rows()[0].textContent).toContain('Yes')
       expect(rows()[1].textContent).toContain('Director')
       expect(rows()[1].textContent).toContain('No')
       // Underscores never reach the screen.
       expect(rows().map((r) => r.textContent).join(' ')).not.toContain('_')
+    })
+
+    /**
+     * Each row leads with a tile, the way a member row does on the group page.
+     * These are records, and a record in this app has something to land on.
+     *
+     * Asserted per row rather than by counting: a mutation that dropped the
+     * tile from the markup passed a version of this file that never looked for
+     * it at all.
+     */
+    test('every row leads with a group tile', async () => {
+      await openTab()
+      for (const [i, row] of rows().entries()) {
+        const tile = row.querySelector('span[class*="h-9"]')
+        expect(tile, `row ${i} has no tile`).not.toBeNull()
+        expect(tile!.querySelector('svg'), `row ${i}'s tile is empty`).not.toBeNull()
+      }
+    })
+
+    /* The box carries no heading of its own — "Groups" above a "Group" column
+       header was the same word twice, which is what prompted the rebuild. */
+    test('the box has no title above the column header', async () => {
+      await openTab()
+      const box = rows()[0].closest('section')!
+      expect(box.querySelector('h3')).toBeNull()
+      expect(box.textContent!.startsWith('Group')).toBe(true)
+      expect(box.textContent).not.toContain('GroupsGroup')
     })
 
     test('the section is boxed, like the other tabs’', async () => {
@@ -269,8 +322,19 @@ describe('MemberPanel', () => {
      * the reader is not looking at would act somewhere they cannot see the
      * consequence.
      */
-    test('only the current group can be left', async () => {
+    /* The pencil, and everything behind it, is on this group's row alone. */
+    test('only the current group can be edited', async () => {
       await openTab()
+      expect(within(rows()[0]).getByRole('button', { name: 'Edit this membership' })).toBeTruthy()
+      expect(
+        within(rows()[1]).queryByRole('button', { name: 'Edit this membership' }),
+      ).toBeNull()
+    })
+
+    test('and only the current group can be left', async () => {
+      const { user } = await openTab()
+      expect(within(rows()[0]).queryByRole('button', { name: 'Remove' })).toBeNull()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this membership' }))
       expect(within(rows()[0]).getByRole('button', { name: 'Remove' })).toBeTruthy()
       expect(within(rows()[1]).queryByRole('button', { name: 'Remove' })).toBeNull()
     })
@@ -279,6 +343,7 @@ describe('MemberPanel', () => {
        inside a <dialog> is a modal over a modal and cannot be styled or read. */
     test('removing asks first, and the first press writes nothing', async () => {
       const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this membership' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
 
       expect(within(rows()[0]).getByRole('button', { name: 'Confirm' })).toBeTruthy()
@@ -288,6 +353,7 @@ describe('MemberPanel', () => {
 
     test('cancelling puts it back and still writes nothing', async () => {
       const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this membership' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Cancel' }))
 
@@ -298,6 +364,7 @@ describe('MemberPanel', () => {
     test('confirming calls the action with this group and this person', async () => {
       vi.mocked(actions.removeMember).mockResolvedValueOnce({ ok: true })
       const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this membership' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Confirm' }))
 
@@ -317,6 +384,7 @@ describe('MemberPanel', () => {
         error: 'Janet Testsmith is this group’s primary contact. Name a different primary contact before removing them.',
       })
       const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Edit this membership' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
       await user.click(within(rows()[0]).getByRole('button', { name: 'Confirm' }))
 
@@ -325,6 +393,130 @@ describe('MemberPanel', () => {
       expect(alert.textContent).toContain('Janet Testsmith')
       // And the control is usable again, rather than stuck mid-confirmation.
       expect(within(rows()[0]).getByRole('button', { name: 'Remove' })).toBeTruthy()
+    })
+  })
+
+  /**
+   * Editing this group's membership, added 11 September 2026.
+   *
+   * Two write paths that did not exist before: a role was set when somebody was
+   * added and never afterwards, and a group's primary contact was set at
+   * creation and never afterwards at all.
+   */
+  describe('editing this group’s row', () => {
+    const openEdit = async () => {
+      const user = userEvent.setup()
+      const rendered = open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      await user.click(screen.getByRole('button', { name: 'Edit this membership' }))
+      return { user, ...rendered }
+    }
+
+    test('the role is a select of every role, on the one the person holds', async () => {
+      await openEdit()
+      const select = screen.getByLabelText('Role in this group') as HTMLSelectElement
+      expect(select.value).toBe('spouse_partner')
+      expect(select.querySelectorAll('option').length).toBeGreaterThan(1)
+    })
+
+    /* TWO roles, deliberately. One would pass against a version that sends a
+       constant, which is exactly what a mutation proved — hardcoding
+       `'dependant'` satisfied the single-value form of this test. */
+    test('choosing a role sends the role that was chosen', async () => {
+      const { user } = await openEdit()
+
+      await user.selectOptions(screen.getByLabelText('Role in this group'), 'dependant')
+      await waitFor(() =>
+        expect(actions.setMemberRole).toHaveBeenCalledWith('g1', 'p1', 'dependant'),
+      )
+
+      await user.selectOptions(screen.getByLabelText('Role in this group'), 'shareholder')
+      await waitFor(() =>
+        expect(actions.setMemberRole).toHaveBeenLastCalledWith('g1', 'p1', 'shareholder'),
+      )
+    })
+
+    /**
+     * **The primary contact cannot be switched off, only handed over**, because
+     * every group must have one. So there is no checkbox: the form says who
+     * holds it and offers the people it could go to.
+     *
+     * This is the assertion that stops a checkbox reappearing. A checkbox would
+     * offer an action the database refuses, and the refusal would arrive after
+     * the press rather than the control never offering it.
+     */
+    test('the primary contact offers a hand-over, never a way to switch it off', async () => {
+      await openEdit()
+      expect(screen.getByText(/is this group’s primary contact/)).toBeTruthy()
+      expect(screen.getByLabelText('Hand the primary contact to')).toBeTruthy()
+      // No control that would clear it.
+      expect(screen.queryByRole('checkbox', { name: /primary contact/i })).toBeNull()
+    })
+
+    test('and handing it over names the person it goes TO, not the one giving it up', async () => {
+      const { user } = await openEdit()
+      await user.selectOptions(screen.getByLabelText('Hand the primary contact to'), 'p2')
+      await waitFor(() => expect(actions.setPrimaryContact).toHaveBeenCalledWith('g1', 'p2'))
+    })
+
+    /* Somebody who is not the contact gets the other half: a plain offer to
+       take it. Same function either way — it moves the contact, so there is no
+       state in which the group has none. */
+    test('a member who is not the contact is offered it instead', async () => {
+      const user = userEvent.setup()
+      render(
+        <MemberPanel
+          groupId="g1"
+          groupName="Testsmith Household"
+          members={[{ ...person, is_primary_contact: false }, second]}
+          initialMode="view"
+          initialPartyId="p1"
+        >
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      await user.click(screen.getByRole('button', { name: 'Edit this membership' }))
+
+      expect(screen.queryByLabelText('Hand the primary contact to')).toBeNull()
+      await user.click(screen.getByRole('button', { name: /Make .* the primary contact/ }))
+      await waitFor(() => expect(actions.setPrimaryContact).toHaveBeenCalledWith('g1', 'p1'))
+    })
+
+    /* A group of one cannot hand its contact anywhere, and the form says so
+       rather than offering an empty select. */
+    test('a sole member is told to add somebody first', async () => {
+      const user = userEvent.setup()
+      render(
+        <MemberPanel
+          groupId="g1"
+          groupName="Testlee Household"
+          members={[person]}
+          initialMode="view"
+          initialPartyId="p1"
+        >
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      await user.click(screen.getByRole('button', { name: 'Edit this membership' }))
+
+      expect(screen.queryByLabelText('Hand the primary contact to')).toBeNull()
+      expect(screen.getByText(/only member/)).toBeTruthy()
+    })
+
+    test('a refused change is shown rather than swallowed', async () => {
+      vi.mocked(actions.setMemberRole).mockResolvedValueOnce({
+        error: 'You do not have permission to change this group’s members',
+      })
+      const { user } = await openEdit()
+      await user.selectOptions(screen.getByLabelText('Role in this group'), 'dependant')
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain('permission')
     })
   })
 

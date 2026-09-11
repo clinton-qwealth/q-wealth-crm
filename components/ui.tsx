@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   ArchiveIcon,
   DocumentIcon,
+  GroupIcon,
   EnvelopeIcon,
   MeetingIcon,
   NoteIcon,
@@ -771,6 +772,23 @@ export function AccountTypeTile({ type, status }: { type: string; status: string
  * type to colour by and a wash of brand orange down the members list would
  * shout over the one pill that matters there, "Deceased".
  */
+/**
+ * A client group's tile: three figures on a neutral square.
+ *
+ * Neutral, and a SQUARE, on this page's own rule — people are circles and
+ * things are squares, and a group is a thing. It takes no colour because the
+ * coloured tiles all encode a kind (green super, gold investment, sky
+ * insurance) and a group has no kind worth a hue; the row beside it already
+ * says which group it is.
+ */
+export function GroupTile() {
+  return (
+    <span className={`${TILE} bg-neutral-100 text-neutral-500 ring-neutral-200`} aria-hidden="true">
+      <GroupIcon className={GLYPH} />
+    </span>
+  )
+}
+
 export function InitialsTile({ name }: { name: string }) {
   const initials = name
     .split(/\s+/)

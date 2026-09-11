@@ -405,3 +405,21 @@ export function ArchiveIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/**
+ * Three figures: a client group.
+ *
+ * The leading tile on a row in the member panel's Memberships tab, where the
+ * rows are groups rather than people. `UserIcon` is one person and `InitialsTile`
+ * is a specific person — a group is neither.
+ */
+export function GroupIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <circle cx="10" cy="7.25" r="2.5" />
+      <path d="M5.75 15.5a4.25 4.25 0 0 1 8.5 0" />
+      <path d="M5.5 9.25a2 2 0 1 0-1.6-3.2M2.5 14.25a3.4 3.4 0 0 1 1.6-2.9" />
+      <path d="M14.5 9.25a2 2 0 1 1 1.6-3.2M17.5 14.25a3.4 3.4 0 0 0-1.6-2.9" />
+    </svg>
+  )
+}

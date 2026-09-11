@@ -8,6 +8,8 @@ import {
   revealSensitiveField,
   removeMember,
   searchPeople,
+  setMemberRole,
+  setPrimaryContact,
   type MemberState,
   type PersonMatch,
   startVerification,
@@ -17,7 +19,7 @@ import {
 import type { Address, PersonDetail, VerificationEntry } from '@/lib/person'
 import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
-import { Pill } from './ui'
+import { GroupTile, Pill } from './ui'
 import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER } from '@/lib/countries'
 
 const FIELD =
@@ -981,54 +983,64 @@ function EditableSection({
 }
 
 /**
- * A person's groups, one row each, on one set of columns.
+ * A person's groups, one row each, as records rather than as a field list.
  *
  * **The group the panel was opened from is a row like any other**, marked with
- * a blue _This group_ pill rather than being described in its own section. It
- * used to be two sections — "This group", a two-field list, and "Other groups",
- * a name-and-role list — which meant the same three facts were laid out two
- * different ways on one tab, and the group you were actually in was the only
- * one whose name was never shown. Rebuilt on 11 September 2026.
+ * a blue _This group_ pill and sorted first. It used to be two sections — "This
+ * group", a two-field list, and "Other groups", a name-and-role list — so the
+ * same facts were laid out two different ways on one tab, and the group you
+ * were actually in was the only one whose name never appeared.
  *
- * It sorts to the top, because it is the row the reader came in through.
+ * **It carries no heading of its own.** The box sat under a "Groups" title with
+ * a "Group" column header directly beneath it, which read as the same word
+ * twice; the column header is the one that earns its place, because it labels
+ * something.
+ *
+ * Each row leads with a tile, the way a member row does on the group page —
+ * these are records, and a record in this app has something to land on.
  */
 function MembershipRows({
   groupId,
   groupName,
   person,
+  members,
 }: {
   groupId: string
   groupName: string
   person: PersonDetail
+  /** The group's other current members — who the primary contact can be handed
+   *  to. Already loaded for the panel, so this costs nothing. */
+  members: PersonDetail[]
 }) {
   const rows = [
     {
       key: 'this-group',
       name: groupName,
       role: person.member_role ?? '',
-      primary: Boolean(person.is_primary_group),
+      contact: person.is_primary_contact,
       here: true,
     },
     ...person.other_groups.map((g) => ({
       key: `${g.name}-${g.member_role}`,
       name: g.name,
       role: g.member_role,
-      primary: g.is_primary_group,
+      contact: g.is_primary_contact,
       here: false,
     })),
   ]
 
   return (
     <div className="flex flex-col">
-      {/* Three columns and a slot for the control. The header is quiet but
-          present: a bare "Yes" under nothing is not a fact anybody can read. */}
+      {/* Quiet, but present: a bare "Yes" under nothing is not a fact anybody
+          can read. Hidden from assistive technology because each cell below
+          carries its own words. */}
       <div
-        className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_5rem] gap-3 border-b border-neutral-200 pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        className="grid grid-cols-[minmax(0,1fr)_7rem_7rem_3rem] gap-3 border-b border-neutral-200 px-1 pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
         aria-hidden="true"
       >
         <span>Group</span>
         <span>Role</span>
-        <span>Primary group</span>
+        <span>Primary contact</span>
         <span />
       </div>
 
@@ -1038,23 +1050,30 @@ function MembershipRows({
             key={r.key}
             data-slot="membership-row"
             data-here={r.here ? 'true' : 'false'}
-            className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_5rem] items-center gap-3 border-b border-neutral-100 py-2.5 last:border-0"
+            className="border-b border-neutral-100 last:border-0"
           >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-medium text-neutral-900">{r.name}</span>
-              {r.here ? <Pill tone="info">This group</Pill> : null}
-            </span>
-            <span className="text-sm text-neutral-700">
-              {ROLE_LABEL[r.role] ?? r.role.replace(/_/g, ' ')}
-            </span>
-            <span className="text-sm text-neutral-700">{r.primary ? 'Yes' : 'No'}</span>
-            {/* Only this group's row offers it. The panel is opened from one
-                group's page and acts on that group; a control that ended a
-                membership of a group you are not looking at would be acting
-                somewhere the reader cannot see the consequences. */}
-            <span className="justify-self-end">
-              {r.here ? <RemoveMember groupId={groupId} person={person} /> : null}
-            </span>
+            <div className="grid grid-cols-[minmax(0,1fr)_7rem_7rem_3rem] items-center gap-3 px-1 py-2.5">
+              <span className="flex min-w-0 items-center gap-2.5">
+                <GroupTile />
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-neutral-900">{r.name}</span>
+                  {r.here ? <Pill tone="info">This group</Pill> : null}
+                </span>
+              </span>
+              <span className="text-sm text-neutral-700">
+                {ROLE_LABEL[r.role] ?? r.role.replace(/_/g, ' ')}
+              </span>
+              <span className="text-sm text-neutral-700">{r.contact ? 'Yes' : 'No'}</span>
+              <span className="justify-self-end">
+                {/* Only this group's row can be edited or left. The panel is
+                    opened from one group's page and acts on that group; a
+                    control that changed a group the reader is not looking at
+                    would act where they cannot see the consequence. */}
+                {r.here ? (
+                  <ThisGroupRow groupId={groupId} person={person} members={members} />
+                ) : null}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
@@ -1063,16 +1082,173 @@ function MembershipRows({
 }
 
 /**
+ * The edit and remove controls for the group the panel was opened from.
+ *
+ * A pencil, matching every other editable section in this panel, opening the
+ * row into a small form beneath it. Role is a plain select. **The primary
+ * contact is not a checkbox**, because it cannot be turned off — a group must
+ * always have one, so the only move available is handing it to somebody else.
+ * The form says exactly that, and offers the people it could go to.
+ */
+function ThisGroupRow({
+  groupId,
+  person,
+  members,
+}: {
+  groupId: string
+  person: PersonDetail
+  members: PersonDetail[]
+}) {
+  const [editing, setEditing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+
+  const others = members.filter((m) => m.party_id !== person.party_id)
+
+  /*
+   * A save does NOT close the form. Role and primary contact are two changes
+   * somebody may well want to make in one sitting, and closing after the first
+   * would make the second a second trip through the pencil. The page
+   * revalidates underneath, so the row behind the form is already correct; Done
+   * is what dismisses it.
+   */
+  const run = (fn: () => Promise<MemberState>) =>
+    start(async () => {
+      const result = await fn()
+      setError(result && 'error' in result ? result.error : null)
+    })
+
+  if (!editing) {
+    return (
+      <span className="flex items-center justify-end gap-0.5">
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(true)
+            setError(null)
+          }}
+          aria-label="Edit this membership"
+          className="rounded-md p-1 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          <PencilIcon className="h-3.5 w-3.5" />
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <span className="contents">
+      {/* Spans the whole row rather than sitting in the 3rem control column,
+          which could not hold a select. `col-span-full` crosses the grid
+          whatever its track count, the same reason `Field` uses it. */}
+      <span className="col-span-full flex flex-col gap-3 rounded-md bg-neutral-50 p-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-neutral-600">Role in this group</span>
+          <select
+            defaultValue={person.member_role ?? 'other_person'}
+            disabled={busy}
+            onChange={(e) => {
+              const role = e.target.value
+              setError(null)
+              run(() => setMemberRole(groupId, person.party_id, role))
+            }}
+            className={FIELD}
+          >
+            {MEMBER_ROLES.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-neutral-600">Primary contact</span>
+          {person.is_primary_contact ? (
+            others.length ? (
+              <>
+                {/* Not a checkbox: every group must have a primary contact, so
+                    this one cannot simply be switched off — it can only be
+                    handed over. The control says so rather than offering an
+                    action that would be refused. */}
+                <p className="text-xs leading-relaxed text-neutral-500">
+                  {person.display_name} is this group’s primary contact. A group always has
+                  one, so choose who takes it instead.
+                </p>
+                <select
+                  defaultValue=""
+                  disabled={busy}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    if (!next) return
+                    setError(null)
+                    run(() => setPrimaryContact(groupId, next))
+                  }}
+                  className={FIELD}
+                  aria-label="Hand the primary contact to"
+                >
+                  <option value="">Hand it to…</option>
+                  {others.map((m) => (
+                    <option key={m.party_id} value={m.party_id}>
+                      {m.display_name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              <p className="text-xs leading-relaxed text-neutral-500">
+                {person.display_name} is this group’s primary contact, and its only member.
+                Add somebody else before handing it over.
+              </p>
+            )
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError(null)
+                run(() => setPrimaryContact(groupId, person.party_id))
+              }}
+              className="self-start rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              Make {person.display_name} the primary contact
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-3">
+          <RemoveMember groupId={groupId} person={person} />
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            Done
+          </button>
+        </div>
+
+        {error ? (
+          <p role="alert" className="text-xs leading-snug text-red-700">
+            {error}
+          </p>
+        ) : null}
+      </span>
+    </span>
+  )
+}
+
+/**
  * Take this person out of this group.
  *
  * **Two presses, not one, and not a native confirm.** The panel is already a
  * `<dialog>`, and `window.confirm` inside one is a second modal over a modal —
- * it also cannot be styled or tested. So the button becomes its own
- * confirmation in place, which keeps the question next to the row it is about.
+ * it also cannot be styled or read by a test. So the button becomes its own
+ * confirmation in place, keeping the question next to the row it is about.
  *
- * The refusal is shown verbatim. The database names who the primary contact is
- * and what to do instead, and a generic "could not remove" would throw that
- * away — see `end_group_membership()`.
+ * The refusal is shown verbatim. `end_group_membership()` names who the primary
+ * contact is and what to do instead, and a generic "could not remove" would
+ * throw that away — the more so now that the edit form above can actually do
+ * the thing the message asks for.
  */
 function RemoveMember({ groupId, person }: { groupId: string; person: PersonDetail }) {
   const [asking, setAsking] = useState(false)
@@ -1081,11 +1257,11 @@ function RemoveMember({ groupId, person }: { groupId: string; person: PersonDeta
 
   /* The refusal outlives the confirmation it came from. An earlier version
      returned the plain button when `asking` went false, which dropped the
-     message on the same render that produced it — the press then looked like
-     it had done nothing at all, which is the one outcome a refusal must never
+     message on the same render that produced it — the press then looked like it
+     had done nothing at all, which is the one outcome a refusal must never
      resemble. */
   return (
-    <span className="flex flex-col items-end gap-1">
+    <span className="flex flex-col items-start gap-1">
       {!asking ? (
         <button
           type="button"
@@ -1098,36 +1274,36 @@ function RemoveMember({ groupId, person }: { groupId: string; person: PersonDeta
           Remove
         </button>
       ) : (
-      <span className="flex items-center gap-1">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            start(async () => {
-              const result = await removeMember(groupId, person.party_id)
-              if (result && 'error' in result) {
-                setError(result.error)
-                setAsking(false)
-              }
-              // On success the page revalidates and this row goes with it.
-            })
-          }
-          className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
-        >
-          {busy ? 'Removing…' : 'Confirm'}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => setAsking(false)}
-          className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
-        >
-          Cancel
-        </button>
-      </span>
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              start(async () => {
+                const result = await removeMember(groupId, person.party_id)
+                if (result && 'error' in result) {
+                  setError(result.error)
+                  setAsking(false)
+                }
+                // On success the page revalidates and this row goes with it.
+              })
+            }
+            className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
+          >
+            {busy ? 'Removing…' : 'Confirm'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setAsking(false)}
+            className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            Cancel
+          </button>
+        </span>
       )}
       {error ? (
-        <span role="alert" className="text-right text-xs leading-snug text-red-700">
+        <span role="alert" className="text-xs leading-snug text-red-700">
           {error}
         </span>
       ) : null}
@@ -1690,16 +1866,17 @@ export function MemberPanel({
                     label: 'Memberships',
                     panel: (
                       <div className="flex flex-col gap-7 px-8 pb-8">
-                        {/* Boxed, like the other tabs' sections. This was two
-                            unboxed lists until 11 September — see
-                            `MembershipRows` for why they became one. */}
-                        <Section title="Groups" boxed>
+                        {/* Boxed like the other tabs' sections, but with no
+                            title of its own — "Groups" above a "Group" column
+                            header read as the same word twice. */}
+                        <section className="rounded-lg border border-neutral-200 px-4 py-4">
                           <MembershipRows
                             groupId={groupId}
                             groupName={groupName}
                             person={person}
+                            members={members.filter((m) => m.is_person)}
                           />
-                        </Section>
+                        </section>
                       </div>
                     ),
                   },
