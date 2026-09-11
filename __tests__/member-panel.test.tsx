@@ -91,6 +91,51 @@ describe('MemberPanel', () => {
     expect(dialog?.className).toContain('qw-drawer')
   })
 
+  /**
+   * **Every section of the panel sits on one gutter**, widened to 24px on
+   * 11 September 2026.
+   *
+   * The value matters less than the agreement. The header, each tab's body and
+   * the footer are separate elements with separate class lists, and the tab
+   * strip is told its gutter as a prop — so there are four places to change and
+   * any one of them left behind puts the record's name, its tab labels and its
+   * values on three different left edges. That is what this asserts: not that
+   * the number is 6, but that nothing is still on the old step.
+   *
+   * The boxed sections inside are deliberately excluded. A card on a roomier
+   * ground keeps its own 16px, or its fields end up 40px from the panel's edge.
+   */
+  test('the header, the body and the footer share one gutter', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+    const gutters = ['header', 'footer', '[role="tabpanel"]:not([hidden]) > div']
+      .map((sel) => container.querySelector(`dialog ${sel}`))
+      .map((el) => (el?.getAttribute('class') ?? '').match(/\bpx-\d+\b/)?.[0])
+
+    expect(gutters, 'a section carries no horizontal padding at all').not.toContain(
+      undefined,
+    )
+    expect(new Set(gutters), 'the sections are on different left edges').toEqual(
+      new Set(['px-6']),
+    )
+  })
+
+  /* The strip is padded by its own prop rather than by a class, so it is the
+     one that goes stale silently — nothing about it looks wrong in the markup. */
+  test('and the tab strip is padded to match, so the first label lines up', async () => {
+    const user = userEvent.setup()
+    const { container } = open('view')
+    await user.click(screen.getByRole('button', { name: 'trigger' }))
+
+    const strip = container.querySelector('dialog [role="tablist"]')!
+    /* `alignFirst` takes the button's own 12px off the left, so a 24px gutter
+       is pl-3 + px-3 on the button. The right side carries it whole. */
+    expect(strip.className).toContain('pr-6')
+    expect(strip.className).toContain('pl-3')
+  })
+
   test('view mode shows the record read-only, with no inputs', async () => {
     const user = userEvent.setup()
     const { container } = open('view')
