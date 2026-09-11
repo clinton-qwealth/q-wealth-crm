@@ -752,6 +752,26 @@ describe('MemberPanel', () => {
       )
     })
 
+    /**
+     * **Both lists on this tab breathe the same.**
+     *
+     * The subscriptions rows ran tighter than the groups rows above them, which
+     * read as cramped rather than as a deliberate second density — they are the
+     * same kind of thing in the same box. Derived from the groups row rather
+     * than written as a value, so changing one alone fails.
+     */
+    test('a subscription row has the same vertical step as a group row', async () => {
+      await openTab()
+      const step = (el: Element) =>
+        (el.getAttribute('class') ?? '').match(/(?:^|\s)py-([\d.]+)/)?.[1]
+
+      const groupRow = document.querySelector('[data-slot="membership-row"] > div')!
+      const subRow = document.querySelector('[data-slot="subscription-row"]')!
+
+      expect(step(groupRow), 'the group row has no vertical step').toBeDefined()
+      expect(step(subRow), 'the subscription row has no vertical step').toBe(step(groupRow))
+    })
+
     test('runs in two columns where there is room', async () => {
       await openTab()
       const list = document.querySelector('[data-slot="subscription-row"]')!.parentElement!

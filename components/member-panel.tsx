@@ -1067,7 +1067,7 @@ function MembershipRows({
             data-here={r.here ? 'true' : 'false'}
             className={`border-b border-neutral-100 last:border-0 ${ROW_EDGE_BOTTOM}`}
           >
-            <div className={`grid ${MEMBERSHIP_COLS} items-center gap-3 px-1 py-2.5`}>
+            <div className={`grid ${MEMBERSHIP_COLS} items-center gap-3 px-1 ${ROW_PADDING}`}>
               <span className="flex min-w-0 items-center gap-2.5">
                 <GroupTile />
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1225,7 +1225,7 @@ function Subscriptions({ person }: { person: PersonDetail }) {
               data-slot="subscription-row"
               data-channel={value}
               data-state={unsubscribed ? 'unsubscribed' : on ? 'on' : 'off'}
-              className="flex items-center justify-between gap-3 px-1 py-1.5"
+              className={`flex items-center justify-between gap-3 px-1 ${ROW_PADDING}`}
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm text-neutral-900">{label}</span>
@@ -1316,6 +1316,16 @@ const ROW_EDGE_BOTTOM = 'last:pb-4'
    subscriptions grid runs in two columns, so `last:` would reach only the final
    channel and leave the other column's foot flush against the box. */
 const LIST_EDGE_BOTTOM = 'pb-4'
+
+/**
+ * The vertical step inside a row, shared by both lists on this tab.
+ *
+ * The groups list set it first and the subscriptions list ran tighter at
+ * `py-1.5`, which read as cramped beside it — the two are the same kind of
+ * thing in the same box, so a reader sees one rhythm broken rather than two
+ * deliberate densities. Named so they cannot drift apart again.
+ */
+const ROW_PADDING = 'py-2.5'
 
 /**
  * The edit form for the group the panel was opened from.
