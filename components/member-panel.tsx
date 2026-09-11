@@ -10,6 +10,7 @@ import {
   searchPeople,
   setMemberRole,
   setPrimaryContact,
+  setSubscription,
   type MemberState,
   type PersonMatch,
   startVerification,
@@ -1051,7 +1052,7 @@ function MembershipRows({
         className={`grid ${MEMBERSHIP_COLS} gap-3 border-b border-neutral-200 px-1 ${ROW_EDGE_TOP} pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500`}
         aria-hidden="true"
       >
-        <span>Group</span>
+        <span>Groups</span>
         <span>Role</span>
         <span>Primary contact</span>
         <span />
@@ -1115,6 +1116,148 @@ function MembershipRows({
       </ul>
     </div>
   )
+}
+
+/**
+ * The channels the firm sends on, in the order they are shown.
+ *
+ * The list lives here rather than being read from the database's enum, because
+ * the enum has no order and no display text — and a channel the app cannot
+ * name is a channel nobody can make a decision about. The two must be kept in
+ * step by hand; a test asserts every value here is one the database accepts.
+ */
+const CHANNELS: [value: string, label: string][] = [
+  ['investment_newsletters', 'Investment Newsletters'],
+  ['events_and_webinars', 'Events and Webinars'],
+  ['q_wealth_updates', 'Q Wealth Updates'],
+  ['markets_in_motion', 'Markets in Motion™'],
+  ['star_quarterly_reviews', 'STAR Quarterly Reviews'],
+  ['promotional_and_marketing', 'Promotional and Marketing'],
+  ['sms_communication', 'SMS Communication'],
+]
+
+/**
+ * What a person is subscribed to, one row per channel.
+ *
+ * ## Three states, and the third is the reason this exists
+ *
+ * | On screen | In the table |
+ * | --- | --- |
+ * | On | a row, opted in |
+ * | Off | a row opted out **by staff**, or no row at all |
+ * | **Unsubscribed** | a row opted out **by the client** |
+ *
+ * **No row means off.** Nothing is sent on a channel nobody has agreed to, and
+ * the toggle starting off is the honest picture of that rather than a default
+ * the firm would be asserting on the client's behalf.
+ *
+ * **An unsubscribe is not a setting and cannot be toggled back.** It is the
+ * client's own instruction, and under the Spam Act a firm has to be able to
+ * show it was honoured — so the control is replaced by a mark saying who asked
+ * and when. The database refuses the write as well, so this is a courtesy to
+ * the reader rather than the enforcement.
+ */
+function Subscriptions({ person }: { person: PersonDetail }) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+  const byChannel = new Map(person.subscriptions.map((s) => [s.channel, s]))
+
+  return (
+    <div className="flex flex-col">
+      <div
+        data-slot="subscriptions-header"
+        className={`grid ${SUBSCRIPTION_COLS} gap-3 border-b border-neutral-200 px-1 ${ROW_EDGE_TOP} pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500`}
+        aria-hidden="true"
+      >
+        <span>Channel</span>
+        <span className="justify-self-end">Subscribed</span>
+      </div>
+
+      <ul>
+        {CHANNELS.map(([value, label]) => {
+          const row = byChannel.get(value)
+          const unsubscribed = row?.source === 'client' && !row.opted_in
+          const on = Boolean(row?.opted_in)
+
+          return (
+            <li
+              key={value}
+              data-slot="subscription-row"
+              data-channel={value}
+              data-state={unsubscribed ? 'unsubscribed' : on ? 'on' : 'off'}
+              className={`grid ${SUBSCRIPTION_COLS} items-center gap-3 border-b border-neutral-100 px-1 py-2.5 last:border-0 ${ROW_EDGE_BOTTOM}`}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm text-neutral-900">{label}</span>
+                {unsubscribed ? (
+                  <span className="mt-0.5 block text-xs text-neutral-500">
+                    Unsubscribed by the client on {formatSubscriptionDate(row!.changed_at)}
+                  </span>
+                ) : null}
+              </span>
+
+              <span className="justify-self-end">
+                {unsubscribed ? (
+                  /* Not a disabled toggle. A switch that cannot move still
+                     reads as a switch, and this is not a setting somebody
+                     failed to reach — it is an instruction that stands. */
+                  <Pill tone="warning">Unsubscribed</Pill>
+                ) : (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={label}
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null)
+                      start(async () => {
+                        const result = await setSubscription(person.party_id, value, !on)
+                        setError(result && 'error' in result ? result.error : null)
+                      })
+                    }}
+                    className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 outline-none transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40 ${
+                      on ? 'bg-brand' : 'bg-neutral-300'
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`block size-4 rounded-full bg-white shadow-sm transition-transform ${
+                        on ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                )}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+
+      {error ? (
+        <p role="alert" className="pt-2 text-xs leading-snug text-red-700">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+const SUBSCRIPTION_COLS = 'grid-cols-[minmax(0,1fr)_auto]'
+
+/**
+ * The day an unsubscribe was recorded.
+ *
+ * `changed_at` is a `timestamptz` — an instant — so it converts to the reader's
+ * own timezone rather than being split off the string. That is the same rule a
+ * file note's date follows, and the opposite of the one a date of birth does;
+ * both are set out on the Client Groups page.
+ */
+function formatSubscriptionDate(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
 
 /** The four tracks, named once so the header and every row cannot drift apart. */
@@ -1915,6 +2058,20 @@ export function MemberPanel({
                             members={members.filter((m) => m.is_person)}
                           />
                         </section>
+
+                        <div className="flex flex-col gap-2.5">
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                            Subscriptions
+                          </h3>
+                          {/* Same box and the same vertical rhythm as the groups
+                              list above it, so the tab reads as one thing. */}
+                          <section
+                            data-slot="subscriptions-box"
+                            className="rounded-lg border border-neutral-200 px-4"
+                          >
+                            <Subscriptions person={person} />
+                          </section>
+                        </div>
                       </div>
                     ),
                   },

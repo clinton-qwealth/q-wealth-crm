@@ -351,6 +351,34 @@ export async function setPrimaryContact(
   return { ok: true }
 }
 
+/**
+ * Record a staff opt-in or opt-out for one communication channel.
+ *
+ * **A channel the client unsubscribed from themselves is refused**, by the
+ * database rather than by this function, so the rule holds for the connector
+ * and psql too. The message says so in the client's terms, and is shown rather
+ * than swallowed — it is the one refusal here that a reader must not mistake
+ * for a fault.
+ */
+export async function setSubscription(
+  partyId: string,
+  channel: string,
+  optedIn: boolean,
+): Promise<MemberState> {
+  if (!partyId || !channel) return { error: 'No channel selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_subscription', {
+    p_party_id: partyId,
+    p_channel: channel,
+    p_opted_in: optedIn,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export type PersonMatch = { party_id: string; display_name: string; detail: string }
 
 /**

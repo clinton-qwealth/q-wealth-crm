@@ -17,6 +17,7 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   removeMember: vi.fn(async () => ({ ok: true as const })),
   setMemberRole: vi.fn(async () => ({ ok: true as const })),
   setPrimaryContact: vi.fn(async () => ({ ok: true as const })),
+  setSubscription: vi.fn(async () => ({ ok: true as const })),
   startVerification: vi.fn(),
   checkVerification: vi.fn(),
   attestVerification: vi.fn(),
@@ -76,6 +77,12 @@ const person: PersonDetail = {
   postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
   postal_same_as_residential: true,
   verifications: [],
+  /* One channel on, one the client unsubscribed from, and five never decided —
+     so every state the section can show is in the fixture. */
+  subscriptions: [
+    { channel: 'investment_newsletters', opted_in: true, source: 'staff', changed_at: '2026-09-01T00:00:00Z' },
+    { channel: 'promotional_and_marketing', opted_in: false, source: 'client', changed_at: '2026-09-03T00:00:00Z' },
+  ],
 }
 
 /* A second member, so the primary contact has somewhere to go. The group's
@@ -304,8 +311,9 @@ describe('MemberPanel', () => {
       await openTab()
       const box = rows()[0].closest('section')!
       expect(box.querySelector('h3')).toBeNull()
-      expect(box.textContent!.startsWith('Group')).toBe(true)
-      expect(box.textContent).not.toContain('GroupsGroup')
+      expect(box.textContent!.startsWith('Groups')).toBe(true)
+      // The duplication that prompted this: a "Groups" title over a "Groups" header.
+      expect(box.textContent).not.toContain('GroupsGroups')
     })
 
     /**
@@ -568,6 +576,164 @@ describe('MemberPanel', () => {
 
       const alert = await screen.findByRole('alert')
       expect(alert.textContent).toContain('permission')
+    })
+  })
+
+  /**
+   * Subscriptions, added 11 September 2026.
+   *
+   * Seven channels, each with a toggle — except one a client has unsubscribed
+   * from, which is not a toggle at all.
+   */
+  describe('the Subscriptions section', () => {
+    const openTab = async () => {
+      const user = userEvent.setup()
+      const rendered = open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      return { user, ...rendered }
+    }
+    const channels = () =>
+      Array.from(document.querySelectorAll('[data-slot="subscription-row"]')) as HTMLElement[]
+    const state = (channel: string) =>
+      document
+        .querySelector(`[data-slot="subscription-row"][data-channel="${channel}"]`)
+        ?.getAttribute('data-state')
+
+    test('lists all seven channels, in order, by name', async () => {
+      await openTab()
+      expect(channels().map((r) => r.textContent!.split('Unsubscribed')[0].trim())).toEqual([
+        'Investment Newsletters',
+        'Events and Webinars',
+        'Q Wealth Updates',
+        'Markets in Motion™',
+        'STAR Quarterly Reviews',
+        'Promotional and Marketing',
+        'SMS Communication',
+      ])
+    })
+
+    /**
+     * **A channel with no row is off.** Nothing is sent on a channel nobody has
+     * agreed to, and the toggle showing off is the honest picture of that
+     * rather than a default the firm asserts on the client's behalf.
+     *
+     * The fixture records two channels and leaves five untouched, so this
+     * distinguishes "recorded as off" from "never decided" — both read off, and
+     * the point is that neither reads on.
+     */
+    test('a channel nobody has decided is off, not on', async () => {
+      await openTab()
+      expect(state('q_wealth_updates')).toBe('off')
+      expect(state('sms_communication')).toBe('off')
+      expect(state('investment_newsletters')).toBe('on')
+
+      const offSwitch = screen.getByRole('switch', { name: 'Q Wealth Updates' })
+      expect(offSwitch.getAttribute('aria-checked')).toBe('false')
+    })
+
+    test('toggling a channel sends the opposite of what it was', async () => {
+      const { user } = await openTab()
+
+      await user.click(screen.getByRole('switch', { name: 'Q Wealth Updates' }))
+      await waitFor(() =>
+        expect(actions.setSubscription).toHaveBeenCalledWith('p1', 'q_wealth_updates', true),
+      )
+
+      // And one that is already on goes the other way, so no constant passes.
+      await user.click(screen.getByRole('switch', { name: 'Investment Newsletters' }))
+      await waitFor(() =>
+        expect(actions.setSubscription).toHaveBeenLastCalledWith(
+          'p1',
+          'investment_newsletters',
+          false,
+        ),
+      )
+    })
+
+    /**
+     * **An unsubscribe is not a toggle.** It is the client's own instruction,
+     * not a setting somebody failed to reach, so the control is replaced rather
+     * than disabled — a switch that cannot move still reads as a switch.
+     */
+    test('a channel the client unsubscribed from offers no switch at all', async () => {
+      await openTab()
+      expect(state('promotional_and_marketing')).toBe('unsubscribed')
+      expect(screen.queryByRole('switch', { name: 'Promotional and Marketing' })).toBeNull()
+
+      const row = document.querySelector(
+        '[data-slot="subscription-row"][data-channel="promotional_and_marketing"]',
+      )! as HTMLElement
+
+      /* The MARK, not the sentence. A first version asserted the row contained
+         the word "Unsubscribed", which the explanatory line below it also
+         contains — so deleting the mark entirely left the test passing. An
+         exact-text query matches the pill and not the sentence. */
+      const mark = within(row).getByText('Unsubscribed', { exact: true })
+      expect(mark.className, 'the mark is not a pill').toContain('rounded-full')
+
+      // And the line beneath says who and when, so it can be read back later.
+      expect(row.textContent).toContain('by the client')
+      expect(row.textContent).toContain('2026')
+    })
+
+    /* A staff opt-out is an ordinary off, and must NOT read as an unsubscribe —
+       the distinction the whole table exists for. */
+    test('a staff opt-out is off, not unsubscribed', async () => {
+      const user = userEvent.setup()
+      render(
+        <MemberPanel
+          groupId="g1"
+          groupName="Testsmith Household"
+          members={[
+            {
+              ...person,
+              subscriptions: [
+                {
+                  channel: 'events_and_webinars',
+                  opted_in: false,
+                  source: 'staff',
+                  changed_at: '2026-09-02T00:00:00Z',
+                },
+              ],
+            },
+          ]}
+          initialMode="view"
+          initialPartyId="p1"
+        >
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+
+      expect(state('events_and_webinars')).toBe('off')
+      expect(screen.getByRole('switch', { name: 'Events and Webinars' })).toBeTruthy()
+      expect(
+        document
+          .querySelector('[data-slot="subscription-row"][data-channel="events_and_webinars"]')!
+          .textContent,
+      ).not.toContain('Unsubscribed')
+    })
+
+    test('a refusal is shown rather than swallowed', async () => {
+      vi.mocked(actions.setSubscription).mockResolvedValueOnce({
+        error: 'This person unsubscribed from that channel themselves. Only they can undo it.',
+      })
+      const { user } = await openTab()
+      await user.click(screen.getByRole('switch', { name: 'Q Wealth Updates' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain('unsubscribed')
+    })
+
+    /* Same box and the same vertical rhythm as the groups list above it, so the
+       tab reads as one thing rather than two. */
+    test('sits in a box matching the groups list', async () => {
+      await openTab()
+      const groups = document.querySelector('[data-slot="memberships-box"]')!
+      const subs = document.querySelector('[data-slot="subscriptions-box"]')!
+      expect(subs.className).toBe(groups.className)
     })
   })
 

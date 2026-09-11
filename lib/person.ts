@@ -83,6 +83,15 @@ export type PersonDetail = {
     /** Whether they are that group's primary contact — see `is_primary_contact`. */
     is_primary_contact: boolean
   }[]
+  /**
+   * What this person is subscribed to.
+   *
+   * **Only the channels with a recorded decision are here.** A channel absent
+   * from this list has never been agreed to and nothing goes out on it — the
+   * table holds decisions, not assumptions, so the UI supplies the seven
+   * channels and reads its answer from this.
+   */
+  subscriptions: Subscription[]
   /** Identity-verification history, newest first. Read from the masked summary
    *  view, so the client's mobile number is never carried in this object. */
   verifications: VerificationEntry[]
@@ -119,6 +128,19 @@ export type VerificationEntry = {
  * trip per panel open — and the panel then has no loading state to design.
  * Worth revisiting if groups ever hold dozens of members.
  */
+/**
+ * One channel's answer for one person.
+ *
+ * `source` is what separates a setting from an instruction: `client` with
+ * `opted_in: false` is an unsubscribe, which staff may not undo.
+ */
+export type Subscription = {
+  channel: string
+  opted_in: boolean
+  source: 'staff' | 'client'
+  changed_at: string
+}
+
 export async function getGroupMemberDetail(groupId: string): Promise<PersonDetail[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
 
@@ -177,7 +199,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
       postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
       postal_same_as_residential: true,
-      roles: [], other_groups: [], verifications: [],
+      roles: [], other_groups: [], verifications: [], subscriptions: [],
     }))
 
   if (ids.length === 0) return organisations.sort((a, b) => a.display_name.localeCompare(b.display_name))
@@ -186,6 +208,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
     { data: persons },
     { data: contacts },
     { data: roles },
+    { data: subscriptions },
     { data: allMemberships },
     { data: verifications },
     hintResults,
@@ -193,6 +216,12 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       supabase.from('persons').select('*').in('party_id', ids),
       supabase.from('contact_points').select('*').in('party_id', ids).eq('is_preferred', true),
       supabase.from('party_roles').select('party_id, role, status, start_date').in('party_id', ids).is('end_date', null),
+      /* One more query on a wave already running: it costs no depth, and a
+         fetch when the tab opens would add a round trip to every panel. */
+      supabase
+        .from('party_subscriptions')
+        .select('party_id, channel, opted_in, source, changed_at')
+        .in('party_id', ids),
       supabase
         .from('client_group_members')
         .select('party_id, member_role, is_primary_group, client_groups(name, primary_contact_party_id)')
@@ -322,6 +351,14 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
             start_date: r.start_date as string,
           })),
         verifications: verificationsBy.get(m.party_id) ?? [],
+        subscriptions: (subscriptions ?? [])
+          .filter((r) => r.party_id === m.party_id)
+          .map((r) => ({
+            channel: r.channel as string,
+            opted_in: r.opted_in as boolean,
+            source: r.source as 'staff' | 'client',
+            changed_at: r.changed_at as string,
+          })),
         other_groups: (allMemberships ?? [])
           .filter((g) => g.party_id === m.party_id)
           .map((g) => {
