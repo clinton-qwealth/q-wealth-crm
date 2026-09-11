@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from 'react'
 import { createPolicy, type CreatePolicyState } from '@/app/(shell)/groups/actions'
 import type { OwnerOption, ProviderOption } from './add-account-modal'
 import { PlusIcon } from './icons'
+import { QUIET_ACTION } from './ui'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -76,7 +77,7 @@ export function AddPolicyModal({
       <button
         type="button"
         onClick={show}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        className={QUIET_ACTION}
       >
         <PlusIcon className="h-3.5 w-3.5" />
         Add policy

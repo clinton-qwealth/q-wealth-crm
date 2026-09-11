@@ -197,13 +197,43 @@ export function Placeholder({ children, className = 'h-56' }: { children: string
 /**
  * The label above a section's sheet — "Investment Accounts", "Members".
  *
- * Exported because the mix chart beside the accounts list has **no** heading
- * (removed 10 September) and still has to start level with the records sheet.
- * It renders this same box, invisible, rather than a hand-measured spacer: one
- * token means the two cannot drift when the heading's size or margin changes.
+ * The `mb-2.5` belongs to the row, not the label: inside a `SECTION_TOOLBAR`
+ * the row carries the margin and `DataSection` strips it from here.
  */
 export const SECTION_HEADING =
   'mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500'
+
+/**
+ * A section's header row: the label on the left, the thing you add with on the
+ * right, and the gap down to the sheet.
+ *
+ * ## This is what makes the two columns of a `TAB_SPLIT` line up
+ *
+ * The mix chart beside the accounts list has no heading of its own (removed
+ * 10 September) and still has to start level with the records sheet, so it
+ * renders this same row invisible.
+ *
+ * It used to render `SECTION_HEADING` instead, and that was 8px short — the
+ * heading is a 16px text line, but the row's real height is set by the taller
+ * thing in it, the 24px add control. Reported on 11 September as the chart
+ * sitting a little high. A row is not the height of its label.
+ *
+ * So the spacer mirrors the row AND holds an invisible `QUIET_ACTION`, which
+ * is the tallest thing a header row contains. Both sides are then one token
+ * each and cannot drift: change the control's padding and both move together.
+ */
+export const SECTION_TOOLBAR = 'mb-2.5 flex items-center gap-3'
+
+/**
+ * The quiet add control — "+ Add account", "+ Add note".
+ *
+ * One string, because there were six identical copies of it: `DataSection`'s
+ * own default link and five modal triggers. Its HEIGHT is now load-bearing as
+ * well as its look, since a section's header row is as tall as this and the
+ * mix chart's spacer is measured against it. See `SECTION_TOOLBAR`.
+ */
+export const QUIET_ACTION =
+  'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
 
 export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,13fr)_minmax(0,7fr)]'
 

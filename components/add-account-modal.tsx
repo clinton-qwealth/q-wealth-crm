@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { createAccount, type CreateAccountState } from '@/app/(shell)/groups/actions'
 import { PlusIcon } from './icons'
+import { QUIET_ACTION } from './ui'
 
 export type OwnerOption = { id: string; name: string }
 export type ProviderOption = { id: string; name: string }
@@ -84,7 +85,7 @@ export function AddAccountModal({
       <button
         type="button"
         onClick={show}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        className={QUIET_ACTION}
       >
         <PlusIcon className="h-3.5 w-3.5" />
         Add account

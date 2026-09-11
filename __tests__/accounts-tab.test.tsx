@@ -187,6 +187,55 @@ describe('the Accounts tab’s investment section', () => {
   })
 
   /**
+   * **The two columns start their sheets on the same line.**
+   *
+   * Asked for on 11 September — the chart sat "a little higher" than the
+   * records. It was 8px, and the cause was a wrong model of the left column:
+   * the chart's spacer copied the HEADING, a 16px text line, but a header row
+   * is as tall as its tallest child and that is the 24px add control beside
+   * the heading.
+   *
+   * Both boxes are built from one token now, and this compares the two as
+   * RENDERED, on the real page, rather than trusting that they were. Heights
+   * cannot be measured here — jsdom lays nothing out — but the boxes are
+   * siblings-in-kind: identical classes and identical content metrics mean
+   * identical heights, and a difference in either is what used to be there.
+   */
+  test('the chart’s spacer and the records header are the same box, so the sheets line up', async () => {
+    const { accounts } = await panels()
+    const grid = accounts.querySelector(`[class="${TAB_SPLIT}"]`)!
+    const [left, right] = Array.from(grid.children) as HTMLElement[]
+
+    const header = left.querySelector('[data-slot="section-toolbar"]')!
+    const spacer = right.querySelector('[data-slot="chart-spacer"]')!
+
+    /* Layout classes compared exactly. `justify-*` is dropped because it moves
+       things across the row and cannot change its height, and `invisible` is
+       the whole point of the spacer. */
+    const box = (el: Element) =>
+      el.className
+        .split(/\s+/)
+        .filter((c) => c !== 'invisible' && !c.startsWith('justify-'))
+        .sort()
+
+    expect(box(spacer), 'the spacer is not the same box as the header row').toEqual(box(header))
+
+    /* And the same tallest child. The row's height comes from the control, so
+       equal rows need the control's own box to match too — this is the part
+       that was missing entirely. */
+    const control = (el: Element) =>
+      Array.from(el.children)
+        .map((c) => c.className)
+        .find((c) => c.includes('py-1'))
+
+    expect(control(spacer), 'the spacer has no control to set its height').toBeTruthy()
+    expect(control(spacer)).toBe(control(header))
+
+    // Both sheets then start immediately after their box, on the same line.
+    expect(header.nextElementSibling!.className).toBe(spacer.nextElementSibling!.className)
+  })
+
+  /**
    * The two tabs share the SPLIT and nothing else. The Workflows tab still
    * reserves its right half, and this is what keeps "shared measurements, own
    * content" true rather than a sentence in a comment.

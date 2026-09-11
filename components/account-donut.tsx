@@ -3,7 +3,7 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import { Cell, Pie, PieChart } from 'recharts'
 import { accountMix, sharePct, type AccountMix, type MixAccount } from '@/lib/account-mix'
-import { accountMoney, SECTION_HEADING, SHEET } from './ui'
+import { accountMoney, QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } from './ui'
 
 /**
  * How a group's investment value is split across its accounts.
@@ -514,8 +514,23 @@ function Frame({ active, children }: { active?: number | null; children: React.R
      * empty string would still match.
      */
     <div data-slot="mix-chart" data-active={active == null ? undefined : String(active)}>
-      <div aria-hidden="true" className={`${SECTION_HEADING} invisible`}>
-        &nbsp;
+      {/*
+        * The spacer that lines this column's sheet up with the records sheet
+        * beside it.
+        *
+        * It mirrors `DataSection`'s header row — the same `SECTION_TOOLBAR`
+        * and a `QUIET_ACTION` inside it — rather than approximating the row's
+        * height. It used to render `SECTION_HEADING` alone and was 8px short,
+        * because a header row is as tall as its TALLEST child and that is the
+        * 24px add control, not the 16px label. Reported on 11 September as the
+        * chart sitting a little high.
+        *
+        * `invisible` rather than absent, because the box still has to occupy
+        * the space; `aria-hidden` because there is nothing here to announce.
+        */}
+      <div aria-hidden="true" data-slot="chart-spacer" className={`${SECTION_TOOLBAR} invisible`}>
+        <span className={SECTION_HEADING.replace('mb-2.5 ', '')}>&nbsp;</span>
+        <span className={QUIET_ACTION}>&nbsp;</span>
       </div>
       {/* The site's own sheet. A dark ground was tried on 10 September and
           reverted the same day — the third dark surface this page has rejected.

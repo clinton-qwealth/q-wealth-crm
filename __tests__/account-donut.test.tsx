@@ -140,18 +140,45 @@ describe('the investment mix donut', () => {
       expect(screen.queryByRole('heading')).toBeNull()
     })
 
-    test('but keeps the heading’s box, invisible and unannounced, above the sheet', () => {
+    test('but keeps a box above the sheet, invisible and unannounced', () => {
       const { container } = render(<AccountDonut accounts={three} />)
       const spacer = container.querySelector('[data-slot="mix-chart"] > :first-child')!
       // `invisible` is visibility:hidden — it keeps the box. `hidden` would not.
       expect(spacer.className).toContain('invisible')
       expect(spacer.className).not.toContain('hidden')
       expect(spacer.getAttribute('aria-hidden')).toBe('true')
-      // The shared token, so it cannot drift from the real heading's metrics.
       expect(spacer.className).toContain('mb-2.5')
-      expect(spacer.className).toContain('text-xs')
       // Not a heading element: an invisible one would still sit in the outline.
       expect(spacer.tagName).toBe('DIV')
+    })
+
+    /**
+     * **The box has to be as tall as the header row it stands in for**, and a
+     * header row is as tall as its TALLEST child.
+     *
+     * This box held only the heading until 11 September, which made it a 16px
+     * text line while the real row is 24px — the height of the add control
+     * beside the heading. Reported as the chart sitting a little high. So it
+     * now carries an invisible control as well, and the control's own vertical
+     * padding is what the row is measured by.
+     *
+     * `accounts-tab.test.tsx` compares this box against the REAL header row on
+     * the page, which is the assertion that proves they match. This one says
+     * the ingredient is present, so a deletion fails here with a clear reason
+     * rather than only over there.
+     */
+    test('and the box is built to the header row’s full height, not the label’s', () => {
+      const { container } = render(<AccountDonut accounts={three} />)
+      const spacer = container.querySelector('[data-slot="chart-spacer"]')!
+
+      expect(spacer.className).toContain('flex')
+      expect(spacer.className).toContain('items-center')
+
+      const control = Array.from(spacer.children).find((c) => c.className.includes('py-1'))
+      expect(control, 'the spacer holds no control, so it is only as tall as its label')
+        .toBeTruthy()
+      // Padding, not a text line, is what makes the real row 24px rather than 16.
+      expect(control!.className).toContain('text-xs')
     })
   })
 

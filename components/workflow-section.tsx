@@ -6,7 +6,7 @@ import type { WorkflowType } from '@/lib/notes'
 import type { BoardCard } from '@/lib/workflow-board'
 import { PlusIcon } from './icons'
 import { formatNoteDate, WORKFLOW_TYPE_LABEL } from './file-notes'
-import { ReservedColumn, TAB_SPLIT } from './ui'
+import { QUIET_ACTION, ReservedColumn, TAB_SPLIT } from './ui'
 import { WorkflowCard } from './workflow-card'
 import { useWorkflowCards } from './use-workflow-cards'
 
@@ -73,7 +73,7 @@ export function StartWorkflowModal({
       <button
         type="button"
         onClick={show}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        className={QUIET_ACTION}
       >
         <PlusIcon className="h-3.5 w-3.5" />
         Start workflow

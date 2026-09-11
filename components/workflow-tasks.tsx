@@ -20,7 +20,7 @@ import {
   type WorkflowTask,
 } from '@/lib/workflow-board'
 import { dueState, formatCalendarDate, formatNoteDate, formatNoteDateTime, type DueState } from '@/lib/note-date'
-import { Pill, SHEET_SURFACE, type PillTone } from './ui'
+import { Pill, QUIET_ACTION, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
 import { Tabs } from './tabs'
 import { ActivityFeed } from './activity-feed'
@@ -1189,7 +1189,7 @@ export function AddTaskModal({ workflowId, staff }: { workflowId: string; staff:
       <button
         type="button"
         onClick={show}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30"
+        className={QUIET_ACTION}
       >
         <PlusIcon className="h-3.5 w-3.5" />
         Add task
