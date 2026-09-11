@@ -130,4 +130,87 @@ describe('Tabs', () => {
     // motion-reduce:transition-none is always present; the animating class is not.
     expect(indicator?.className).not.toContain('transition-[left,width]')
   })
+
+  /**
+   * **The gutter is a closed set of steps, and each step is four branches.**
+   *
+   * Tailwind scans source text, so a constructed `-mx-${gutter}` would never be
+   * generated — which is why this is `4 | 5 | 6 | 8` rather than a number, and
+   * why adding a step means editing the strip's padding, the negative margin
+   * that bleeds it, the lift that caps a container, and the grounded panel.
+   * Three of those four are easy to forget, and nothing about the markup looks
+   * wrong when one is missed.
+   *
+   * 8 was added on 11 September 2026 for the member panel.
+   */
+  describe('the gutter steps', () => {
+    const strip = (c: HTMLElement) => c.querySelector('[role="tablist"]')!
+    const panel = (c: HTMLElement) => c.querySelector('[role="tabpanel"]')!
+
+    test('each step pads the strip to its own width', () => {
+      for (const [gutter, cls] of [[4, 'px-4'], [5, 'px-5'], [6, 'px-6'], [8, 'px-8']] as const) {
+        const { container, unmount } = render(
+          <Tabs items={items} label="s" gutter={gutter} />,
+        )
+        expect(strip(container).className, `gutter ${gutter}`).toContain(cls)
+        unmount()
+      }
+    })
+
+    /* With `alignFirst` the left side gives back the button's own 12px, so the
+       first LABEL lands on the container's text edge rather than its box edge.
+       The right side still carries the gutter whole — asserted together,
+       because a step that got one and not the other would look centred. */
+    test('and lines the first label up by giving back the button’s own padding', () => {
+      for (const [gutter, left, right] of [
+        [4, 'pl-1', 'pr-4'],
+        [5, 'pl-2', 'pr-5'],
+        [6, 'pl-3', 'pr-6'],
+        [8, 'pl-5', 'pr-8'],
+      ] as const) {
+        const { container, unmount } = render(
+          <Tabs items={items} label="s" gutter={gutter} alignFirst />,
+        )
+        expect(strip(container).className, `gutter ${gutter} left`).toContain(left)
+        expect(strip(container).className, `gutter ${gutter} right`).toContain(right)
+        unmount()
+      }
+    })
+
+    /* Bleeding cancels the parent's padding so the strip reaches the container's
+       edges, and the lift pulls it into the top padding so it caps the card.
+       Both are the gutter's own negative — a mismatch puts the strip inside a
+       picture frame, which is the bug `bleed` exists to prevent. */
+    test('a bled strip cancels exactly the padding it sits in', () => {
+      for (const [gutter, pull, lift] of [
+        [4, '-mx-4', '-mt-4'],
+        [5, '-mx-5', '-mt-5'],
+        [6, '-mx-6', '-mt-6'],
+        [8, '-mx-8', '-mt-8'],
+      ] as const) {
+        const { container, unmount } = render(<Tabs items={items} label="s" gutter={gutter} />)
+        expect(strip(container).className, `gutter ${gutter} pull`).toContain(pull)
+        expect(strip(container).className, `gutter ${gutter} lift`).toContain(lift)
+        unmount()
+      }
+    })
+
+    /* A grounded panel has to reach the edges the same way, or the grey sits in
+       a white frame. This is the fourth branch, and the one with no visible
+       symptom until a caller turns `ground` on. */
+    test('and a grounded panel reaches them too', () => {
+      for (const [gutter, cls] of [
+        [4, '-mx-4'],
+        [5, '-mx-5'],
+        [6, '-mx-6'],
+        [8, '-mx-8'],
+      ] as const) {
+        const { container, unmount } = render(
+          <Tabs items={items} label="s" gutter={gutter} ground />,
+        )
+        expect(panel(container).className, `gutter ${gutter}`).toContain(cls)
+        unmount()
+      }
+    })
+  })
 })

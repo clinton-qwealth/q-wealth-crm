@@ -1135,22 +1135,27 @@ export function MemberPanel({
         className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
       >
         {/*
-          * **One gutter, 24px, and every section of the panel is on it** — the
+          * **One gutter, 32px, and every section of the panel is on it** — the
           * header, each tab's body, the create and search bodies, and the
           * footers, with the tab strip told the same number so the first label
           * lines up with the name above it and the values below.
           *
-          * Widened from 20px on 11 September 2026. It is a `px-6` rather than a
-          * token because Tailwind scans source text and a constructed class
-          * would never be generated — the same reason `Tabs` takes its gutter
-          * as a closed set of steps rather than a number.
+          * Widened 20 → 24 → 32 on 11 September 2026, a step at a time on
+          * sight. The last step made `Tabs` grow a fourth gutter: its set is
+          * closed because Tailwind scans source text and a constructed class
+          * would never be generated, so a new step is four branches there
+          * rather than one number here.
+          *
+          * The panel is 544px at its narrowest, so 32 a side still leaves
+          * 480px of content — enough for the Personal tab's two columns at
+          * roughly 224px each.
           *
           * The boxed sections inside keep their own 16px, deliberately: a card
           * on a roomier ground should not grow with it, or the fields end up
           * 40px from the panel's edge.
           */}
         <div className="flex h-full flex-col">
-          <header className="flex shrink-0 items-start justify-between gap-3 px-6 pb-4 pt-6">
+          <header className="flex shrink-0 items-start justify-between gap-3 px-8 pb-5 pt-8">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h2
@@ -1205,7 +1210,7 @@ export function MemberPanel({
                   above and the values below. */}
               <Tabs
                 fill
-                gutter={6}
+                gutter={8}
                 flushTop={false}
                 bleed={false}
                 alignFirst
@@ -1215,7 +1220,7 @@ export function MemberPanel({
                     id: 'personal',
                     label: 'Personal',
                     panel: (
-                      <div className="flex flex-col gap-4 px-6 pb-6">
+                      <div className="flex flex-col gap-4 px-8 pb-8">
                         <EditableSection
                           title="Identity"
                           partyId={person.party_id}
@@ -1396,7 +1401,7 @@ export function MemberPanel({
                     id: 'contact',
                     label: 'Contact',
                     panel: (
-                      <div className="flex flex-col gap-7 px-6 pb-6">
+                      <div className="flex flex-col gap-7 px-8 pb-8">
                         <EditableSection
                           title="Reachable on"
                           partyId={person.party_id}
@@ -1472,7 +1477,7 @@ export function MemberPanel({
                     id: 'compliance',
                     label: 'Compliance',
                     panel: (
-                      <div className="flex flex-col gap-7 px-6 pb-6">
+                      <div className="flex flex-col gap-7 px-8 pb-8">
                         <Section title="Standing with the firm">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Roles" value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')} />
@@ -1497,7 +1502,7 @@ export function MemberPanel({
                     id: 'estate',
                     label: 'Estate',
                     panel: (
-                      <div className="flex flex-col gap-7 px-6 pb-6">
+                      <div className="flex flex-col gap-7 px-8 pb-8">
                         <Section title="Estate">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Date of death" value={person.date_of_death} />
@@ -1524,7 +1529,7 @@ export function MemberPanel({
                     id: 'memberships',
                     label: 'Memberships',
                     panel: (
-                      <div className="flex flex-col gap-7 px-6 pb-6">
+                      <div className="flex flex-col gap-7 px-8 pb-8">
                         <Section title="This group">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
@@ -1563,7 +1568,7 @@ export function MemberPanel({
                     id: 'activity',
                     label: 'Activity',
                     panel: (
-                      <div className="flex flex-col gap-7 px-6 pb-6">
+                      <div className="flex flex-col gap-7 px-8 pb-8">
                         <Section title="Identity verification">
                           <VerificationHistory entries={person.verifications} />
                         </Section>
@@ -1596,7 +1601,7 @@ export function MemberPanel({
                 ]}
               />
 
-              <footer className="flex shrink-0 justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-6 py-4">
+              <footer className="flex shrink-0 justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
                 <button
                   type="button"
                   onClick={close}
@@ -1610,7 +1615,7 @@ export function MemberPanel({
 
           {mode === 'search' ? (
             <>
-              <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="flex-1 overflow-y-auto px-8 py-6">
                 <label className="flex flex-col gap-1.5">
                   <span className={LABEL}>Search people already on file</span>
                   <input
@@ -1667,7 +1672,7 @@ export function MemberPanel({
                 ) : null}
               </div>
 
-              <footer className="flex items-center justify-between gap-2 border-t border-neutral-100 bg-neutral-50/60 px-6 py-4">
+              <footer className="flex items-center justify-between gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
                 <button
                   type="button"
                   onClick={() => setMode('create')}
@@ -1694,7 +1699,7 @@ export function MemberPanel({
             >
               <input type="hidden" name="group_id" value={groupId} />
 
-              <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="flex-1 overflow-y-auto px-8 py-6">
                 <div className="flex flex-col gap-6">
                   <Section title="Identity">
                     <div className="grid grid-cols-6 gap-3">
@@ -1802,7 +1807,7 @@ export function MemberPanel({
                 </div>
               </div>
 
-              <footer className="flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-6 py-4">
+              <footer className="flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
                 <button
                   type="button"
                   onClick={close}

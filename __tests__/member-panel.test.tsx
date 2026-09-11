@@ -92,8 +92,8 @@ describe('MemberPanel', () => {
   })
 
   /**
-   * **Every section of the panel sits on one gutter**, widened to 24px on
-   * 11 September 2026.
+   * **Every section of the panel sits on one gutter**, widened 20 → 24 → 32
+   * on 11 September 2026, a step at a time on sight.
    *
    * The value matters less than the agreement. The header, each tab's body and
    * the footer are separate elements with separate class lists, and the tab
@@ -118,7 +118,7 @@ describe('MemberPanel', () => {
       undefined,
     )
     expect(new Set(gutters), 'the sections are on different left edges').toEqual(
-      new Set(['px-6']),
+      new Set(['px-8']),
     )
   })
 
@@ -130,10 +130,10 @@ describe('MemberPanel', () => {
     await user.click(screen.getByRole('button', { name: 'trigger' }))
 
     const strip = container.querySelector('dialog [role="tablist"]')!
-    /* `alignFirst` takes the button's own 12px off the left, so a 24px gutter
-       is pl-3 + px-3 on the button. The right side carries it whole. */
-    expect(strip.className).toContain('pr-6')
-    expect(strip.className).toContain('pl-3')
+    /* `alignFirst` takes the button's own 12px off the left, so a 32px gutter
+       is pl-5 + the button's px-3. The right side carries it whole. */
+    expect(strip.className).toContain('pr-8')
+    expect(strip.className).toContain('pl-5')
   })
 
   test('view mode shows the record read-only, with no inputs', async () => {
