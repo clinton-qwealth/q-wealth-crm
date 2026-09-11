@@ -161,6 +161,31 @@ const OUTER_RADIUS = 0.94
  */
 const GAP_DEGREES = 11
 
+/**
+ * The band's width in viewBox units — inner edge of the ring to outer edge.
+ * 40.8 at the radii above.
+ */
+const BAND = ((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 2
+
+/**
+ * How round the ends of each arc are, as a fraction of the band.
+ *
+ * **0.5 is the maximum**: a cap spanning the whole band, which is the
+ * semicircle a `stroke-linecap="round"` dash gives, and what this was when the
+ * treatment was first matched to the comparison ring. Zero is a square end.
+ *
+ * 0.35 — asked for on 11 September as "reduce the roundness a little". Still
+ * plainly soft, but the ends now read as a rounded rectangle's rather than as
+ * half-circles, which at this ring's size was most of the shape.
+ *
+ * A fraction of the band rather than a pixel figure, so it survives a change
+ * to either radius and so the number says how round the end is rather than how
+ * many units it measures. The test asserts the measured cap inset, which is
+ * the only property that separates one roundness from another — arc COUNT
+ * cannot, because any rounding at all gives six.
+ */
+const CAP_ROUNDNESS = 0.35
+
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   /*
    * `missing` is deliberately not read.
@@ -325,11 +350,12 @@ const Ring = memo(function Ring({
              *
              * That ring was hand-drawn as a dashed circle with
              * `stroke-linecap="round"`, which puts a semicircular cap on each
-             * end: the cap radius is exactly HALF THE BAND. Recharts reaches
-             * the same shape through `cornerRadius`, so it is half the band
-             * here too — 20.4 in viewBox units — rather than the arbitrary 7
-             * it started at. That ring's gap was 3% of the circumference,
-             * which is 10.8°, so `paddingAngle` is 11.
+             * end — a cap radius of exactly HALF THE BAND — and Recharts
+             * reached the same shape through `cornerRadius`. That is where
+             * this started, and it has since been pulled back to 0.35 of the
+             * band on instruction; see `CAP_ROUNDNESS`. The gap is untouched:
+             * that ring's was 3% of the circumference, which is 10.8°, so
+             * `paddingAngle` is 11.
              *
              * No conditional for a lone segment: a mutation showed Recharts
              * emits a byte-identical path for a single sector whether the
@@ -337,7 +363,7 @@ const Ring = memo(function Ring({
              * be separated from.
              */
             paddingAngle={GAP_DEGREES}
-            cornerRadius={((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 4}
+            cornerRadius={BAND * CAP_ROUNDNESS}
             stroke="none"
             /* Starts at twelve o'clock and fills clockwise, so the largest
                share is where a reader looks first. */

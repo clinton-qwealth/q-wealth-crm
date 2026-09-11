@@ -190,34 +190,48 @@ describe('the investment mix donut', () => {
     })
 
     /**
-     * **Fully** round, which is what was asked for — not merely rounded.
+     * **Softened, and no longer fully round** — asked for on 11 September as
+     * "reduce the roundness a little".
      *
-     * The comparison ring the treatment was chosen from was a dashed circle
-     * with `stroke-linecap="round"`: a semicircular cap spanning the whole
-     * band. Recharts reaches that only when `cornerRadius` is half the band,
-     * and the tell is where the path starts. A fully round cap is a semicircle
-     * whose apex sits on the band's MIDLINE; a smaller radius starts nearer the
-     * outer edge. Mutation found this: an arbitrary `cornerRadius={7}` passed
-     * the arc-count test above, because any rounding at all gives six arcs.
+     * Roundness cannot be read from the arc COUNT, which the test above uses:
+     * any rounding at all gives six arcs, so an arbitrary `cornerRadius={7}`
+     * passed it. What separates one roundness from another is where the path
+     * starts, measured as the cap's inset from the outer edge.
+     *
+     * The ladder, measured in this harness rather than predicted:
+     *
+     * | Cap, as a fraction of the band | Inset |
+     * | --- | --- |
+     * | 0.5 — fully round, the original | 22.7 |
+     * | 0.4 | 17.7 |
+     * | **0.35 — current** | **15.3** |
+     * | 0.3 | 13.0 |
+     * | 0 — square | 0 |
+     *
+     * toBeCloseTo at precision 0 is a tolerance of half a unit, so this fails
+     * on a step of 0.05 of the band in either direction,
+     * and fails hard if the cap goes back to spanning the whole band. (An
+     * earlier note here predicted the fully-round cap's apex would land on the
+     * band midline at 92.4; it lands at 90.1. Recharts' cap is not quite the
+     * semicircle that construction implies, which is why this is a measured
+     * table and not a formula.)
      */
-    test('the ends are FULLY round — the cap spans the whole band', () => {
+    test('the ends are softened rather than fully round', () => {
       render(<AccountDonut accounts={three} />)
       const half = 120 // SIZE / 2
       const outer = 0.94 * half // 112.8
-      const halfBand = ((0.94 - 0.6) * half) / 2 // 20.4
-      const [, x, y] = segments()[0].getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
-      const inset = outer - Math.hypot(Number(x) - half, Number(y) - half)
+      const fullyRound = 22.7
 
-      /* Measured, not predicted: a full-band corner radius insets the path's
-         start 22.7 from the outer edge, where the arbitrary 7 it started at
-         insets only 11.9. (I first asserted the cap apex would land exactly on
-         the band's midline at 92.4 — it lands at 90.1, so Recharts' cap is not
-         quite the semicircle that construction implies. The inset is the
-         property that actually separates the two.) */
-      expect(
-        inset,
-        `cap insets ${inset.toFixed(1)} from the outer edge; half the band is ${halfBand.toFixed(1)}`,
-      ).toBeGreaterThan(halfBand * 0.9)
+      for (const [i, seg] of segments().entries()) {
+        const [, x, y] = seg.getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
+        const inset = outer - Math.hypot(Number(x) - half, Number(y) - half)
+
+        expect(inset, `segment ${i} caps inset ${inset.toFixed(1)}`).toBeCloseTo(15.3, 0)
+        // Stated separately so the failure says which way it went.
+        expect(inset, 'the caps are back to spanning the whole band').toBeLessThan(
+          fullyRound - 3,
+        )
+      }
     })
 
     /**
