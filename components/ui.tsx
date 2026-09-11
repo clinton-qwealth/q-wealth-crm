@@ -309,6 +309,7 @@ export function StatTile({
   label,
   value,
   hint,
+  change,
   title,
   bare = false,
   size = 'md',
@@ -318,6 +319,25 @@ export function StatTile({
   value: string
   /** Printed beneath the value. */
   hint?: string
+  /**
+   * How the figure has moved, printed under it as "+0.2% over the last 30
+   * days" with the percentage coloured.
+   *
+   * The tone is decided HERE and not by the caller, the same rule `Pill` gives
+   * for its own: green up, red down, grey flat, and no way for one tile to
+   * pick a different green from the next. Both colours are the ones
+   * `PILL_TONES` already uses for a rising and falling value, so a headline and
+   * the account rows below it do not drift into separate greens and reds.
+   *
+   * Pass a percentage already rounded to the precision it prints at — the tone
+   * is read from this number, so an unrounded +0.04 would print "0.0%" and
+   * colour it green. `wealthSummary` rounds before it returns.
+   *
+   * The period is fixed rather than a prop because the schema computes exactly
+   * one baseline, the thirty days before an account's latest valuation. A
+   * second period should arrive with its own data, not as a caption.
+   */
+  change?: { pct: number; text: string }
   /** NOT printed — a native tooltip on the tile. For a caveat that should be
    *  discoverable without being on the page: the wealth summary's "no
    *  liabilities recorded yet" lives here after the printed version was
@@ -372,6 +392,28 @@ export function StatTile({
       >
         {value}
       </p>
+      {/* neutral-600 throughout, not 500, for the reason already recorded on
+          `PILL_TONES`: on this page's ground 500 measures 4.35:1, under the
+          4.5:1 floor for text this small, and 600 measures 7.17:1. These tiles
+          are `bare` in the group header, so the ground is the shell's own — an
+          opaque white artwork multiplied over neutral-100, which that layout
+          samples at #f5f5f5 — and not a white card. */}
+      {change ? (
+        <p data-slot="change" className="mt-1 text-xs leading-snug text-neutral-600">
+          <span
+            className={`font-semibold tabular-nums ${
+              change.pct > 0
+                ? 'text-emerald-700'
+                : change.pct < 0
+                  ? 'text-red-700'
+                  : 'text-neutral-600'
+            }`}
+          >
+            {change.text}
+          </span>{' '}
+          over the last 30 days
+        </p>
+      ) : null}
       {hint ? (
         <p className="mt-1 text-xs leading-snug text-neutral-400">{hint}</p>
       ) : null}

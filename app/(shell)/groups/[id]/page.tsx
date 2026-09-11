@@ -309,6 +309,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                     key={f.label}
                     label={f.label}
                     value={f.value}
+                    change={f.change}
                     title={f.note}
                     bare
                     size="lg"
