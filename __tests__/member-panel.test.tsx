@@ -735,6 +735,161 @@ describe('MemberPanel', () => {
       const subs = document.querySelector('[data-slot="subscriptions-box"]')!
       expect(subs.className).toBe(groups.className)
     })
+
+    /* The label is inside the box and there is nothing above it. The two
+       together were the same word twice in two type sizes — the mistake the
+       groups list had just been corrected for. */
+    test('is labelled once, inside its own box', async () => {
+      await openTab()
+      const box = document.querySelector('[data-slot="subscriptions-box"]')!
+      expect(box.querySelector('[data-slot="subscriptions-header"]')!.textContent!.trim()).toBe(
+        'Subscriptions',
+      )
+      expect(box.previousElementSibling?.tagName).not.toBe('H3')
+      expect(box.textContent).not.toContain('Channel')
+      expect(box.textContent!.indexOf('Subscriptions')).toBe(
+        box.textContent!.lastIndexOf('Subscriptions'),
+      )
+    })
+
+    test('runs in two columns where there is room', async () => {
+      await openTab()
+      const list = document.querySelector('[data-slot="subscription-row"]')!.parentElement!
+      expect(list.className).toContain('sm:grid-cols-2')
+      expect(list.className).toContain('grid-cols-1')
+    })
+
+    /**
+     * **The switch moves on the click, not on the round trip.**
+     *
+     * It used to wait for the write — roughly 170ms at this page's cost, long
+     * enough to read as a dead control and invite a second press. The action is
+     * left PENDING here on purpose: if the switch only moved when the promise
+     * settled, it would still read unchecked at this point.
+     */
+    test('the switch flips before the write has finished', async () => {
+      let release: (v: { ok: true }) => void = () => {}
+      vi.mocked(actions.setSubscription).mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve as (v: { ok: true }) => void
+        }),
+      )
+
+      const { user } = await openTab()
+      expect(
+        screen.getByRole('switch', { name: 'Q Wealth Updates' }).getAttribute('aria-checked'),
+      ).toBe('false')
+
+      await user.click(screen.getByRole('switch', { name: 'Q Wealth Updates' }))
+
+      expect(
+        screen.getByRole('switch', { name: 'Q Wealth Updates' }).getAttribute('aria-checked'),
+        'the switch waited for the server',
+      ).toBe('true')
+
+      release({ ok: true })
+    })
+
+    /**
+     * **And a refusal puts it back.** This is the half that makes an optimistic
+     * control honest rather than merely quick: without it the screen keeps
+     * showing a change the database rejected.
+     */
+    test('a refused toggle goes back to where it was, with the reason', async () => {
+      vi.mocked(actions.setSubscription).mockResolvedValueOnce({
+        error: 'This person unsubscribed from that channel themselves. Only they can undo it.',
+      })
+
+      const { user } = await openTab()
+      await user.click(screen.getByRole('switch', { name: 'Q Wealth Updates' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain('unsubscribed')
+      await waitFor(() =>
+        expect(
+          screen.getByRole('switch', { name: 'Q Wealth Updates' }).getAttribute('aria-checked'),
+          'the refused change was left on screen',
+        ).toBe('false'),
+      )
+    })
+
+    /**
+     * **A fresh server render replaces what the toggle put there.**
+     *
+     * This is what `useServerState` is for, and the defect it was written after:
+     * `useState(serverValue)` reads its argument once, so a list seeded from
+     * the server ignores every later render's data. The revalidation that a
+     * successful write triggers would arrive and change nothing on screen.
+     *
+     * Driven by re-rendering with a different person, which is exactly what a
+     * revalidation delivers. A plain `useState` passes every other test in this
+     * block and fails this one.
+     */
+    test('server data arriving after mount replaces the local state', async () => {
+      const user = userEvent.setup()
+      const { rerender } = render(
+        <MemberPanel
+          groupId="g1"
+          groupName="Testsmith Household"
+          members={[{ ...person, subscriptions: [] }]}
+          initialMode="view"
+          initialPartyId="p1"
+        >
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      expect(
+        screen.getByRole('switch', { name: 'Q Wealth Updates' }).getAttribute('aria-checked'),
+      ).toBe('false')
+
+      rerender(
+        <MemberPanel
+          groupId="g1"
+          groupName="Testsmith Household"
+          members={[
+            {
+              ...person,
+              subscriptions: [
+                {
+                  channel: 'q_wealth_updates',
+                  opted_in: true,
+                  source: 'staff',
+                  changed_at: '2026-09-11T00:00:00Z',
+                },
+              ],
+            },
+          ]}
+          initialMode="view"
+          initialPartyId="p1"
+        >
+          trigger
+        </MemberPanel>,
+      )
+
+      expect(
+        screen.getByRole('switch', { name: 'Q Wealth Updates' }).getAttribute('aria-checked'),
+        'the list ignored the server and kept what it mounted with',
+      ).toBe('true')
+    })
+
+    /* A channel already on goes the other way and comes back the other way, so
+       neither direction is a constant. */
+    test('and a refused switch-off goes back to on', async () => {
+      vi.mocked(actions.setSubscription).mockResolvedValueOnce({ error: 'Nope.' })
+
+      const { user } = await openTab()
+      await user.click(screen.getByRole('switch', { name: 'Investment Newsletters' }))
+
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole('switch', { name: 'Investment Newsletters' })
+            .getAttribute('aria-checked'),
+        ).toBe('true'),
+      )
+    })
   })
 
   test('an absent value reads as a gap rather than being hidden', async () => {

@@ -17,10 +17,11 @@ import {
   checkVerification,
   attestVerification,
 } from '@/app/(shell)/groups/actions'
-import type { Address, PersonDetail, VerificationEntry } from '@/lib/person'
+import type { Address, PersonDetail, Subscription, VerificationEntry } from '@/lib/person'
 import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
 import { GroupTile, Pill } from './ui'
+import { useServerState } from './use-server-state'
 import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER } from '@/lib/countries'
 
 const FIELD =
@@ -1137,7 +1138,7 @@ const CHANNELS: [value: string, label: string][] = [
 ]
 
 /**
- * What a person is subscribed to, one row per channel.
+ * What a person is subscribed to, two columns of channels.
  *
  * ## Three states, and the third is the reason this exists
  *
@@ -1156,24 +1157,63 @@ const CHANNELS: [value: string, label: string][] = [
  * show it was honoured — so the control is replaced by a mark saying who asked
  * and when. The database refuses the write as well, so this is a courtesy to
  * the reader rather than the enforcement.
+ *
+ * ## The toggle moves first and the write follows
+ *
+ * It used to wait for the round trip, which at this page's cost is roughly
+ * 170ms before anything moved — long enough to read as a dead control and
+ * invite a second press. Now the switch flips on the click and the write goes
+ * behind it, through the same `useServerState` every other list on this site
+ * uses: the local value is re-seeded whenever the server sends a new one, so a
+ * revalidation replaces the optimistic state with the same fact from the source
+ * of truth.
+ *
+ * **A refusal puts it back**, and says why. That is the half that makes an
+ * optimistic control honest rather than merely quick — without it the screen
+ * would keep showing a change the database rejected.
  */
 function Subscriptions({ person }: { person: PersonDetail }) {
+  const [rows, setRows] = useServerState<Subscription[]>(person.subscriptions)
   const [error, setError] = useState<string | null>(null)
-  const [busy, start] = useTransition()
-  const byChannel = new Map(person.subscriptions.map((s) => [s.channel, s]))
+  const [, start] = useTransition()
+  const byChannel = new Map(rows.map((s) => [s.channel, s]))
+
+  const toggle = (channel: string, on: boolean) => {
+    const before = rows
+    setError(null)
+    /* Optimistic: the row this produces is what the server will write, minus
+       the staff member's name, which nothing on this screen shows. */
+    setRows([
+      ...rows.filter((r) => r.channel !== channel),
+      { channel, opted_in: !on, source: 'staff', changed_at: new Date().toISOString() },
+    ])
+    start(async () => {
+      const result = await setSubscription(person.party_id, channel, !on)
+      if (result && 'error' in result) {
+        setRows(before)
+        setError(result.error)
+      }
+    })
+  }
 
   return (
     <div className="flex flex-col">
+      {/* One label across the top. It replaced both a section heading above the
+          box and a "Channel" column header inside it, which said the same thing
+          twice in two type sizes. */}
       <div
         data-slot="subscriptions-header"
-        className={`grid ${SUBSCRIPTION_COLS} gap-3 border-b border-neutral-200 px-1 ${ROW_EDGE_TOP} pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500`}
-        aria-hidden="true"
+        className={`border-b border-neutral-200 px-1 ${ROW_EDGE_TOP} pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500`}
       >
-        <span>Channel</span>
-        <span className="justify-self-end">Subscribed</span>
+        Subscriptions
       </div>
 
-      <ul>
+      {/* Two columns where there is room, one where there is not. Seven
+          channels down a single column ran longer than the panel's other
+          sections for no reason — they are short labels with a control each. */}
+      <ul
+        className={`grid grid-cols-1 gap-x-8 pt-1 sm:grid-cols-2 ${LIST_EDGE_BOTTOM}`}
+      >
         {CHANNELS.map(([value, label]) => {
           const row = byChannel.get(value)
           const unsubscribed = row?.source === 'client' && !row.opted_in
@@ -1185,7 +1225,7 @@ function Subscriptions({ person }: { person: PersonDetail }) {
               data-slot="subscription-row"
               data-channel={value}
               data-state={unsubscribed ? 'unsubscribed' : on ? 'on' : 'off'}
-              className={`grid ${SUBSCRIPTION_COLS} items-center gap-3 border-b border-neutral-100 px-1 py-2.5 last:border-0 ${ROW_EDGE_BOTTOM}`}
+              className="flex items-center justify-between gap-3 px-1 py-1.5"
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm text-neutral-900">{label}</span>
@@ -1196,54 +1236,43 @@ function Subscriptions({ person }: { person: PersonDetail }) {
                 ) : null}
               </span>
 
-              <span className="justify-self-end">
-                {unsubscribed ? (
-                  /* Not a disabled toggle. A switch that cannot move still
-                     reads as a switch, and this is not a setting somebody
-                     failed to reach — it is an instruction that stands. */
-                  <Pill tone="warning">Unsubscribed</Pill>
-                ) : (
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={label}
-                    disabled={busy}
-                    onClick={() => {
-                      setError(null)
-                      start(async () => {
-                        const result = await setSubscription(person.party_id, value, !on)
-                        setError(result && 'error' in result ? result.error : null)
-                      })
-                    }}
-                    className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 outline-none transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40 ${
-                      on ? 'bg-brand' : 'bg-neutral-300'
+              {unsubscribed ? (
+                /* Not a disabled toggle. A switch that cannot move still reads
+                   as a switch, and this is not a setting somebody failed to
+                   reach — it is an instruction that stands. */
+                <Pill tone="warning">Unsubscribed</Pill>
+              ) : (
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  aria-label={label}
+                  onClick={() => toggle(value, on)}
+                  className={`inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/40 ${
+                    on ? 'bg-brand' : 'bg-neutral-300'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`block size-4 rounded-full bg-white shadow-sm transition-transform ${
+                      on ? 'translate-x-4' : 'translate-x-0'
                     }`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`block size-4 rounded-full bg-white shadow-sm transition-transform ${
-                        on ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                )}
-              </span>
+                  />
+                </button>
+              )}
             </li>
           )
         })}
       </ul>
 
       {error ? (
-        <p role="alert" className="pt-2 text-xs leading-snug text-red-700">
+        <p role="alert" className="px-1 pb-3 text-xs leading-snug text-red-700">
           {error}
         </p>
       ) : null}
     </div>
   )
 }
-
-const SUBSCRIPTION_COLS = 'grid-cols-[minmax(0,1fr)_auto]'
 
 /**
  * The day an unsubscribe was recorded.
@@ -1259,6 +1288,7 @@ function formatSubscriptionDate(iso: string) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
 }
+
 
 /** The four tracks, named once so the header and every row cannot drift apart. */
 const MEMBERSHIP_COLS = 'grid-cols-[minmax(0,1fr)_7rem_7rem_3rem]'
@@ -1282,6 +1312,10 @@ const ROW_EDGE_TOP = 'pt-4'
    would put `last:pb-4` nowhere in the source, and Tailwind only emits what it
    can read. */
 const ROW_EDGE_BOTTOM = 'last:pb-4'
+/* The same step again, for a list whose last row is not its visual bottom: the
+   subscriptions grid runs in two columns, so `last:` would reach only the final
+   channel and leave the other column's foot flush against the box. */
+const LIST_EDGE_BOTTOM = 'pb-4'
 
 /**
  * The edit form for the group the panel was opened from.
@@ -2059,19 +2093,16 @@ export function MemberPanel({
                           />
                         </section>
 
-                        <div className="flex flex-col gap-2.5">
-                          <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                            Subscriptions
-                          </h3>
-                          {/* Same box and the same vertical rhythm as the groups
-                              list above it, so the tab reads as one thing. */}
-                          <section
-                            data-slot="subscriptions-box"
-                            className="rounded-lg border border-neutral-200 px-4"
-                          >
-                            <Subscriptions person={person} />
-                          </section>
-                        </div>
+                        {/* No heading above the box: the label inside it says
+                            "Subscriptions" already, and the two together were
+                            the same word twice in two type sizes — the mistake
+                            the groups list above had just been corrected for. */}
+                        <section
+                          data-slot="subscriptions-box"
+                          className="rounded-lg border border-neutral-200 px-4"
+                        >
+                          <Subscriptions person={person} />
+                        </section>
                       </div>
                     ),
                   },
