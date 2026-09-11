@@ -1,6 +1,6 @@
 import type { PersonDetail, VerificationEntry } from '@/lib/person'
 import { describe, expect, test, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 /**
@@ -14,6 +14,7 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   linkMember: vi.fn(),
   revealSensitiveField: vi.fn(async () => ({ error: 'not in this test' })),
   searchPeople: vi.fn(async () => []),
+  removeMember: vi.fn(async () => ({ ok: true as const })),
   startVerification: vi.fn(),
   checkVerification: vi.fn(),
   attestVerification: vi.fn(),
@@ -61,7 +62,9 @@ const person: PersonDetail = {
   phone_other: null,
   address: { line1: '12 Bay Street', line2: null, suburb: 'Mosman', state: 'NSW', postcode: '2088' },
   roles: [{ role: 'client', status: 'active', start_date: '2026-09-02' }],
-  other_groups: [{ name: 'Faketrade Pty Ltd Group', member_role: 'director' }],
+  other_groups: [
+    { name: 'Faketrade Pty Ltd Group', member_role: 'director', is_primary_group: false },
+  ],
   postal_address: { line1: null, line2: null, suburb: null, state: null, postcode: null },
   postal_same_as_residential: true,
   verifications: [],
@@ -69,7 +72,7 @@ const person: PersonDetail = {
 
 function open(mode: 'view' | 'search' = 'view') {
   return render(
-    <MemberPanel groupId="g1" members={[person]} initialMode={mode} initialPartyId="p1">
+    <MemberPanel groupId="g1" groupName="Testsmith Household" members={[person]} initialMode={mode} initialPartyId="p1">
       trigger
     </MemberPanel>,
   )
@@ -189,6 +192,140 @@ describe('MemberPanel', () => {
     const activity = screen.getByRole('tabpanel').textContent ?? ''
     expect(activity).toContain('Prefers email.')
     expect(activity).not.toContain('Faketrade Pty Ltd Group')
+  })
+
+  /**
+   * The Memberships tab, rebuilt 11 September 2026.
+   *
+   * It was two sections — "This group", a two-field list, and "Other groups", a
+   * name-and-role list — so the same three facts were laid out two different
+   * ways on one tab, and **the group you were actually in was the only one
+   * whose name never appeared.** Now every group is a row on one set of
+   * columns, and the one you came in through is marked rather than described
+   * separately.
+   */
+  describe('the Memberships tab', () => {
+    const openTab = async () => {
+      const user = userEvent.setup()
+      const rendered = open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(screen.getByRole('tab', { name: 'Memberships' }))
+      return { user, ...rendered }
+    }
+    const rows = () =>
+      Array.from(document.querySelectorAll('[data-slot="membership-row"]')) as HTMLElement[]
+
+    test('every group the person belongs to is a row, this one first', async () => {
+      await openTab()
+      expect(rows()).toHaveLength(2)
+      expect(rows()[0].textContent).toContain('Testsmith Household')
+      expect(rows()[1].textContent).toContain('Faketrade Pty Ltd Group')
+    })
+
+    /* The name is the fix. Before this the current group was described as
+       "This group" and never named, which is the one group a reader cannot
+       look up elsewhere on the tab. */
+    test('and the current group is NAMED, not just called “this group”', async () => {
+      await openTab()
+      expect(rows()[0].textContent).toContain('Testsmith Household')
+    })
+
+    test('the row you came in through is marked, and only that one', async () => {
+      await openTab()
+      expect(rows()[0].getAttribute('data-here')).toBe('true')
+      expect(rows()[1].getAttribute('data-here')).toBe('false')
+
+      const marks = document.querySelectorAll('[data-slot="membership-row"] .bg-sky-50')
+      expect(marks, 'exactly one group is the one you are in').toHaveLength(1)
+      expect(rows()[0].textContent).toContain('This group')
+      expect(rows()[1].textContent).not.toContain('This group')
+    })
+
+    /* Role and primary-group read the same way on every row. The point of the
+       rebuild was that they did not: the current group's were a labelled field
+       list and the others' were a right-aligned run of words. */
+    test('role and primary group read the same way on every row', async () => {
+      await openTab()
+      // The fixture is a spouse here and primary, a director elsewhere and not.
+      expect(rows()[0].textContent).toContain('Spouse')
+      expect(rows()[0].textContent).toContain('Yes')
+      expect(rows()[1].textContent).toContain('Director')
+      expect(rows()[1].textContent).toContain('No')
+      // Underscores never reach the screen.
+      expect(rows().map((r) => r.textContent).join(' ')).not.toContain('_')
+    })
+
+    test('the section is boxed, like the other tabs’', async () => {
+      await openTab()
+      const box = rows()[0].closest('section')
+      expect(box, 'the rows are not inside a section at all').not.toBeNull()
+      expect(box!.className).toContain('border')
+      expect(box!.className).toContain('rounded-lg')
+    })
+
+    /**
+     * **Only this group offers Remove.** The panel is opened from one group's
+     * page and acts on that group; a control that ended a membership of a group
+     * the reader is not looking at would act somewhere they cannot see the
+     * consequence.
+     */
+    test('only the current group can be left', async () => {
+      await openTab()
+      expect(within(rows()[0]).getByRole('button', { name: 'Remove' })).toBeTruthy()
+      expect(within(rows()[1]).queryByRole('button', { name: 'Remove' })).toBeNull()
+    })
+
+    /* Two presses, not one — and deliberately not `window.confirm`, which
+       inside a <dialog> is a modal over a modal and cannot be styled or read. */
+    test('removing asks first, and the first press writes nothing', async () => {
+      const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
+
+      expect(within(rows()[0]).getByRole('button', { name: 'Confirm' })).toBeTruthy()
+      expect(within(rows()[0]).getByRole('button', { name: 'Cancel' })).toBeTruthy()
+      expect(actions.removeMember).not.toHaveBeenCalled()
+    })
+
+    test('cancelling puts it back and still writes nothing', async () => {
+      const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Cancel' }))
+
+      expect(within(rows()[0]).getByRole('button', { name: 'Remove' })).toBeTruthy()
+      expect(actions.removeMember).not.toHaveBeenCalled()
+    })
+
+    test('confirming calls the action with this group and this person', async () => {
+      vi.mocked(actions.removeMember).mockResolvedValueOnce({ ok: true })
+      const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Confirm' }))
+
+      await waitFor(() => expect(actions.removeMember).toHaveBeenCalledWith('g1', 'p1'))
+    })
+
+    /**
+     * **The refusal is shown, and it outlives the confirmation that produced
+     * it.** The database names who the primary contact is and what to do
+     * instead; a generic message would throw that away. An earlier version
+     * rendered the plain button again as soon as the confirm collapsed, which
+     * dropped the message on the same render — the press then looked like it
+     * had done nothing, which is the one thing a refusal must never resemble.
+     */
+    test('a refusal is shown in the row, in the database’s own words', async () => {
+      vi.mocked(actions.removeMember).mockResolvedValueOnce({
+        error: 'Janet Testsmith is this group’s primary contact. Name a different primary contact before removing them.',
+      })
+      const { user } = await openTab()
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Remove' }))
+      await user.click(within(rows()[0]).getByRole('button', { name: 'Confirm' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toContain('primary contact')
+      expect(alert.textContent).toContain('Janet Testsmith')
+      // And the control is usable again, rather than stuck mid-confirmation.
+      expect(within(rows()[0]).getByRole('button', { name: 'Remove' })).toBeTruthy()
+    })
   })
 
   test('an absent value reads as a gap rather than being hidden', async () => {
@@ -389,7 +526,7 @@ describe('MemberPanel', () => {
     async function openPostal(person_: typeof person) {
       const user = userEvent.setup()
       render(
-        <MemberPanel groupId="g1" members={[person_]} initialMode="view" initialPartyId="p1">
+        <MemberPanel groupId="g1" groupName="Testsmith Household" members={[person_]} initialMode="view" initialPartyId="p1">
           trigger
         </MemberPanel>,
       )
@@ -558,7 +695,7 @@ describe('MemberPanel', () => {
   test('a stored gender outside the list is kept rather than cleared', async () => {
     const user = userEvent.setup()
     const { container } = render(
-      <MemberPanel groupId="g1" members={[{ ...person, gender: 'Indeterminate' }]} initialMode="view" initialPartyId="p1">
+      <MemberPanel groupId="g1" groupName="Testsmith Household" members={[{ ...person, gender: 'Indeterminate' }]} initialMode="view" initialPartyId="p1">
         trigger
       </MemberPanel>,
     )
@@ -586,7 +723,7 @@ describe('MemberPanel', () => {
 
     function openWith(verifications: VerificationEntry[]) {
       return render(
-        <MemberPanel groupId="g1" members={[{ ...person, verifications }]} initialMode="view" initialPartyId="p1">
+        <MemberPanel groupId="g1" groupName="Testsmith Household" members={[{ ...person, verifications }]} initialMode="view" initialPartyId="p1">
           trigger
         </MemberPanel>,
       )

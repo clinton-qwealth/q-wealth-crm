@@ -34,7 +34,7 @@ const rows = () => screen.getAllByRole('listitem').filter((el) => !el.closest('d
 
 describe('GroupMembers', () => {
   test('a person is a button that opens their record; an entity is not', () => {
-    render(<GroupMembers groupId="g1" members={[janet, trust]} />)
+    render(<GroupMembers groupId="g1" groupName="Testsmith Household" members={[janet, trust]} />)
     const [person, entity] = rows()
     expect(person.querySelector('button')).toBeTruthy()
     expect(entity.querySelector('button')).toBeNull()
@@ -42,19 +42,19 @@ describe('GroupMembers', () => {
   })
 
   test('the role reads as the second line, in words', () => {
-    render(<GroupMembers groupId="g1" members={[janet, trust]} />)
+    render(<GroupMembers groupId="g1" groupName="Testsmith Household" members={[janet, trust]} />)
     expect(rows()[0].textContent).toContain('primary')
     // underscores never reach the screen
     expect(rows()[1].textContent).not.toContain('_')
   })
 
   test('a deceased member is marked on the row', () => {
-    render(<GroupMembers groupId="g1" members={[{ ...janet, date_of_death: '2026-01-01' }]} />)
+    render(<GroupMembers groupId="g1" groupName="Testsmith Household" members={[{ ...janet, date_of_death: '2026-01-01' }]} />)
     expect(rows()[0].textContent).toContain('Deceased')
   })
 
   test('no members shows the message and still offers Add member', () => {
-    render(<GroupMembers groupId="g1" members={[]} />)
+    render(<GroupMembers groupId="g1" groupName="Testsmith Household" members={[]} />)
     expect(screen.getByText('No members yet.')).toBeTruthy()
     expect(screen.getByRole('button', { name: /add member/i })).toBeTruthy()
   })

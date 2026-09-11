@@ -6,6 +6,7 @@ import {
   linkMember,
   patchMember,
   revealSensitiveField,
+  removeMember,
   searchPeople,
   type MemberState,
   type PersonMatch,
@@ -979,6 +980,161 @@ function EditableSection({
   )
 }
 
+/**
+ * A person's groups, one row each, on one set of columns.
+ *
+ * **The group the panel was opened from is a row like any other**, marked with
+ * a blue _This group_ pill rather than being described in its own section. It
+ * used to be two sections — "This group", a two-field list, and "Other groups",
+ * a name-and-role list — which meant the same three facts were laid out two
+ * different ways on one tab, and the group you were actually in was the only
+ * one whose name was never shown. Rebuilt on 11 September 2026.
+ *
+ * It sorts to the top, because it is the row the reader came in through.
+ */
+function MembershipRows({
+  groupId,
+  groupName,
+  person,
+}: {
+  groupId: string
+  groupName: string
+  person: PersonDetail
+}) {
+  const rows = [
+    {
+      key: 'this-group',
+      name: groupName,
+      role: person.member_role ?? '',
+      primary: Boolean(person.is_primary_group),
+      here: true,
+    },
+    ...person.other_groups.map((g) => ({
+      key: `${g.name}-${g.member_role}`,
+      name: g.name,
+      role: g.member_role,
+      primary: g.is_primary_group,
+      here: false,
+    })),
+  ]
+
+  return (
+    <div className="flex flex-col">
+      {/* Three columns and a slot for the control. The header is quiet but
+          present: a bare "Yes" under nothing is not a fact anybody can read. */}
+      <div
+        className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_5rem] gap-3 border-b border-neutral-200 pb-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500"
+        aria-hidden="true"
+      >
+        <span>Group</span>
+        <span>Role</span>
+        <span>Primary group</span>
+        <span />
+      </div>
+
+      <ul>
+        {rows.map((r) => (
+          <li
+            key={r.key}
+            data-slot="membership-row"
+            data-here={r.here ? 'true' : 'false'}
+            className="grid grid-cols-[minmax(0,1fr)_7rem_6rem_5rem] items-center gap-3 border-b border-neutral-100 py-2.5 last:border-0"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-medium text-neutral-900">{r.name}</span>
+              {r.here ? <Pill tone="info">This group</Pill> : null}
+            </span>
+            <span className="text-sm text-neutral-700">
+              {ROLE_LABEL[r.role] ?? r.role.replace(/_/g, ' ')}
+            </span>
+            <span className="text-sm text-neutral-700">{r.primary ? 'Yes' : 'No'}</span>
+            {/* Only this group's row offers it. The panel is opened from one
+                group's page and acts on that group; a control that ended a
+                membership of a group you are not looking at would be acting
+                somewhere the reader cannot see the consequences. */}
+            <span className="justify-self-end">
+              {r.here ? <RemoveMember groupId={groupId} person={person} /> : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Take this person out of this group.
+ *
+ * **Two presses, not one, and not a native confirm.** The panel is already a
+ * `<dialog>`, and `window.confirm` inside one is a second modal over a modal —
+ * it also cannot be styled or tested. So the button becomes its own
+ * confirmation in place, which keeps the question next to the row it is about.
+ *
+ * The refusal is shown verbatim. The database names who the primary contact is
+ * and what to do instead, and a generic "could not remove" would throw that
+ * away — see `end_group_membership()`.
+ */
+function RemoveMember({ groupId, person }: { groupId: string; person: PersonDetail }) {
+  const [asking, setAsking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+
+  /* The refusal outlives the confirmation it came from. An earlier version
+     returned the plain button when `asking` went false, which dropped the
+     message on the same render that produced it — the press then looked like
+     it had done nothing at all, which is the one outcome a refusal must never
+     resemble. */
+  return (
+    <span className="flex flex-col items-end gap-1">
+      {!asking ? (
+        <button
+          type="button"
+          onClick={() => {
+            setAsking(true)
+            setError(null)
+          }}
+          className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-red-500/30"
+        >
+          Remove
+        </button>
+      ) : (
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            start(async () => {
+              const result = await removeMember(groupId, person.party_id)
+              if (result && 'error' in result) {
+                setError(result.error)
+                setAsking(false)
+              }
+              // On success the page revalidates and this row goes with it.
+            })
+          }
+          className="rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
+        >
+          {busy ? 'Removing…' : 'Confirm'}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setAsking(false)}
+          className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          Cancel
+        </button>
+      </span>
+      )}
+      {error ? (
+        <span role="alert" className="text-right text-xs leading-snug text-red-700">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 function Section({
   title,
   children,
@@ -1031,6 +1187,7 @@ function Section({
  */
 export function MemberPanel({
   groupId,
+  groupName,
   members,
   children,
   variant = 'row',
@@ -1038,6 +1195,9 @@ export function MemberPanel({
   initialPartyId,
 }: {
   groupId: string
+  /** The group's own name. The Memberships tab lists a person's groups as rows
+   *  and this is one of them, so it has to be nameable rather than implied. */
+  groupName: string
   members: PersonDetail[]
   /**
    * The trigger's contents. Deliberately children rather than a render prop:
@@ -1530,36 +1690,15 @@ export function MemberPanel({
                     label: 'Memberships',
                     panel: (
                       <div className="flex flex-col gap-7 px-8 pb-8">
-                        <Section title="This group">
-                          <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                            <Row label="Role in this group" value={ROLE_LABEL[person.member_role ?? ''] ?? person.member_role} />
-                            <Row label="Primary group" value={person.is_primary_group ? 'Yes' : 'No'} />
-                          </dl>
-                        </Section>
-                        <Section title="Other groups">
-                          {/* One line each rather than the comma-joined string
-                              this was when it shared a tab. Someone who sits in
-                              several groups is exactly who this tab is for, and
-                              a run-on sentence is the wrong shape for that. */}
-                          {person.other_groups.length ? (
-                            <ul className="flex flex-col gap-2">
-                              {person.other_groups.map((g) => (
-                                <li
-                                  key={`${g.name}-${g.member_role}`}
-                                  className="flex items-baseline justify-between gap-3 border-b border-neutral-100 pb-2 last:border-0 last:pb-0"
-                                >
-                                  <span className="text-sm text-neutral-900">{g.name}</span>
-                                  <span className="shrink-0 text-xs text-neutral-500">
-                                    {ROLE_LABEL[g.member_role] ?? g.member_role.replace(/_/g, ' ')}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-neutral-400">
-                              Belongs to no other group.
-                            </p>
-                          )}
+                        {/* Boxed, like the other tabs' sections. This was two
+                            unboxed lists until 11 September — see
+                            `MembershipRows` for why they became one. */}
+                        <Section title="Groups" boxed>
+                          <MembershipRows
+                            groupId={groupId}
+                            groupName={groupName}
+                            person={person}
+                          />
                         </Section>
                       </div>
                     ),

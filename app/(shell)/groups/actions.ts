@@ -272,6 +272,35 @@ export async function linkMember(
   return { ok: true }
 }
 
+/**
+ * Take a member out of a group.
+ *
+ * **It ends the membership rather than deleting it** — `end_group_membership()`
+ * sets an end date, and every read in the application already filters on that,
+ * so one write removes the person from the group's members, its accounts, its
+ * policies, its wealth figures and its mix ring at once while the record of
+ * their having been there survives.
+ *
+ * The guards are in the database, not here, so they bind the MCP and psql too:
+ * an active staff member, a membership that is actually current, and a refusal
+ * when the person is the group's own primary contact. **The refusal is shown
+ * rather than swallowed** — the database's own message names who it is and what
+ * to do instead, and rewriting it here would lose that.
+ */
+export async function removeMember(groupId: string, partyId: string): Promise<MemberState> {
+  if (!groupId || !partyId) return { error: 'No member selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('end_group_membership', {
+    p_group_id: groupId,
+    p_party_id: partyId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export type PersonMatch = { party_id: string; display_name: string; detail: string }
 
 /**

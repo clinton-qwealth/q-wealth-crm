@@ -449,7 +449,7 @@ export function Button({
   )
 }
 
-export type PillTone = 'brand' | 'success' | 'warning' | 'danger' | 'neutral'
+export type PillTone = 'brand' | 'success' | 'warning' | 'danger' | 'neutral' | 'info'
 
 const PILL_TONES: Record<PillTone, string> = {
   // Brand marks something as *ours* — an identity or a label, not a state.
@@ -464,6 +464,24 @@ const PILL_TONES: Record<PillTone, string> = {
   // neutral-600, not 500: 500 on the 100 ground measured 4.35:1 in a browser,
   // under the 4.5:1 floor for text this small. 600 measures 7.17:1.
   neutral: 'bg-neutral-100 text-neutral-600 ring-neutral-200 font-medium',
+  /*
+   * Blue marks WHERE YOU ARE — the record you are looking at, among others of
+   * its kind. Added 11 September 2026 for the member panel's Memberships tab,
+   * where a person's groups are listed and one of them is the group whose page
+   * the panel was opened from.
+   *
+   * It is not a state, which is why it takes none of the state colours: that
+   * membership is not healthier or worse than the others, it is the one you
+   * came in through. Brand was the closest existing fit — it marks something as
+   * ours, an identity rather than a state — but brand is also the action
+   * colour, and a pill nobody can click should not wear it.
+   *
+   * Sky already carries the insurance tile, and that overlap is accepted rather
+   * than missed: a tile is a 36px glyph square on a record row, this is a text
+   * pill beside a group's name, and the two never stand as alternatives to one
+   * another. If sky ever has to mean one thing only, this is the caller to move.
+   */
+  info: 'bg-sky-50 text-sky-700 ring-sky-200 font-semibold',
 }
 
 /**

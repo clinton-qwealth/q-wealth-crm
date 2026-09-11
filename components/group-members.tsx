@@ -24,9 +24,13 @@ import { PlusIcon } from './icons'
  */
 export function GroupMembers({
   groupId,
+  groupName,
   members,
 }: {
   groupId: string
+  /** Passed straight through to the panel, whose Memberships tab lists this
+   *  group as one row among the person's others and has to name it. */
+  groupName: string
   members: PersonDetail[]
 }) {
   const role = (m: PersonDetail) => (m.member_role ?? '').replace(/_/g, ' ')
@@ -43,6 +47,7 @@ export function GroupMembers({
                 <li key={m.party_id}>
                   <MemberPanel
                     groupId={groupId}
+                    groupName={groupName}
                     members={members}
                     initialMode="view"
                     initialPartyId={m.party_id}
@@ -90,7 +95,13 @@ export function GroupMembers({
             people already on file, because linking an existing record is what
             keeps duplicate people out of the database. */}
         <div className="border-t border-neutral-200 bg-neutral-50">
-          <MemberPanel groupId={groupId} members={members} initialMode="search" variant="link">
+          <MemberPanel
+            groupId={groupId}
+            groupName={groupName}
+            members={members}
+            initialMode="search"
+            variant="link"
+          >
             <PlusIcon className="h-3.5 w-3.5" />
             Add member
           </MemberPanel>

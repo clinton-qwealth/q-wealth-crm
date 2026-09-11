@@ -58,7 +58,15 @@ export type PersonDetail = {
   /** True when post goes to the residential address. Defaults true. */
   postal_same_as_residential: boolean
   roles: { role: string; status: string; start_date: string }[]
-  other_groups: { name: string; member_role: string }[]
+  /**
+   * The person's OTHER current memberships — this group is excluded, because
+   * the panel already holds it as `member_role` and `is_primary_group`.
+   *
+   * `is_primary_group` joined the shape on 11 September so the Memberships tab
+   * could show every group on one set of columns instead of describing this
+   * group in a different vocabulary from the rest.
+   */
+  other_groups: { name: string; member_role: string; is_primary_group: boolean }[]
   /** Identity-verification history, newest first. Read from the masked summary
    *  view, so the client's mobile number is never carried in this object. */
   verifications: VerificationEntry[]
@@ -158,7 +166,7 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
       supabase.from('party_roles').select('party_id, role, status, start_date').in('party_id', ids).is('end_date', null),
       supabase
         .from('client_group_members')
-        .select('party_id, member_role, client_groups(name)')
+        .select('party_id, member_role, is_primary_group, client_groups(name)')
         .in('party_id', ids)
         .is('end_date', null)
         .neq('group_id', groupId),
@@ -288,7 +296,11 @@ export async function getGroupMemberDetail(groupId: string): Promise<PersonDetai
           .map((g) => {
             const raw = (g as Record<string, unknown>).client_groups
             const grp = (Array.isArray(raw) ? raw[0] : raw) as { name?: string } | null
-            return { name: grp?.name ?? 'Unnamed group', member_role: g.member_role as string }
+            return {
+              name: grp?.name ?? 'Unnamed group',
+              member_role: g.member_role as string,
+              is_primary_group: (g.is_primary_group as boolean) ?? false,
+            }
           }),
       }
     })

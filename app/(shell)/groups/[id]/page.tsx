@@ -404,7 +404,11 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 </div>
               </dl>
 
-              <GroupMembers groupId={group.group_id} members={memberDetail} />
+              <GroupMembers
+                groupId={group.group_id}
+                groupName={group.name}
+                members={memberDetail}
+              />
 
               {/* Points at where choosing WILL happen. The Groups index exists
                   as of 10 September and is in the navbar; it has no list in it
