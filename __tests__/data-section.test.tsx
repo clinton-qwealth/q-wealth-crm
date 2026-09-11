@@ -93,4 +93,34 @@ describe('DataSection', () => {
     const tile = screen.getByTestId('tile')
     expect(row.firstElementChild).toBe(tile)
   })
+
+  /**
+   * **The name has the header line to itself.**
+   *
+   * A `badge` prop used to put a status pill here, to the right of the name.
+   * The pill was `whitespace-nowrap` and the name is `truncate`, so in this
+   * flexible column the pill always won and the NAME was what got cut —
+   * plainly wrong once the accounts list moved into the 65% column of a
+   * `TAB_SPLIT`. Status moved to the leading tile, which is a fixed 36px
+   * square and cannot squeeze anything, and the prop was removed rather than
+   * left unused (see the note in the component, and the removed `metaBelow`
+   * before it).
+   *
+   * So the header line is one element now, and that is the assertion: a second
+   * child here means something is competing for the width again.
+   */
+  test('nothing shares the header line with the name', () => {
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="A Very Long Account Label Indeed" secondary="Janet" meta="$1.00" />
+      </DataSection>,
+    )
+    const name = screen.getByText('A Very Long Account Label Indeed')
+    expect(name.className).toContain('truncate')
+    // `block`, not a flex row holding the name plus a badge.
+    expect(name.className).toContain('block')
+    expect(name.parentElement!.firstElementChild, 'the name is first in its column').toBe(name)
+    // Its column holds the name and the second line, and nothing else.
+    expect(name.parentElement!.children).toHaveLength(2)
+  })
 })

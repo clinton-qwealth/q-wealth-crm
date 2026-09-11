@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react'
 import {
+  ArchiveIcon,
   DocumentIcon,
   EnvelopeIcon,
   MeetingIcon,
   NoteIcon,
+  PauseIcon,
   PhoneIcon,
   ShieldTickIcon,
   TaskIcon,
@@ -576,19 +578,128 @@ export function AccountValue({
  */
 const TILE = 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1'
 
-export function AccountTypeTile({ type }: { type: string }) {
-  const superannuation = type === 'superannuation'
+/**
+ * The tile a record wears when it is **no longer live** — a suspended or closed
+ * account, a lapsed or cancelled policy.
+ *
+ * ## Grey, and NOT amber
+ *
+ * Amber is the obvious choice for "suspended" and it is the wrong one here.
+ * The gold token exists precisely to stay clear of it: `globals.css` says a
+ * gold tile must not sit beside an amber mark and read as two warnings. Gold-50
+ * is `#fbf6e4` and Tailwind's amber-50 is `#fffbeb` — so a suspended
+ * INVESTMENT account would change from one pale warm yellow to an almost
+ * identical one, which is no signal at all, while undoing the separation that
+ * token was created for. Grey has no such neighbour on this page.
+ *
+ * One grey for every not-live state, because the GLYPH separates them: the
+ * ground says "not live", the glyph says which, and the tooltip names it. A
+ * second hue would be a third encoding on a 36px square.
+ *
+ * The glyph is a graphic, so its floor is 3:1 (WCAG 1.4.11) rather than the
+ * 4.5:1 text needs. neutral-500 on neutral-100 is recorded above, measured in
+ * a browser, at 4.35:1 — the same pair, with room to spare.
+ *
+ * Solid and flat, deliberately: **not dashed**, which in this app means
+ * "planned, not built" (`Placeholder`, `ReservedColumn`), and **not pulsing**,
+ * which means "arriving" (`PageSkeleton`). That three-way rule is written out
+ * on `GhostRing` in `account-donut.tsx`.
+ */
+const TILE_DORMANT = 'bg-neutral-100 text-neutral-500 ring-neutral-200'
+
+const GLYPH = 'h-[18px] w-[18px]'
+
+/**
+ * The lifecycle states a tile can show, and the word each one gets.
+ *
+ * Kept here rather than at the call site for the reason `Pill` gives above: a
+ * status added to the database later cannot then quietly pick the wrong
+ * treatment in one place and the right one in another. These maps were the
+ * status pills' only readers before the pills were removed on 11 September.
+ */
+export const ACCOUNT_STATUS_LABEL: Record<string, string> = {
+  active: 'Active',
+  suspended: 'Suspended',
+  closed: 'Closed',
+}
+
+export const POLICY_STATUS_LABEL: Record<string, string> = {
+  in_force: 'In force',
+  lapsed: 'Lapsed',
+  cancelled: 'Cancelled',
+}
+
+/** The live state of each kind of record — everything else is dormant. */
+export const ACCOUNT_LIVE = 'active'
+export const POLICY_LIVE = 'in_force'
+
+/**
+ * What a dormant record shows instead of its type glyph: paused, or over.
+ *
+ * Anything not named here falls back to the archive, which is the safer of the
+ * two to be wrong about — a state nobody has taught this map about is more
+ * likely to be an ending than a pause.
+ */
+function dormantGlyph(status: string) {
+  return status === 'suspended' || status === 'lapsed' ? (
+    <PauseIcon className={GLYPH} />
+  ) : (
+    <ArchiveIcon className={GLYPH} />
+  )
+}
+
+/**
+ * A tile plus, when the record is dormant, the word for it.
+ *
+ * The tile is `aria-hidden`, so `title` reaches a pointer and nothing else —
+ * which is why the `sr-only` sibling is not optional. The status pill this
+ * replaced was the ONLY place an account's status was rendered anywhere in the
+ * app, so without this the word would leave the product's readable output
+ * entirely. `sr-only` is `position: absolute`, so it adds no layout weight to
+ * the row's flex line.
+ */
+function Tile({ tone, glyph, label }: { tone: string; glyph: ReactNode; label?: string }) {
   return (
-    <span
-      className={`${TILE} ${
-        superannuation
-          ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-          : 'bg-gold-50 text-gold-700 ring-gold-100'
-      }`}
-      aria-hidden="true"
-    >
-      {superannuation ? <ShieldTickIcon className="h-[18px] w-[18px]" /> : <TrendUpIcon className="h-[18px] w-[18px]" />}
-    </span>
+    <>
+      <span className={`${TILE} ${tone}`} title={label} aria-hidden="true">
+        {glyph}
+      </span>
+      {label ? <span className="sr-only">{label}</span> : null}
+    </>
+  )
+}
+
+/**
+ * `status` is required, not optional: a tile that silently defaults to "live"
+ * would show a closed account as an ordinary one, which is the failure this
+ * whole change exists to prevent.
+ */
+export function AccountTypeTile({ type, status }: { type: string; status: string }) {
+  const superannuation = type === 'superannuation'
+  const dormant = status !== ACCOUNT_LIVE
+  return (
+    <Tile
+      tone={
+        dormant
+          ? TILE_DORMANT
+          : superannuation
+            ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+            : 'bg-gold-50 text-gold-700 ring-gold-100'
+      }
+      /* A dormant row gives up its type glyph, and so the glance-level shortcut
+         for superannuation vs investment, because the tile is saying something
+         else. The row's own second line still names the type in words. */
+      glyph={
+        dormant ? (
+          dormantGlyph(status)
+        ) : superannuation ? (
+          <ShieldTickIcon className={GLYPH} />
+        ) : (
+          <TrendUpIcon className={GLYPH} />
+        )
+      }
+      label={dormant ? (ACCOUNT_STATUS_LABEL[status] ?? status) : undefined}
+    />
   )
 }
 
@@ -621,11 +732,14 @@ export function InitialsTile({ name }: { name: string }) {
  *  so one umbrella tile gives the rows the same anchor as accounts without
  *  inventing a distinction the data does not make. Blue: cover, shelter,
  *  the one colour on the page that is neither money nor a state. */
-export function PolicyTile() {
+export function PolicyTile({ status }: { status: string }) {
+  const dormant = status !== POLICY_LIVE
   return (
-    <span className={`${TILE} bg-sky-50 text-sky-700 ring-sky-100`} aria-hidden="true">
-      <UmbrellaIcon className="h-[18px] w-[18px]" />
-    </span>
+    <Tile
+      tone={dormant ? TILE_DORMANT : 'bg-sky-50 text-sky-700 ring-sky-100'}
+      glyph={dormant ? dormantGlyph(status) : <UmbrellaIcon className={GLYPH} />}
+      label={dormant ? (POLICY_STATUS_LABEL[status] ?? status) : undefined}
+    />
   )
 }
 

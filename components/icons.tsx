@@ -378,3 +378,30 @@ export function ChevronDownIcon({ className = 'h-4 w-4' }: { className?: string 
     </svg>
   )
 }
+
+/**
+ * Two bars: a record that is paused — a suspended account, a lapsed policy.
+ *
+ * Its own icon rather than a reused one. `CrossIcon` is this app's
+ * remove/close affordance (the address field's clear, the member panel's
+ * dismiss, a failed check) and inside a tile would read as a control; the
+ * hourglass is a workflow-template glyph, not a state.
+ */
+export function PauseIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M7.75 4.5v11M12.25 4.5v11" />
+    </svg>
+  )
+}
+
+/** A lidded box: a record that is over — a closed account, a cancelled policy. */
+export function ArchiveIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M2.75 4.25h14.5v3H2.75z" />
+      <path d="M4.25 7.25v8.25a1 1 0 0 0 1 1h9.5a1 1 0 0 0 1-1V7.25" />
+      <path d="M8.25 10.5h3.5" />
+    </svg>
+  )
+}

@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { coverSummary, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
+import { coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
+import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
 import { PhoneIcon } from '@/components/icons'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
@@ -204,19 +205,6 @@ const COVER_TYPE_LABEL: Record<string, string> = {
   income_protection: 'Income protection',
 }
 
-const POLICY_STATUS_LABEL: Record<string, string> = {
-  in_force: 'In force',
-  lapsed: 'Lapsed',
-  cancelled: 'Cancelled',
-}
-
-
-const ACCOUNT_STATUS_LABEL: Record<string, string> = {
-  active: 'Active',
-  suspended: 'Suspended',
-  closed: 'Closed',
-}
-
 
 /** Strip formatting so the dialler gets something it can use. */
 function telHref(number: string) {
@@ -262,7 +250,26 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
      group is a wrong URL, not a state the screen should try to render. Same
      treatment as the workflow detail page. */
   if (!group) notFound()
-  const { accounts, policies, members: ownerOptions, providers } = accountsData
+  const {
+    accounts: allAccounts,
+    policies: allPolicies,
+    members: ownerOptions,
+    providers,
+  } = accountsData
+
+  /*
+   * Dormant records sink, asked for on 11 September — a closed account belongs
+   * under the live ones, not between two of them.
+   *
+   * Display only, and applied here rather than in the loader so it stays that
+   * way. `wealthSummary` below sums and `AccountDonut` re-sorts by value, so
+   * neither can see this; `liveFirst` returns a new array so neither is handed
+   * a reordered one either. The alphabetical order the query applied survives
+   * inside each group — see `lib/record-order.ts` for why that is not an
+   * accident.
+   */
+  const accounts = liveFirst(allAccounts, (a) => a.status === ACCOUNT_LIVE)
+  const policies = liveFirst(allPolicies, (p) => p.status === POLICY_LIVE)
   const { notes, workflows } = notesData
 
 
@@ -462,26 +469,26 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                           ? accounts.map((a) => (
                               <DataRow
                                 key={a.account_id}
-                                leading={<AccountTypeTile type={a.account_type} />}
+                                /* The tile carries the status: a live account
+                                   keeps its type colour and glyph, a suspended
+                                   or closed one turns grey and swaps the glyph
+                                   for a pause or an archive. It replaced a pill
+                                   beside the name on 11 September, which was
+                                   truncating the name to fit itself. */
+                                leading={
+                                  <AccountTypeTile type={a.account_type} status={a.status} />
+                                }
                                 primary={a.label}
                                 /* One heading now covers both kinds of account, so the
-                                   row has to say which this is. */
+                                   row has to say which this is — and it is the only
+                                   place the type is stated once a dormant tile has
+                                   given up its glyph for the status. */
                                 secondary={[
                                   ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
                                   a.owners,
                                 ]
                                   .filter(Boolean)
                                   .join(' · ')}
-                                /* Marked only when it is not active. Most accounts
-                                   are, so badging every row would be noise and the
-                                   exceptions would stop standing out. */
-                                badge={
-                                  a.status === 'active' ? undefined : (
-                                    <Pill tone={a.status === 'suspended' ? 'warning' : 'neutral'}>
-                                      {ACCOUNT_STATUS_LABEL[a.status] ?? a.status}
-                                    </Pill>
-                                  )
-                                }
                                 meta={
                                   <AccountValue
                                     value={a.latest_value}
@@ -525,7 +532,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                         ? policies.map((p) => (
                             <DataRow
                               key={p.policy_id}
-                              leading={<PolicyTile />}
+                              leading={<PolicyTile status={p.status} />}
                               primary={p.label}
                               secondary={[
                                 p.cover_types
@@ -536,15 +543,6 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                               ]
                                 .filter(Boolean)
                                 .join(' \u00b7 ')}
-                              /* Same rule as accounts: marked only when the
-                                 status is worth noticing. */
-                              badge={
-                                p.status === 'in_force' ? undefined : (
-                                  <Pill tone={p.status === 'lapsed' ? 'warning' : 'neutral'}>
-                                    {POLICY_STATUS_LABEL[p.status] ?? p.status}
-                                  </Pill>
-                                )
-                              }
                               meta={coverSummary(p.total_lump_sum_cover, p.total_monthly_benefit) ?? undefined}
                             />
                           ))

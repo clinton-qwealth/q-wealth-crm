@@ -197,7 +197,6 @@ export function DataRow({
   primary,
   secondary,
   meta,
-  badge,
 }: {
   /** A tile or glyph before the text, e.g. AccountTypeTile. Optional: a list
    *  with nothing meaningful to draw is better off without a decorative one. */
@@ -205,18 +204,26 @@ export function DataRow({
   primary: string
   secondary?: string
   meta?: ReactNode
-  /** Status mark shown beside the name. Left empty for the ordinary case, so a
-   *  row only carries a badge when something is worth noticing. */
-  badge?: ReactNode
+  /*
+   * A `badge` prop sat here until 11 September, holding a status pill to the
+   * right of the name. It was removed rather than left unused, the same call
+   * made about `metaBelow` below: an option nothing passes, with tests around
+   * it, reads as a supported feature.
+   *
+   * It had to go on its own merits too. The pill was `whitespace-nowrap` and
+   * the name is `truncate`, so inside this flexible column the pill always won
+   * and the account name was the thing that got cut — plainly wrong once the
+   * list moved into the 65% column of a TAB_SPLIT. Status now rides on the
+   * LEADING TILE, which is a fixed 36px square and cannot squeeze anything.
+   */
 }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-3">
       {leading}
       <span className="min-w-0 flex-1 basis-40">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-neutral-900">{primary}</span>
-          {badge}
-        </span>
+        {/* One span, with nothing to compete for the width — see the note on
+            the removed `badge` prop above. */}
+        <span className="block truncate text-sm font-semibold text-neutral-900">{primary}</span>
         {secondary ? (
           <span className="block truncate text-xs text-neutral-500">{secondary}</span>
         ) : null}

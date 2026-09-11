@@ -15,19 +15,27 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
  * so the helper below opens Accounts and then reads both panels.
  */
 const ACCOUNTS = [
+  /* **Order here is the point.** Closed, and FIRST — so a page that forgot to
+     sink it would render it at the head of the list and fail. The two live rows
+     that follow are deliberately NOT alphabetical, so a sink that sorted by
+     name instead of bucketing would reorder them and fail too.
+
+     This fixture was appended rather than prepended on the first attempt, which
+     left it already in the expected order: the ordering test then passed with
+     the sink removed entirely. The mutation round caught it. */
   {
     group_id: 'g1',
-    account_id: 'a1',
-    account_type: 'superannuation',
-    label: 'Joint Super',
-    status: 'active',
+    account_id: 'a3',
+    account_type: 'investment',
+    label: 'Aardvark Legacy',
+    status: 'closed',
     owners: 'Janet Testsmith',
-    latest_value: '486210',
-    valued_on: '2026-09-01',
-    change_amount: '1200',
-    change_pct: '0.25',
-    baseline_value: '485010',
-    baseline_points: 30,
+    latest_value: '9000',
+    valued_on: '2026-08-01',
+    change_amount: null,
+    change_pct: null,
+    baseline_value: null,
+    baseline_points: null,
   },
   /* Deliberately unvalued. The removed total carried a note — "Excludes 1
      account with no recorded value" — and it only appeared when a row was
@@ -47,9 +55,39 @@ const ACCOUNTS = [
     baseline_value: null,
     baseline_points: null,
   },
+  {
+    group_id: 'g1',
+    account_id: 'a1',
+    account_type: 'superannuation',
+    label: 'Joint Super',
+    status: 'active',
+    owners: 'Janet Testsmith',
+    latest_value: '486210',
+    valued_on: '2026-09-01',
+    change_amount: '1200',
+    change_pct: '0.25',
+    baseline_value: '485010',
+    baseline_points: 30,
+  },
 ]
 
 const POLICIES = [
+  /* Lapsed, and first, for the same reason as the closed account above. */
+  {
+    group_id: 'g1',
+    policy_id: 'i2',
+    policy_number: 'POL-2',
+    label: 'Aardvark Trauma',
+    status: 'lapsed',
+    insurer: 'A Provider',
+    owners: 'Janet Testsmith',
+    lives_insured: 'Janet Testsmith',
+    cover_types: 'trauma',
+    total_lump_sum_cover: '250000',
+    total_monthly_benefit: null,
+    premium: '40',
+    premium_frequency: 'monthly',
+  },
   {
     group_id: 'g1',
     policy_id: 'i1',
@@ -184,6 +222,106 @@ describe('the Accounts tab’s investment section', () => {
     /* The Accounts tab is open by the time `panels()` returns, so the ring is
        in the accessibility tree and no `hidden` option is needed. */
     expect(within(right).getByRole('img')).toBeTruthy()
+  })
+
+  describe('status, and where a dormant record sits', () => {
+    const labels = (section: HTMLElement) =>
+      Array.from(section.querySelectorAll('li')).map(
+        (li) => li.querySelector('.font-semibold')?.textContent ?? '',
+      )
+
+    /**
+     * **A closed account goes to the bottom**, asked for on 11 September.
+     *
+     * The fixture puts it first, so leaving the sink out renders it first and
+     * fails. The two live rows behind it are in non-alphabetical order, so a
+     * sink that sorted by name would reorder them and fail as well — the sink
+     * has to be a bucket, and has to keep the order it was handed.
+     */
+    test('a closed account sinks below the live ones, which keep their order', async () => {
+      const { accounts } = await panels()
+      expect(labels(investmentSection(accounts))).toEqual([
+        'Unvalued Portfolio',
+        'Joint Super',
+        'Aardvark Legacy',
+      ])
+    })
+
+    test('and a lapsed policy sinks the same way in the section below', async () => {
+      const { accounts } = await panels()
+      const insurance = within(accounts).getByText('Insurance Policies').closest('div')!
+        .parentElement as HTMLElement
+      expect(labels(insurance)).toEqual(['Life cover', 'Aardvark Trauma'])
+    })
+
+    /**
+     * **The status word is nowhere on screen.** The pill was removed because it
+     * was truncating the account name to fit itself on the header line; status
+     * is now the tile's colour and glyph, with the word on a tooltip.
+     *
+     * Asserted as "no VISIBLE element says Closed" rather than "no element has
+     * `rounded-full`. The first version of this test used the class and failed
+     * for the wrong reason: `AccountValue` draws its trend arrow in a round
+     * badge, so the row legitimately contains one. The word is the thing that
+     * must not be on screen, so the word is what to look for.
+     */
+    test('no row shows a status word on screen any more', async () => {
+      const { accounts } = await panels()
+      const section = investmentSection(accounts)
+      /* `getAttribute('class')`, not `.className`: these rows contain SVG, and
+         on an SVG element `className` is an `SVGAnimatedString`, not a string.
+         The first version of this line threw on it. */
+      const visible = Array.from(section.querySelectorAll('li *')).filter(
+        (el) =>
+          el.children.length === 0 &&
+          !(el.getAttribute('class') ?? '').includes('sr-only') &&
+          ['Closed', 'Suspended', 'Lapsed', 'Cancelled'].includes(el.textContent?.trim() ?? ''),
+      )
+      expect(visible.map((el) => el.textContent)).toEqual([])
+    })
+
+    /**
+     * The word is still there, once, for a screen reader — and this is the only
+     * place an account's status is rendered in the whole app now, so losing it
+     * would lose it everywhere.
+     */
+    test('the closed row still says “Closed”, once, and only to assistive tech', async () => {
+      const { accounts } = await panels()
+      const row = Array.from(investmentSection(accounts).querySelectorAll('li')).find((li) =>
+        li.textContent?.includes('Aardvark Legacy'),
+      )!
+      const marks = row.querySelectorAll(':scope > .sr-only')
+      expect(marks).toHaveLength(1)
+      expect(marks[0].textContent).toBe('Closed')
+      // On the tile, which is hidden from assistive tech — hence the sr-only.
+      expect(row.querySelector('[title="Closed"]')!.getAttribute('aria-hidden')).toBe('true')
+    })
+
+    /* Scoped to the row's own children, because `AccountValue` carries an
+       sr-only "increasing"/"decreasing" of its own inside the meta column —
+       which a broader selector picked up, and which is not a status mark. */
+    test('and a live row is not marked at all', async () => {
+      const { accounts } = await panels()
+      const row = Array.from(investmentSection(accounts).querySelectorAll('li')).find((li) =>
+        li.textContent?.includes('Joint Super'),
+      )!
+      expect(row.querySelectorAll(':scope > .sr-only')).toHaveLength(0)
+      /* Also scoped: a valued row carries a `title` on its trend arrow,
+         spelling out the 30-day comparison. That is not a status tooltip. */
+      expect(row.querySelector(':scope > [title]'), 'a live tile needs no tooltip').toBeNull()
+    })
+
+    /* The value is NOT hidden for a dormant account — checked when this was
+       planned and deliberately left alone, so the closed row still shows its
+       last balance. A future change that starts hiding it should fail here and
+       be a decision, not a side effect. */
+    test('a closed account still shows its last recorded value', async () => {
+      const { accounts } = await panels()
+      const row = Array.from(investmentSection(accounts).querySelectorAll('li')).find((li) =>
+        li.textContent?.includes('Aardvark Legacy'),
+      )!
+      expect(row.textContent).toContain('$9,000')
+    })
   })
 
   /**
