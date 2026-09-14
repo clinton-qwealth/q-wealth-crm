@@ -188,19 +188,21 @@ describe('the balance bar', () => {
   })
 
   /**
-   * **It carries no chrome of its own.** It lives inside the net position card
-   * now, between that card's label and its figure; a border, a ground or a
-   * shadow here would draw a box inside a box.
+   * It stands on its own at the top of the panel, so it carries the same card
+   * as the record sheets below it — white, hairline border, faint lift. On the
+   * panel's grey ground a bare bar would read as a rule drawn on the
+   * background rather than as one of the panel's objects.
    */
-  test('it has no card of its own — it sits inside one', () => {
+  test('it is a card, like the sheets it sits above', () => {
     const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
     const root = container.querySelector('[data-slot="balance-bar"]') as HTMLElement
-    for (const chrome of ['border', 'shadow', 'bg-white', 'px-4', 'py-3', 'rounded-lg']) {
-      expect(root.className, chrome).not.toContain(chrome)
-    }
-    // And it gives up width rather than forcing the row wider.
-    expect(root.className).toContain('flex-1')
-    expect(root.className).toContain('min-w-0')
+    expect(root.className).toContain('rounded-lg')
+    expect(root.className).toContain('border-neutral-200')
+    expect(root.className).toContain('bg-white')
+    /* And it is not still trying to be a flex child of something else — the
+       shape it had for an hour on 14 September, wedged inside the net
+       position card. */
+    expect(root.className).not.toContain('flex-1')
   })
 
   /* The height is the one dimension a reader has specified twice — thick on

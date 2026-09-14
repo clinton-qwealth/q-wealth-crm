@@ -10,12 +10,17 @@ import { accountMoney } from './ui'
  * adviser reads at a glance and the thing that changes slowly enough to be
  * worth watching.
  *
- * It began as a card of its own above the net position and was moved INSIDE it
- * the same day, between the label and the figure. That is the better home: the
- * bar and the net position are two readings of one subtraction, and a card
- * apiece made them look like two facts. The component therefore carries no
- * chrome — no border, no ground, no padding — and takes the width it is
- * handed.
+ * It took three homes on 14 September, which is worth recording so the fourth
+ * is a decision rather than a fifth try: a card above the net position, then
+ * squeezed INSIDE that card between its label and its figure — where it did
+ * not work, because a bar wedged between two fixed-width things gets whatever
+ * is left and reads as an afterthought — and finally **the top of the panel,
+ * directly under the tabs**, where it has the full width and is the first
+ * thing the tab says.
+ *
+ * That last is also the right order to read in: the shape of the sheet, then
+ * the two lists that make it up, then the net at the foot. It carries a card
+ * of its own again, matching the sheets below it on the same grey ground.
  *
  * ## The colours, and why the join is marked
  *
@@ -88,16 +93,14 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
   return (
     <div
       data-slot="balance-bar"
-      /* No card of its own: this sits INSIDE the net position card, between
-         its label and its figure, so it takes the width it is given and adds
-         no chrome. `min-w-0` because a flex child will not shrink below its
-         content without it, and the two legend words are that content. */
-      className="min-w-0 flex-1"
+      /* The same card as the sheets below it, so it reads as one of this
+         panel's objects rather than as a rule drawn on the ground. */
+      className="rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]"
     >
       {/* Owned on the left, owed on the right — the same order as the two
           columns above, so the bar reads as a summary of them rather than as a
           new arrangement to work out. */}
-      <div className="flex items-center justify-between gap-3 text-[11px] leading-none">
+      <div className="flex items-center justify-between gap-3 text-xs">
         <span className="flex min-w-0 items-center gap-1.5">
           <Swatch className={ASSET_CHIP} />
           <span className="truncate text-neutral-500">Assets</span>
@@ -118,7 +121,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
       <div
         role="img"
         aria-label={label}
-        className="mt-1.5 flex h-5 overflow-hidden rounded-md bg-neutral-100 ring-1 ring-inset ring-neutral-200"
+        className="mt-2 flex h-5 overflow-hidden rounded-md bg-neutral-100 ring-1 ring-inset ring-neutral-200"
       >
         {/* Rendered only when there is something to draw. A zero side with a
             minimum width would put six pixels of red on a group that owes

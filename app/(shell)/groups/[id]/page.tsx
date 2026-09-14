@@ -395,6 +395,11 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   const securable = balance
     .filter((b) => b.side === 'asset' && b.status === ITEM_LIVE)
     .map((b) => ({ id: b.item_id, label: b.label }))
+  /* The bar and the net position both need something on BOTH sides to say
+     anything — a bar of one colour, and a net equal to the total above it.
+     One boolean, so the two cannot come apart and leave a bar with no net or a
+     net with no bar. */
+  const bothSides = assetRows.length > 0 && liabilityRows.length > 0
   const { notes, workflows } = notesData
 
 
@@ -690,6 +695,16 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 label: 'Assets + Liabilities',
                 panel: (
                   <div className="flex flex-col gap-6">
+                    {/* The shape of the sheet first, then the two lists that
+                        make it up, then the net at the foot — which is also the
+                        order it is read in. The bar spent the morning of
+                        14 September above the net position and then inside it;
+                        neither worked, for the reason written on the component:
+                        wedged between a label and a figure it gets whatever
+                        width is left. Full width under the tabs, it is the
+                        first thing this tab says. */}
+                    {bothSides ? <BalanceBar totals={sheet} /> : null}
+
                     {/* Owned on the left, owed on the right — and the side is
                         carried by the rows themselves as well as by the column
                         they sit in: a liability's tile is light red where an
@@ -784,22 +799,12 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                         assets with no debts against them have a net position
                         equal to the total above it, and a bar of one colour,
                         which between them say nothing twice. */}
-                    {assetRows.length && liabilityRows.length ? (
-                      /* Label, then the shape, then the figure. The bar sits
-                         BETWEEN them rather than in a card of its own: it and
-                         the net position are two readings of the same
-                         subtraction, and a card apiece made them look like two
-                         separate facts.
-
-                         `items-center`, not `items-baseline`: the middle column
-                         is two lines tall (its legend, then the bar) and has no
-                         single baseline to share with the two beside it. */
-                      <div className="flex items-center gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                    {bothSides ? (
+                      <div className="flex items-baseline justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
                           Net position
                         </span>
-                        <BalanceBar totals={sheet} />
-                        <span className="shrink-0 text-[17px] font-bold tabular-nums text-neutral-900">
+                        <span className="text-[17px] font-bold tabular-nums text-neutral-900">
                           {accountMoney.format(sheet.net)}
                         </span>
                       </div>

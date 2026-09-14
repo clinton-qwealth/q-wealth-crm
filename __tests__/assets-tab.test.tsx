@@ -249,38 +249,40 @@ describe('the Assets + Liabilities tab', () => {
     })
 
     /**
-     * **The bar sits inside the net position card, between its label and its
-     * figure** — moved there on 14 September from a card of its own above it.
-     * The two are readings of one subtraction, and a card apiece made them look
-     * like two separate facts.
+     * **The bar is the first thing in the panel, above both columns** — its
+     * third home on 14 September, after a card above the net position and then
+     * a squeeze inside it. What the panel now reads, top to bottom, is: the
+     * shape of the sheet, the two lists that make it up, the net at the foot.
      *
-     * Order is asserted by document position rather than by reading the markup,
-     * so a refactor that reshuffles the row fails here.
+     * Asserted as position among the panel's own children rather than by
+     * reading the markup, so any reshuffle fails here.
      */
-    test('the bar sits between the net position’s label and its figure', async () => {
+    test('the bar is the panel’s first element, above the two columns', async () => {
       const panel = await openTab()
       const { grid } = columns(panel)
       const bar = panel.querySelector('[data-slot="balance-bar"]') as HTMLElement
-      const label = within(panel).getByText('Net position')
-      const card = label.parentElement as HTMLElement
-
       expect(bar, 'no balance bar on a sheet with both sides').toBeTruthy()
+
+      /* The panel's own stack: bar, columns, net. `panel` is the tabpanel, so
+         its single child is the flex column the tab renders. */
+      const stack = panel.firstElementChild as HTMLElement
+      const kids = Array.from(stack.children)
+      expect(kids[0]).toBe(bar)
+      expect(kids[1]).toBe(grid)
+      expect(kids[2]!.textContent).toContain('Net position')
+
+      // Above the columns, not inside one of them.
       expect(grid.contains(bar), 'the bar is inside a column').toBe(false)
+    })
 
-      // One row: label, bar, figure — and the bar is the middle child of three.
-      expect(card.contains(bar), 'the bar is not in the net position card').toBe(true)
-      const kids = Array.from(card.children)
-      expect(kids).toHaveLength(3)
-      expect(kids[1]).toBe(bar)
-      expect(kids[0].textContent).toBe('Net position')
-      expect(kids[2].textContent).toContain('$708,000.00')
-
-      /* And it takes the middle: the two either side hold their width, the bar
-         gives up its own. Without this the figure would be pushed off the row
-         by a long label rather than the bar narrowing. */
-      expect(bar.className).toContain('flex-1')
-      expect(kids[0].className).toContain('shrink-0')
-      expect(kids[2].className).toContain('shrink-0')
+    /* The bar and the net position stand or fall together — a bar of one
+       colour and a net equal to the total above it both say nothing. One
+       boolean decides, so they cannot come apart. */
+    test('with one side empty, neither the bar nor the net position appears', async () => {
+      balance = BALANCE.filter((b) => b.side === 'liability')
+      const panel = await openTab()
+      expect(panel.querySelector('[data-slot="balance-bar"]')).toBeNull()
+      expect(within(panel).queryByText('Net position')).toBeNull()
     })
 
     /* The bar reads the same totals the two columns do — closed rows excluded —
