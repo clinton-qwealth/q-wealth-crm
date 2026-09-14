@@ -150,4 +150,127 @@ describe('wealthSummary', () => {
       expect(investments.change).toBeUndefined()
     })
   })
+
+  /**
+   * **The join point.** Total wealth, total investments and total assets were
+   * the same number until 14 September because other assets and liabilities
+   * were both literal zeroes in this file. They are real now, and this is what
+   * says the three figures are three answers.
+   */
+  describe('once assets and liabilities exist', () => {
+    const sheet = [
+      { item_id: 'b1', side: 'asset', value: '800000', status: 'active' },
+      { item_id: 'b2', side: 'liability', value: '500000', status: 'active' },
+    ]
+
+    test('the three figures diverge, and wealth is assets less debts', () => {
+      const { wealth, investments, assets } = wealthSummary(rows, sheet)
+      expect(investments.value).toBe('$1,284,300')
+      expect(assets.value).toBe('$2,084,300')
+      expect(wealth.value).toBe('$1,584,300')
+      expect(new Set([wealth.value, investments.value, assets.value]).size).toBe(3)
+    })
+
+    /** The caveats were true and are not any more, so they have to go. */
+    test('the two standing caveats drop away on their own', () => {
+      const { wealth, assets } = wealthSummary(rows, sheet)
+      expect(wealth.note ?? '').not.toMatch(/no liabilities recorded/i)
+      expect(assets.note ?? '').not.toMatch(/no other assets recorded/i)
+    })
+
+    /* Each caveat answers to its own side. Recording an asset does not make a
+       group's debts known, and a single flag covering both would say it had. */
+    test('a group with assets and no debts still says the debts are unknown', () => {
+      const { wealth, assets } = wealthSummary(rows, [sheet[0]])
+      expect(assets.note ?? '').not.toMatch(/no other assets recorded/i)
+      expect(wealth.note).toMatch(/no liabilities recorded/i)
+    })
+
+    /**
+     * **The change narrows to investments.** Assets and liabilities carry one
+     * current value and no history, so a percentage shown against Total assets
+     * or Total wealth would describe a part while appearing to describe the
+     * whole — the +25% error of 11 September in a new place.
+     */
+    test('only investments keeps a 30-day change, and the other two say why', () => {
+      const real = [
+        { latest_value: '284350.75', baseline_value: '279360.57' },
+        { latest_value: '112900.00', baseline_value: '117070.00' },
+      ]
+      const { wealth, investments, assets } = wealthSummary(real, sheet)
+      expect(investments.change?.text).toBe('+0.2%')
+      expect(wealth.change).toBeUndefined()
+      expect(assets.change).toBeUndefined()
+      for (const f of [wealth, assets]) {
+        expect(f.note, f.label).toMatch(/no valuation history/i)
+      }
+      expect(investments.note ?? '').not.toMatch(/no valuation history/i)
+    })
+
+    /* With nothing on the balance sheet the change rides on all three again,
+       because all three are once more the accounts total. Without this the
+       narrowing could be unconditional and every earlier assertion above would
+       still pass. */
+    test('with an empty balance sheet all three keep the change, as before', () => {
+      const real = [{ latest_value: '110', baseline_value: '100' }]
+      const { wealth, investments, assets } = wealthSummary(real, [])
+      expect(investments.change?.text).toBe('+10.0%')
+      expect(wealth.change).toEqual(investments.change)
+      expect(assets.change).toEqual(investments.change)
+    })
+
+    /**
+     * The coverage caveat travels WITH the change and never without it: a
+     * figure showing no change has nothing for "covers 1 of 2" to qualify.
+     */
+    test('the coverage caveat goes wherever the change goes', () => {
+      const partly = [
+        { latest_value: '110', baseline_value: '100' },
+        { latest_value: '500', baseline_value: null },
+      ]
+      const { wealth, investments, assets } = wealthSummary(partly, sheet)
+      expect(investments.note).toMatch(/covers 1 of 2/)
+      for (const f of [wealth, assets]) {
+        expect(f.note ?? '', f.label).not.toMatch(/covers 1 of 2/)
+      }
+    })
+
+    /** Closed items count for nothing, and the figures say how many. */
+    test('a sold asset and a repaid loan are excluded, and the exclusion is stated', () => {
+      const { wealth, assets, investments } = wealthSummary(rows, [
+        ...sheet,
+        { item_id: 'b3', side: 'asset', value: '400000', status: 'closed' },
+        { item_id: 'b4', side: 'liability', value: '90000', status: 'closed' },
+      ])
+      expect(assets.value).toBe('$2,084,300')
+      expect(wealth.value).toBe('$1,584,300')
+      expect(assets.note).toMatch(/2 closed items excluded/)
+      expect(wealth.note).toMatch(/2 closed items excluded/)
+      /* Not on investments: closed ACCOUNTS are a separate open question, and
+         borrowing this caveat for them would answer it by accident. */
+      expect(investments.note ?? '').not.toMatch(/closed item/)
+    })
+
+    test('plural agreement on that one too', () => {
+      const { assets } = wealthSummary(rows, [
+        ...sheet,
+        { item_id: 'b3', side: 'asset', value: '400000', status: 'closed' },
+      ])
+      expect(assets.note).toMatch(/1 closed item excluded/)
+    })
+
+    /** Owing more than the group owns is a real answer, printed as one. */
+    test('wealth can be negative', () => {
+      const { wealth } = wealthSummary([], [
+        { item_id: 'b1', side: 'asset', value: '100000', status: 'active' },
+        { item_id: 'b2', side: 'liability', value: '250000', status: 'active' },
+      ])
+      expect(wealth.value).toBe('-$150,000')
+    })
+
+    /** The argument is optional, so every existing caller keeps working. */
+    test('called with one argument, nothing changes', () => {
+      expect(wealthSummary(rows)).toEqual(wealthSummary(rows, []))
+    })
+  })
 })

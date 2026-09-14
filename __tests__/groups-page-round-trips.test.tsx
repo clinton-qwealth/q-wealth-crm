@@ -38,6 +38,12 @@ function stubClient() {
     party_roles: [{ party_id: 'p1', role: 'client', status: 'active', start_date: '2026-01-01', parties: { display_name: 'A Provider' } }],
     group_financial_accounts: [{ group_id: 'g1', account_id: 'a1', label: 'Super' }],
     group_insurance_policies: [{ group_id: 'g1', policy_id: 'i1', label: 'Life' }],
+    /* The balance sheet, added 14 September. It joins the accounts loader's
+       existing wave rather than adding one — see the wave assertion below. */
+    group_assets_liabilities: [
+      { group_id: 'g1', item_id: 'b1', item_type: 'principal_residence', side: 'asset',
+        label: 'Mercer Street', value: '1200000', status: 'active', owner_shares: [] },
+    ],
     /* The tables the accounts loader walked before the two group views
        replaced its chain on 10 September. Kept populated so a loader that
        regresses to chaining still finds rows and reaches its full depth,
@@ -132,10 +138,14 @@ describe('/groups/[id] round-trip depth', () => {
     // old chain walked are not read on their own.
     expect(calls).toContain('group_financial_accounts')
     expect(calls).toContain('group_insurance_policies')
+    expect(calls).toContain('group_assets_liabilities')
     expect(calls).not.toContain('financial_account_owners')
     expect(calls).not.toContain('financial_accounts_summary')
     expect(calls).not.toContain('insurance_policy_parties')
     expect(calls).not.toContain('insurance_policies_summary')
+    /* Still 2 with the balance sheet added on 14 September: one more read on a
+       wave that was already running costs no depth, and a fifth read chained
+       after it would read 3 here. */
     expect(depth).toBe(2)
 
     /* The accounts loader is ONE wave of four, and the wave is the first: none
@@ -143,7 +153,7 @@ describe('/groups/[id] round-trip depth', () => {
        cannot see it — a loader chained to depth 2 sits under the member-detail
        floor of 2 and the total still reads 2. (Found by mutation: re-chaining
        the members read ahead of the other three passed the depth assertion.) */
-    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_summary', 'group_notes_summary']) {
+    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

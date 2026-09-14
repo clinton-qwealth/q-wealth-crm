@@ -439,3 +439,99 @@ export function BuildingIcon({ className = 'h-4 w-4' }: { className?: string }) 
     </svg>
   )
 }
+
+/** A house: a residence, a holiday home, land. */
+export function HouseIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M2.75 8.75 10 3l7.25 5.75" />
+      <path d="M4.5 10.25V16.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-6.25" />
+      <path d="M8.25 17.5v-4.25h3.5v4.25" />
+    </svg>
+  )
+}
+
+/** A banknote: cash at bank, a term deposit. */
+export function CashIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="2.25" y="5.25" width="15.5" height="9.5" rx="1.5" />
+      <circle cx="10" cy="10" r="2.25" />
+      <path d="M5 10h.01M15 10h.01" />
+    </svg>
+  )
+}
+
+/** A car, seen from the side: a motor vehicle, and the loan against one. */
+export function CarIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3 12.5h14v2.25a.75.75 0 0 1-.75.75h-1a.75.75 0 0 1-.75-.75V15.5H5.5v-.25a.75.75 0 0 1-.75.75h-1A.75.75 0 0 1 3 14.75z" />
+      <path d="M4.25 12.5 5.75 8a1 1 0 0 1 .95-.7h6.6a1 1 0 0 1 .95.7l1.5 4.5" />
+      <path d="M6 10.75h8" />
+    </svg>
+  )
+}
+
+/** A hull and a sail: a boat or caravan. */
+export function BoatIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3 13.75h14l-2 3.5H5z" />
+      <path d="M10 12.25V3.5l5 8.75" />
+      <path d="M8.75 12.25 5.5 8.5l4.5-1" />
+    </svg>
+  )
+}
+
+/** A gem: collectibles, art, anything held for its own worth. */
+export function GemIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M6 3.25h8l3.25 4.5L10 16.75 2.75 7.75z" />
+      <path d="M2.75 7.75h14.5M6 3.25 10 16.75 14 3.25" />
+    </svg>
+  )
+}
+
+/** A card with a stripe: a credit card, a line of credit. */
+export function CreditCardIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="2.25" y="4.75" width="15.5" height="10.5" rx="1.5" />
+      <path d="M2.25 8.25h15.5" />
+      <path d="M5.25 12.25h3" />
+    </svg>
+  )
+}
+
+/** A classical column: a bank, and the loans one makes. */
+export function BankIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M2.5 8.25 10 3.5l7.5 4.75" />
+      <path d="M4.75 8.75v6M8.25 8.75v6M11.75 8.75v6M15.25 8.75v6" />
+      <path d="M2.75 16.5h14.5" />
+    </svg>
+  )
+}
+
+/** A mortarboard: a study debt. */
+export function StudyIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M10 4 2.75 7.5 10 11l7.25-3.5z" />
+      <path d="M5.5 9.25v3.5c0 1.1 2 2.25 4.5 2.25s4.5-1.15 4.5-2.25v-3.5" />
+    </svg>
+  )
+}
+
+/** A closed box: home contents, and anything else owned but unclassified. */
+export function BoxIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3 6.75 10 3.5l7 3.25v6.5L10 16.5l-7-3.25z" />
+      <path d="M3 6.75 10 10l7-3.25M10 10v6.5" />
+    </svg>
+  )
+}

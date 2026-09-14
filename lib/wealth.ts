@@ -1,3 +1,5 @@
+import { balanceTotals, type BalanceRow } from './balance-sheet'
+
 /**
  * Headline money: whole dollars.
  *
@@ -97,7 +99,15 @@ export type SummaryFigure = {
  * value written, and a wealth figure that silently omitted them is the kind
  * of number that gets repeated in a client conversation.
  */
-export function wealthSummary(accounts: ValuedRow[]): {
+export function wealthSummary(
+  accounts: ValuedRow[],
+  /**
+   * The group's assets and liabilities — everything that is not an investment
+   * account. Optional, so a caller with nothing but accounts still works and
+   * gets exactly what it used to.
+   */
+  balance: BalanceRow[] = [],
+): {
   wealth: SummaryFigure
   investments: SummaryFigure
   assets: SummaryFigure
@@ -138,10 +148,19 @@ export function wealthSummary(accounts: ValuedRow[]): {
           valued: valued.length,
         }
 
-  // Nothing else exists to add or subtract yet. Named so the intent is visible
-  // at the call site the day it changes.
-  const otherAssets = 0
-  const liabilities = 0
+  /*
+   * **This is the join the file was waiting for.** These two were named
+   * constants set to zero from 6 September until 14, with a comment saying the
+   * intent should be visible at the call site the day it changed. This is that
+   * day.
+   *
+   * `balanceTotals` excludes closed items — a sold house and a repaid loan are
+   * history — and subtracts liabilities there rather than here, so the sign is
+   * decided in exactly one place.
+   */
+  const sheet = balanceTotals(balance)
+  const otherAssets = sheet.assets
+  const liabilities = sheet.liabilities
 
   const assets = investments + otherAssets
   const wealth = assets - liabilities
@@ -165,17 +184,48 @@ export function wealthSummary(accounts: ValuedRow[]): {
   }
 
   /*
-   * One change on all three, because all three ARE the accounts total today —
-   * other assets and liabilities are both zero, so the same money moved by the
-   * same amount. The day either exists, each figure needs its own baseline and
-   * the arithmetic above is where they join, exactly as the values do.
+   * **The change belongs to investments alone**, and this is a narrowing, not
+   * an omission.
+   *
+   * It used to ride on all three figures, which was correct only because all
+   * three WERE the accounts total. Now that assets and liabilities are real,
+   * Total assets and Total wealth contain money with no valuation history
+   * behind it — an asset carries one current value, by decision — so a change
+   * shown against either would describe part of a figure while appearing to
+   * describe the whole of it. That is the +25% mistake of 11 September in a new
+   * place, and the file's own note anticipated it: each figure needs its own
+   * baseline.
+   *
+   * The two that lose it say why, so a reader who noticed it yesterday is not
+   * left wondering.
    */
+  const noHistoryNote =
+    otherAssets === 0 && liabilities === 0
+      ? null
+      : 'Assets and liabilities carry no valuation history, so no 30-day change is shown'
+
+  const sheetNote =
+    sheet.closed === 0
+      ? null
+      : `${sheet.closed} closed item${sheet.closed === 1 ? '' : 's'} excluded`
+
+  /* The coverage caveat travels WITH the change, never without it. A figure
+     showing no change has nothing for "covers 2 of 3" to qualify, and a figure
+     showing one needs it. One flag decides both, so they cannot come apart. */
+  const wholeFigureHasHistory = noHistoryNote === null
+
   return {
     wealth: {
       label: 'Total wealth',
       value: headlineMoney.format(wealth),
-      note: join('No liabilities recorded yet', unvaluedNote, changeNote),
-      change,
+      note: join(
+        liabilities === 0 ? 'No liabilities recorded yet' : null,
+        unvaluedNote,
+        wholeFigureHasHistory ? changeNote : null,
+        sheetNote,
+        noHistoryNote,
+      ),
+      change: wholeFigureHasHistory ? change : undefined,
     },
     investments: {
       label: 'Total investments',
@@ -186,8 +236,14 @@ export function wealthSummary(accounts: ValuedRow[]): {
     assets: {
       label: 'Total assets',
       value: headlineMoney.format(assets),
-      note: join('No other assets recorded yet', unvaluedNote, changeNote),
-      change,
+      note: join(
+        otherAssets === 0 ? 'No other assets recorded yet' : null,
+        unvaluedNote,
+        wholeFigureHasHistory ? changeNote : null,
+        sheetNote,
+        noHistoryNote,
+      ),
+      change: wholeFigureHasHistory ? change : undefined,
     },
   }
 }

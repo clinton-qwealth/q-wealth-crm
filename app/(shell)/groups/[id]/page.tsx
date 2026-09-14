@@ -2,15 +2,17 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
+import { accountMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
+import { balanceTotals, ITEM_LIVE, ITEM_TYPE_LABEL } from '@/lib/balance-sheet'
 import { PhoneIcon } from '@/components/icons'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { AccountDonut } from '@/components/account-donut'
 import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
+import { AddBalanceItemModal } from '@/components/add-balance-item-modal'
 import { GroupMembers } from '@/components/group-members'
 import { getGroupMemberDetail } from '@/lib/person'
 import { getGroupNotes } from '@/lib/notes'
@@ -19,6 +21,84 @@ import { WorkflowSection } from '@/components/workflow-section'
 import { Tabs } from '@/components/tabs'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
+
+/** A row of `group_assets_liabilities`. Money arrives as a string, because
+ *  PostgREST sends `numeric` that way rather than losing precision to a float. */
+type BalanceItemRow = {
+  item_id: string
+  item_type: string
+  side: string
+  label: string
+  value: string | number | null
+  valued_on: string | null
+  status: string
+  closed_on: string | null
+  institution: string | null
+  secured_against_id: string | null
+  secured_against: string | null
+  owners: string | null
+  owner_count: number | null
+  owner_shares: { party_id: string; name: string; share_percent: string | number }[] | null
+}
+
+/**
+ * Who owns a balance-sheet row, with the share each one holds.
+ *
+ * The shares are the whole reason this table records them, so they are printed
+ * rather than left to a hover — but only when there is more than one owner. A
+ * lone "Jane Doe 100%" is noise: one name already means all of it.
+ */
+function ownerLine(item: BalanceItemRow): string {
+  const shares = item.owner_shares ?? []
+  if (shares.length > 1) {
+    return shares
+      .map((o) => `${o.name} ${Number(o.share_percent)}%`)
+      .join(' \u00b7 ')
+  }
+  return item.owners ?? ''
+}
+
+/** One asset or liability, as a row of its section's sheet. */
+function balanceRow(item: BalanceItemRow) {
+  return (
+    <DataRow
+      key={item.item_id}
+      /* Neutral tile, type glyph, and the archive plus a grey when the item is
+         closed — the same language a dormant account speaks, and here it also
+         says "not in the total below", which is true of both. */
+      leading={<BalanceItemTile type={item.item_type} status={item.status} />}
+      primary={item.label}
+      secondary={[
+        ITEM_TYPE_LABEL[item.item_type] ?? item.item_type,
+        ownerLine(item),
+        /* Only a liability carries this, and only when it is secured. It is
+           the one thing on the row that points at another row, so it is
+           spelled out rather than implied by an icon. */
+        item.secured_against ? `Secured against ${item.secured_against}` : '',
+      ]
+        .filter(Boolean)
+        .join(' \u00b7 ')}
+      meta={
+        <span className={item.status === ITEM_LIVE ? undefined : 'text-neutral-400'}>
+          {accountMoney.format(Number(item.value ?? 0))}
+        </span>
+      }
+    />
+  )
+}
+
+/**
+ * What a section's total leaves out, or nothing.
+ *
+ * A total that quietly drops rows is worse than no total at all — the rule the
+ * accounts footer already follows, and it matters more here because a closed
+ * row is still sitting in the list above the figure that excludes it.
+ */
+function closedNote(rows: BalanceItemRow[]): string | undefined {
+  const closed = rows.filter((r) => r.status !== ITEM_LIVE).length
+  if (closed === 0) return undefined
+  return `${closed} closed item${closed === 1 ? '' : 's'} excluded`
+}
 
 type GroupSummary = {
   group_id: string
@@ -162,7 +242,8 @@ type AccountRow = {
 async function getAccountsData(groupId: string) {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const [{ data: memberRows }, { data: providerRows }, accountsRes, policiesRes] = await Promise.all([
+  const [{ data: memberRows }, { data: providerRows }, accountsRes, policiesRes, balanceRes] =
+    await Promise.all([
     supabase
       .from('client_group_members')
       .select('party_id, parties(display_name)')
@@ -175,6 +256,10 @@ async function getAccountsData(groupId: string) {
       .eq('status', 'active'),
     supabase.from('group_financial_accounts').select('*').eq('group_id', groupId).order('label'),
     supabase.from('group_insurance_policies').select('*').eq('group_id', groupId).order('label'),
+    /* One more read on a wave already running. It needs nothing from the
+       others, so it costs no depth — the page stays at two waves, which a test
+       asserts rather than trusts. */
+    supabase.from('group_assets_liabilities').select('*').eq('group_id', groupId).order('label'),
   ])
 
   const members = (memberRows ?? []).map((m) => {
@@ -192,6 +277,7 @@ async function getAccountsData(groupId: string) {
   return {
     accounts: (accountsRes.data ?? []) as AccountRow[],
     policies: (policiesRes.data ?? []) as PolicyRow[],
+    balance: (balanceRes.data ?? []) as BalanceItemRow[],
     members,
     providers,
   }
@@ -253,6 +339,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   const {
     accounts: allAccounts,
     policies: allPolicies,
+    balance,
     members: ownerOptions,
     providers,
   } = accountsData
@@ -270,6 +357,25 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
    */
   const accounts = liveFirst(allAccounts, (a) => a.status === ACCOUNT_LIVE)
   const policies = liveFirst(allPolicies, (p) => p.status === POLICY_LIVE)
+
+  /* The balance sheet, split into the two columns it is shown in and sunk in
+     the same way — a sold house belongs under the ones still owned. The totals
+     are worked out from `balance` whole, NOT from these two lists: sorting is a
+     display decision and arithmetic must not be able to see it. */
+  const assetRows = liveFirst(
+    balance.filter((b) => b.side === 'asset'),
+    (b) => b.status === ITEM_LIVE
+  )
+  const liabilityRows = liveFirst(
+    balance.filter((b) => b.side === 'liability'),
+    (b) => b.status === ITEM_LIVE
+  )
+  const sheet = balanceTotals(balance)
+  /* What a new loan can be secured against: assets still held. Offering a sold
+     one would create a link the adviser then has to notice is wrong. */
+  const securable = balance
+    .filter((b) => b.side === 'asset' && b.status === ITEM_LIVE)
+    .map((b) => ({ id: b.item_id, label: b.label }))
   const { notes, workflows } = notesData
 
 
@@ -299,7 +405,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                as part of the header rather than as furniture beside it. */
             <div className="grid grid-cols-3 divide-x divide-neutral-300/80">
               {(() => {
-                const w = wealthSummary(accounts)
+                const w = wealthSummary(accounts, balance)
                 /* Three equals, one size. A headline-plus-two-in-support layout
                    was tried and reversed: the reader wanted the three figures
                    weighed side by side, not ranked. The dividers still say
@@ -560,14 +666,107 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 id: 'assets-liabilities',
                 label: 'Assets + Liabilities',
                 panel: (
-                  <DataSection
-                    addLabel="Add asset"
-                    empty={{
-                      title: 'Nothing recorded',
-                      description:
-                        'Property, investments and debts, and the net position they add up to.',
-                    }}
-                  />
+                  <div className="flex flex-col gap-6">
+                    {/* Owned on the left, owed on the right — the side a row is
+                        on is the only thing carrying that distinction, because
+                        the tiles are neutral on both sides and there is no hue
+                        left to spend. `BALANCE_SPLIT` rather than `TAB_SPLIT`:
+                        these two columns are peers and split evenly, where the
+                        accounts tab is a list beside a chart at 65/35. */}
+                    <div className={BALANCE_SPLIT}>
+                      <DataSection
+                        title="Assets"
+                        addLabel="Add asset"
+                        action={
+                          <AddBalanceItemModal
+                            side="asset"
+                            owners={ownerOptions}
+                            providers={providers}
+                            triggerVariant="quiet"
+                          />
+                        }
+                        emptyAction={
+                          <AddBalanceItemModal
+                            side="asset"
+                            owners={ownerOptions}
+                            providers={providers}
+                          />
+                        }
+                        empty={{
+                          title: 'No assets yet',
+                          description:
+                            'Property, cash, vehicles and anything else this group\u2019s members own outright.',
+                        }}
+                        total={
+                          assetRows.length
+                            ? {
+                                label: 'Total assets',
+                                value: accountMoney.format(sheet.assets),
+                                note: closedNote(assetRows),
+                              }
+                            : undefined
+                        }
+                      >
+                        {assetRows.length ? assetRows.map(balanceRow) : undefined}
+                      </DataSection>
+
+                      <DataSection
+                        title="Liabilities"
+                        addLabel="Add liability"
+                        action={
+                          <AddBalanceItemModal
+                            side="liability"
+                            owners={ownerOptions}
+                            providers={providers}
+                            securable={securable}
+                            triggerVariant="quiet"
+                          />
+                        }
+                        emptyAction={
+                          <AddBalanceItemModal
+                            side="liability"
+                            owners={ownerOptions}
+                            providers={providers}
+                            securable={securable}
+                          />
+                        }
+                        empty={{
+                          title: 'No liabilities yet',
+                          description:
+                            'Loans, credit and anything else this group\u2019s members owe.',
+                        }}
+                        total={
+                          liabilityRows.length
+                            ? {
+                                label: 'Total liabilities',
+                                value: accountMoney.format(sheet.liabilities),
+                                note: closedNote(liabilityRows),
+                              }
+                            : undefined
+                        }
+                      >
+                        {liabilityRows.length ? liabilityRows.map(balanceRow) : undefined}
+                      </DataSection>
+                    </div>
+
+                    {/* The one figure neither column can state, under both of
+                        them rather than inside either: net position is the
+                        subtraction, and putting it in a column would make it
+                        look like that column's total. Shown only once there is
+                        something on both sides — assets with no debts against
+                        them have a net position equal to the total above it,
+                        which says nothing. */}
+                    {assetRows.length && liabilityRows.length ? (
+                      <div className="flex items-baseline justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                          Net position
+                        </span>
+                        <span className="text-[17px] font-bold tabular-nums text-neutral-900">
+                          {accountMoney.format(sheet.net)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
                 ),
               },
               {

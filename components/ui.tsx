@@ -1,14 +1,24 @@
 import type { ReactNode } from 'react'
 import {
   ArchiveIcon,
+  BankIcon,
+  BoatIcon,
+  BoxIcon,
+  BuildingIcon,
+  CarIcon,
+  CashIcon,
+  CreditCardIcon,
   DocumentIcon,
+  GemIcon,
   GroupIcon,
   EnvelopeIcon,
+  HouseIcon,
   MeetingIcon,
   NoteIcon,
   PauseIcon,
   PhoneIcon,
   ShieldTickIcon,
+  StudyIcon,
   TaskIcon,
   TrendUpIcon,
   UmbrellaIcon,
@@ -239,6 +249,16 @@ export const QUIET_ACTION =
   'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
 
 export const TAB_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,13fr)_minmax(0,7fr)]'
+
+/**
+ * Two columns of equal weight — assets and liabilities.
+ *
+ * A sibling of `TAB_SPLIT` rather than a use of it: that split is 65/35 because
+ * it holds a list beside a chart, and these two are the same kind of thing,
+ * read against each other. Same gap and same breakpoint, so the two tabs still
+ * feel like one page.
+ */
+export const BALANCE_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-2'
 
 /**
  * The right half of a `TAB_SPLIT`, before anything has been decided for it.
@@ -817,6 +837,76 @@ export function PolicyTile({ status }: { status: string }) {
       tone={dormant ? TILE_DORMANT : 'bg-sky-50 text-sky-700 ring-sky-100'}
       glyph={dormant ? dormantGlyph(status) : <UmbrellaIcon className={GLYPH} />}
       label={dormant ? (POLICY_STATUS_LABEL[status] ?? status) : undefined}
+    />
+  )
+}
+
+/**
+ * The live state of a balance-sheet item, and the word for the other one.
+ *
+ * Beside `ACCOUNT_STATUS_LABEL` and `POLICY_STATUS_LABEL` rather than in
+ * `lib/balance-sheet.ts`, because this is the map the TILE reads and the rule
+ * `Pill` gives applies: one place decides what a status looks like.
+ */
+export const ITEM_STATUS_LABEL: Record<string, string> = { active: 'Active', closed: 'Closed' }
+
+/**
+ * Which glyph each of the 22 types gets.
+ *
+ * **The glyph is the only thing distinguishing one of these rows from another
+ * at a glance, because the tile itself is neutral on both sides.** Gold is
+ * investments, emerald superannuation and sky insurance; red and amber are
+ * spoken for by the pill tones. There is no free hue left, and inventing one
+ * would mean two colour languages on the same page. It costs nothing here: the
+ * COLUMN a row sits in already says whether it is owned or owed, which no
+ * other list on this page can rely on.
+ *
+ * A type with no entry falls back to the box, which is `other_asset`'s own
+ * glyph — a type this map has not been taught about is more likely to be a new
+ * kind of thing than a new kind of debt.
+ */
+const ITEM_GLYPH: Record<string, (p: { className?: string }) => ReactNode> = {
+  principal_residence: HouseIcon,
+  investment_property: HouseIcon,
+  holiday_home_or_land: HouseIcon,
+  commercial_property: BuildingIcon,
+  cash_at_bank: CashIcon,
+  term_deposit: CashIcon,
+  motor_vehicle: CarIcon,
+  boat_or_caravan: BoatIcon,
+  home_contents: BoxIcon,
+  collectibles_and_art: GemIcon,
+  business_interest: BuildingIcon,
+  other_asset: BoxIcon,
+  home_loan: HouseIcon,
+  investment_property_loan: HouseIcon,
+  line_of_credit: CreditCardIcon,
+  margin_loan: BankIcon,
+  personal_loan: BankIcon,
+  car_loan: CarIcon,
+  credit_card: CreditCardIcon,
+  hecs_help: StudyIcon,
+  business_loan: BuildingIcon,
+  other_liability: BankIcon,
+}
+
+/**
+ * An asset or a liability. Same square as an account, neutral tone, and the
+ * type drawn on it.
+ *
+ * A closed row — a house sold, a loan repaid — gives up its type glyph for the
+ * archive and takes the dormant grey, exactly as a closed account does. That
+ * matters more here than there: closed items are excluded from every total on
+ * the page, so the row has to look like it is not being counted.
+ */
+export function BalanceItemTile({ type, status }: { type: string; status: string }) {
+  const dormant = status !== 'active'
+  const Glyph = ITEM_GLYPH[type] ?? BoxIcon
+  return (
+    <Tile
+      tone={dormant ? TILE_DORMANT : 'bg-neutral-100 text-neutral-700 ring-neutral-200'}
+      glyph={dormant ? <ArchiveIcon className={GLYPH} /> : <Glyph className={GLYPH} />}
+      label={dormant ? (ITEM_STATUS_LABEL[status] ?? status) : undefined}
     />
   )
 }

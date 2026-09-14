@@ -97,6 +97,98 @@ export async function createAccount(
   return { ok: true }
 }
 
+export type CreateBalanceItemState = { error: string } | { ok: true } | null
+
+/**
+ * Splits 100 between n owners so the parts total exactly 100.
+ *
+ * Three owners is 33.33 three times, which is 99.99 — one cent of a percent
+ * short, and the database refuses anything but 100. The shortfall goes to the
+ * first owner rather than being rounded away, so the sum is exact by
+ * construction instead of by luck.
+ */
+function evenShares(n: number): string[] {
+  const each = Math.floor(10000 / n) / 100
+  const parts = Array.from({ length: n }, () => each)
+  parts[0] = Number((each + (100 - each * n)).toFixed(2))
+  return parts.map((p) => p.toFixed(2))
+}
+
+/**
+ * Creates an asset or a liability with its owners, via create_asset_liability().
+ *
+ * Shares are what this table records and `financial_account_owners` deliberately
+ * does not — a house held 60/40 is ordinary, a platform account held 60/40 is
+ * not. They are validated here so a typo reads as a sentence, and again in the
+ * function, and again by a deferred trigger at COMMIT: three layers because the
+ * figure is one somebody reads out to a client.
+ */
+export async function createBalanceItem(
+  _prev: CreateBalanceItemState,
+  formData: FormData
+): Promise<CreateBalanceItemState> {
+  const itemType = String(formData.get('item_type') ?? '')
+  const label = String(formData.get('label') ?? '').trim()
+  const rawValue = String(formData.get('value') ?? '').trim()
+  const valuedOn = String(formData.get('valued_on') ?? '') || null
+  const institutionId = String(formData.get('institution_party_id') ?? '') || null
+  const securedAgainst = String(formData.get('secured_against_id') ?? '') || null
+  const notes = String(formData.get('notes') ?? '').trim() || null
+  const ownerIds = formData.getAll('owner_party_ids').map(String).filter(Boolean)
+
+  if (!itemType) return { error: 'Choose a type.' }
+  if (!label) return { error: 'Give it a name.' }
+  if (ownerIds.length === 0) return { error: 'Choose at least one owner.' }
+
+  const value = parseAmount(rawValue, 'The value')
+  if (typeof value !== 'string') return value
+
+  /* Shares are optional in the form and never optional in the database. Left
+     blank they are split evenly, which is what a reader means by ticking two
+     names and typing nothing; filled in, every ticked owner must carry one, so
+     a half-completed split cannot silently become an even one. */
+  const typed = ownerIds.map((id) => String(formData.get(`share_${id}`) ?? '').trim())
+  let shares: string[]
+  if (typed.every((t) => t === '')) {
+    shares = evenShares(ownerIds.length)
+  } else {
+    if (typed.some((t) => t === '')) {
+      return { error: 'Give every owner a share, or leave them all blank for an even split.' }
+    }
+    for (const t of typed) {
+      if (!/^\d+(\.\d{1,2})?$/.test(t.replace(/[%\s]/g, ''))) {
+        return { error: 'Each share must be a percentage, to at most two decimal places.' }
+      }
+    }
+    shares = typed.map((t) => t.replace(/[%\s]/g, ''))
+    const total = shares.reduce((sum, s) => sum + Number(s), 0)
+    /* Compared at two decimal places, not directly: three shares of 5.00,
+       63.01 and 31.99 add up to 99.99999999999999 in binary floating point,
+       and refusing a split that is correct on paper would be the same class of
+       bug as storing money in a float. */
+    if (Number(total.toFixed(2)) !== 100) {
+      return { error: `Shares must total 100%, not ${Number(total.toFixed(2))}%.` }
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_asset_liability', {
+    p_item_type: itemType,
+    p_label: label,
+    p_value: value,
+    p_owners: ownerIds.map((id, i) => ({ party_id: id, share_percent: shares[i] })),
+    p_valued_on: valuedOn,
+    p_institution_party_id: institutionId,
+    p_secured_against_id: securedAgainst,
+    p_notes: notes,
+  })
+
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export type CreatePolicyState = { error: string } | { ok: true } | null
 
 /** Amounts are validated here so a typo is a clear message rather than a
