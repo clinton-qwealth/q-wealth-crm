@@ -869,12 +869,10 @@ export const ITEM_STATUS_LABEL: Record<string, string> = { active: 'Active', clo
  * Which glyph each of the 22 types gets.
  *
  * **The glyph is the only thing distinguishing one of these rows from another
- * at a glance, because the tile itself is neutral on both sides.** Gold is
- * investments, emerald superannuation and sky insurance; red and amber are
- * spoken for by the pill tones. There is no free hue left, and inventing one
- * would mean two colour languages on the same page. It costs nothing here: the
- * COLUMN a row sits in already says whether it is owned or owed, which no
- * other list on this page can rely on.
+ * at a glance**, because a tile's tone is spent on which SIDE the row is on —
+ * neutral for owned, light red for owed (see `TILE_OWED`) — not on which type
+ * it is. Twenty-two types could never have had twenty-two hues anyway, and the
+ * two that matter at a glance are the two columns.
  *
  * A type with no entry falls back to the box, which is `other_asset`'s own
  * glyph — a type this map has not been taught about is more likely to be a new
@@ -908,20 +906,29 @@ const ITEM_GLYPH: Record<string, (p: { className?: string }) => ReactNode> = {
 /**
  * The two tile treatments the balance sheet uses, and the reason there are two.
  *
- * Both columns were neutral squares on 14 September and read as one list —
- * with no hue to spend (gold is investments, emerald super, sky insurance, red
- * and amber the pill tones) the two sides had nothing but their headings to
- * tell them apart. The answer is TONE rather than colour: an asset is an open
- * square, dark glyph on a pale ground; a liability is a filled one, pale glyph
- * on a dark ground. Owned is light, owed is heavy. It costs no colour and it
- * survives the closed state, where both collapse to the dormant grey — a
- * repaid loan and a sold house are equally finished.
+ * Both columns were neutral squares on 14 September and read as one list, with
+ * nothing but their headings to tell them apart. An asset stays neutral — it is
+ * the ordinary case, and the page's other neutral squares (a group, a note) are
+ * all "a thing, no state implied". **A liability takes a very light red**, asked
+ * for the same day.
  *
- * neutral-50 on neutral-800 is #fafafa on #262626, 15.2:1 — both flat hex, so
- * the figure is arithmetic, not a browser measurement.
+ * That spends a hue this page had already spoken for: red is the falling half
+ * of `PILL_TONES`, and a mortgage is not a warning. It is a deliberate trade —
+ * a debt is the one thing on a balance sheet that subtracts, and the columns
+ * now separate at a glance instead of on a heading. The signed figure beside
+ * the tile says the same thing in words, so neither carries it alone.
+ *
+ * Same shape as every other coloured tile — 50 ground, 700 glyph, 100 ring —
+ * so it reads as one of this page's tiles rather than as an oversized pill.
+ * The danger pill keeps `ring-red-200` and a bolder weight, which is what
+ * separates the two on a page that could show both.
+ *
+ * red-700 on red-50 is #b91c1c on #fef2f2, 5.91:1 — well over the 3:1 floor a
+ * glyph needs (WCAG 1.4.11) and over the 4.5:1 text floor too. Both flat hex,
+ * so that figure is arithmetic rather than a browser measurement.
  */
 const TILE_OWNED = 'bg-neutral-100 text-neutral-700 ring-neutral-200'
-const TILE_OWED = 'bg-neutral-800 text-neutral-50 ring-neutral-800'
+const TILE_OWED = 'bg-red-50 text-red-700 ring-red-100'
 
 /**
  * An asset or a liability. Same square as an account, the type drawn on it,

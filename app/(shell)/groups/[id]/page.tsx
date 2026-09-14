@@ -84,10 +84,14 @@ function balanceRow(item: BalanceItemRow) {
       ]
         .filter(Boolean)
         .join(' \u00b7 ')}
-      /* The second half of what separates the columns: a liability's figure is
+      /* The other half of what separates the columns: a liability's figure is
          signed and a shade lighter than an asset's, so the right-hand column
          reads as what comes off rather than a second list of the same kind. A
-         closed row is lighter still on both sides — it is not being counted. */
+         closed row is lighter still on both sides — it is not being counted.
+
+         Deliberately NOT red to match the tile: the figure would then be the
+         third mark saying one thing, and red numerals in a column read as an
+         error state rather than as a balance-sheet convention. */
       meta={
         item.status !== ITEM_LIVE ? (
           <span className="text-neutral-400">{balanceMoney(item)}</span>
@@ -681,12 +685,15 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                 label: 'Assets + Liabilities',
                 panel: (
                   <div className="flex flex-col gap-6">
-                    {/* Owned on the left, owed on the right — the side a row is
-                        on is the only thing carrying that distinction, because
-                        the tiles are neutral on both sides and there is no hue
-                        left to spend. `BALANCE_SPLIT` rather than `TAB_SPLIT`:
-                        these two columns are peers and split evenly, where the
-                        accounts tab is a list beside a chart at 65/35. */}
+                    {/* Owned on the left, owed on the right — and the side is
+                        carried by the rows themselves as well as by the column
+                        they sit in: a liability's tile is light red where an
+                        asset's is neutral, and its figure is signed. Two marks,
+                        because a column heading is a poor thing to make a
+                        reader hold in their head while scanning.
+                        `BALANCE_SPLIT` rather than `TAB_SPLIT`: these two
+                        columns are peers and split evenly, where the accounts
+                        tab is a list beside a chart at 65/35. */}
                     <div className={BALANCE_SPLIT}>
                       <DataSection
                         title="Assets"

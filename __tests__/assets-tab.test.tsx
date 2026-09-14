@@ -324,13 +324,16 @@ describe('the Assets + Liabilities tab', () => {
      * grey, which here also means "not counted in the total below".
      */
     /**
-     * **Owned is an open square, owed is a filled one.** The other half of the
-     * 14 September separation: with no hue free to spend, the tile carries the
-     * side as tone — dark glyph on a pale ground for an asset, pale glyph on a
-     * dark ground for a liability. Neither borrows a colour that already means
-     * something else on this page.
+     * **Owned is neutral, owed is a very light red.** The other half of the
+     * 14 September separation, asked for after a dark-filled tile was tried:
+     * the tile carries the SIDE, not the type.
+     *
+     * Red is spent knowingly — it is the falling half of `PILL_TONES` — so what
+     * is pinned here is that the asset side stays clear of it entirely. A
+     * change that tinted both would undo the whole point and is the thing most
+     * likely to happen by accident.
      */
-    test('an asset’s tile is open and a liability’s is filled, and neither takes a spoken-for hue', async () => {
+    test('an asset’s tile is neutral and a liability’s is light red', async () => {
       const panel = await openTab()
       const tile = (text: string) =>
         rowFor(panel, text).querySelector('span[aria-hidden="true"]') as HTMLElement
@@ -338,17 +341,37 @@ describe('the Assets + Liabilities tab', () => {
       const owned = tile('Mercer Street')
       expect(owned.className).toContain('bg-neutral-100')
       expect(owned.className).toContain('text-neutral-700')
+      expect(owned.className).not.toContain('red')
 
       const owed = tile('Mercer Street mortgage')
-      expect(owed.className).toContain('bg-neutral-800')
-      expect(owed.className).toContain('text-neutral-50')
+      expect(owed.className).toContain('bg-red-50')
+      expect(owed.className).toContain('text-red-700')
       expect(owed.className).not.toBe(owned.className)
 
+      /* Neither side borrows a hue that names a KIND of holding elsewhere on
+         this page — gold investments, emerald super, sky insurance — which
+         would say these rows are one of those. */
       for (const t of [owned, owed]) {
-        for (const spoken of ['bg-gold-50', 'bg-emerald-50', 'bg-sky-50', 'bg-red-50', 'bg-amber-50']) {
+        for (const spoken of ['bg-gold-50', 'bg-emerald-50', 'bg-sky-50']) {
           expect(t.className).not.toContain(spoken)
         }
       }
+    })
+
+    /**
+     * The tile is the only red on the row. The figure stays neutral: red
+     * numerals in a column read as an error state rather than as the ordinary
+     * way a balance sheet prints what is owed, and the minus sign already says
+     * it.
+     */
+    test('the red stops at the tile — the figure beside it is not red', async () => {
+      const panel = await openTab()
+      const row = rowFor(panel, 'Mercer Street mortgage')
+      const figures = Array.from(row.querySelectorAll('span')).filter(
+        (el) => el.children.length === 0 && /\$[\d,]+\.\d\d$/.test(el.textContent ?? ''),
+      )
+      expect(figures.length).toBeGreaterThan(0)
+      for (const f of figures) expect(f.className).not.toContain('red')
     })
 
     /* Closed collapses both sides to the same dormant grey: a repaid loan and a
@@ -370,7 +393,8 @@ describe('the Assets + Liabilities tab', () => {
       const repaidLoan = tile('Old car loan')
       expect(soldAsset.className).toContain('text-neutral-500')
       expect(repaidLoan.className).toBe(soldAsset.className)
-      expect(repaidLoan.className).not.toContain('bg-neutral-800')
+      // The red goes with it: a repaid loan is not owed any more.
+      expect(repaidLoan.className).not.toContain('red')
 
       expect(soldAsset.getAttribute('title')).toBe('Closed')
       // And the word survives for a screen reader, since nothing else says it.
