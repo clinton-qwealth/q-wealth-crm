@@ -423,3 +423,19 @@ export function GroupIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/**
+ * A building: an organisation that provides something — a platform, an
+ * insurer, a fund manager. The search's mark for a service provider, which is
+ * neither a person nor a client group and so takes neither of their glyphs.
+ */
+export function BuildingIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M4 17.5V4.25a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1V17.5" />
+      <path d="M13 8.5h2.25a1 1 0 0 1 1 1v8" />
+      <path d="M2.75 17.5h14.5" />
+      <path d="M6.75 6.5h1.5M8.75 6.5h1.5M6.75 9.5h1.5M8.75 9.5h1.5M6.75 12.5h1.5M8.75 12.5h1.5" />
+    </svg>
+  )
+}
