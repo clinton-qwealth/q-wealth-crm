@@ -900,8 +900,8 @@ export const ITEM_STATUS_LABEL: Record<string, string> = { active: 'Active', clo
  *
  * **The glyph is the only thing distinguishing one of these rows from another
  * at a glance**, because a tile's tone is spent on which SIDE the row is on —
- * neutral for owned, light red for owed (see `TILE_OWED`) — not on which type
- * it is. Twenty-two types could never have had twenty-two hues anyway, and the
+ * light blue for owned, light red for owed (see `TILE_OWED`) — not on which
+ * type it is. Twenty-two types could never have had twenty-two hues anyway, and the
  * two that matter at a glance are the two columns.
  *
  * A type with no entry falls back to the box, which is `other_asset`'s own
@@ -937,27 +937,32 @@ const ITEM_GLYPH: Record<string, (p: { className?: string }) => ReactNode> = {
  * The two tile treatments the balance sheet uses, and the reason there are two.
  *
  * Both columns were neutral squares on 14 September and read as one list, with
- * nothing but their headings to tell them apart. An asset stays neutral — it is
- * the ordinary case, and the page's other neutral squares (a group, a note) are
- * all "a thing, no state implied". **A liability takes a very light red**, asked
- * for the same day.
+ * nothing but their headings to tell them apart. **A liability took a very
+ * light red** the same day, and **an asset a light blue** shortly after — the
+ * same pair, and in the same order, as the proportion bar at the top of the
+ * tab (see `balance-bar.tsx`), so a row and the bar summarising it are
+ * speaking one language.
  *
- * That spends a hue this page had already spoken for: red is the falling half
- * of `PILL_TONES`, and a mortgage is not a warning. It is a deliberate trade —
- * a debt is the one thing on a balance sheet that subtracts, and the columns
- * now separate at a glance instead of on a heading. The signed figure beside
- * the tile says the same thing in words, so neither carries it alone.
+ * Blue was free and red was not. Red is the falling half of `PILL_TONES`, and
+ * a mortgage is not a warning; that is a deliberate trade — a debt is the one
+ * thing on a balance sheet that subtracts, and the columns now separate at a
+ * glance instead of on a heading. The signed figure beside the tile says the
+ * same thing in words, so neither carries it alone. Blue collides with
+ * nothing: the "this group" pill and the insurance tile are both SKY, which is
+ * a different family, and no other tile on this page is blue.
  *
  * Same shape as every other coloured tile — 50 ground, 700 glyph, 100 ring —
- * so it reads as one of this page's tiles rather than as an oversized pill.
- * The danger pill keeps `ring-red-200` and a bolder weight, which is what
- * separates the two on a page that could show both.
+ * so they read as this page's tiles rather than as oversized pills. The danger
+ * pill keeps `ring-red-200` and a bolder weight, which is what separates it
+ * from the liability tile on a page that could show both.
  *
- * red-700 on red-50 is #b91c1c on #fef2f2, 5.91:1 — well over the 3:1 floor a
- * glyph needs (WCAG 1.4.11) and over the 4.5:1 text floor too. Both flat hex,
- * so that figure is arithmetic rather than a browser measurement.
+ * blue-700 on blue-50 is 6.16:1 and red-700 on red-50 is 5.91:1 — both well
+ * over the 3:1 floor a glyph needs (WCAG 1.4.11) and over the 4.5:1 text floor
+ * too, and close enough to each other that neither side reads as the louder
+ * one. Flat hex throughout, so those are arithmetic rather than browser
+ * measurements.
  */
-const TILE_OWNED = 'bg-neutral-100 text-neutral-700 ring-neutral-200'
+const TILE_OWNED = 'bg-blue-50 text-blue-700 ring-blue-100'
 const TILE_OWED = 'bg-red-50 text-red-700 ring-red-100'
 
 /**

@@ -385,33 +385,40 @@ describe('the Assets + Liabilities tab', () => {
      * grey, which here also means "not counted in the total below".
      */
     /**
-     * **Owned is neutral, owed is a very light red.** The other half of the
-     * 14 September separation, asked for after a dark-filled tile was tried:
-     * the tile carries the SIDE, not the type.
+     * **Owned is a light blue, owed is a light red** — the tile carries the
+     * SIDE, not the type, and it carries it in the same pair of hues, in the
+     * same order, as the proportion bar at the top of the tab.
      *
-     * Red is spent knowingly — it is the falling half of `PILL_TONES` — so what
-     * is pinned here is that the asset side stays clear of it entirely. A
-     * change that tinted both would undo the whole point and is the thing most
-     * likely to happen by accident.
+     * What is pinned is that the two never bleed into each other: an asset tile
+     * with any red on it, or a liability tile with any blue, is the change that
+     * would undo the whole separation and the one most likely to happen by
+     * accident.
      */
-    test('an asset’s tile is neutral and a liability’s is light red', async () => {
+    test('an asset’s tile is light blue and a liability’s is light red', async () => {
       const panel = await openTab()
       const tile = (text: string) =>
         rowFor(panel, text).querySelector('span[aria-hidden="true"]') as HTMLElement
 
       const owned = tile('Mercer Street')
-      expect(owned.className).toContain('bg-neutral-100')
-      expect(owned.className).toContain('text-neutral-700')
+      expect(owned.className).toContain('bg-blue-50')
+      expect(owned.className).toContain('text-blue-700')
       expect(owned.className).not.toContain('red')
 
       const owed = tile('Mercer Street mortgage')
       expect(owed.className).toContain('bg-red-50')
       expect(owed.className).toContain('text-red-700')
+      expect(owed.className).not.toContain('blue')
       expect(owed.className).not.toBe(owned.className)
 
-      /* Neither side borrows a hue that names a KIND of holding elsewhere on
+      /* Both are built to the same recipe — 50 ground, 700 glyph, 100 ring —
+         so neither side reads as the louder one. */
+      for (const t of [owned, owed]) expect(t.className).toContain('ring-')
+
+      /* And neither borrows a hue that names a KIND of holding elsewhere on
          this page — gold investments, emerald super, sky insurance — which
-         would say these rows are one of those. */
+         would say these rows are one of those. Sky in particular: it is the
+         insurance tile AND the "this group" pill, and it is the blue a careless
+         change would reach for here. */
       for (const t of [owned, owed]) {
         for (const spoken of ['bg-gold-50', 'bg-emerald-50', 'bg-sky-50']) {
           expect(t.className).not.toContain(spoken)
