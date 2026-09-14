@@ -121,7 +121,11 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
       <div
         role="img"
         aria-label={label}
-        className="mt-2 flex h-5 overflow-hidden rounded-md bg-neutral-100 ring-1 ring-inset ring-neutral-200"
+        /* 14px. `rounded`, not `rounded-md`: a 6px radius on a 14px bar is
+           within a pixel of a full stadium, and the ends would read as a pill
+           rather than as a measured length. The radius came down with the
+           height so the shape stayed the same shape. */
+        className="mt-2 flex h-3.5 overflow-hidden rounded bg-neutral-100 ring-1 ring-inset ring-neutral-200"
       >
         {/* Rendered only when there is something to draw. A zero side with a
             minimum width would put six pixels of red on a group that owes

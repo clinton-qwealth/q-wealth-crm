@@ -205,13 +205,19 @@ describe('the balance bar', () => {
     expect(root.className).not.toContain('flex-1')
   })
 
-  /* The height is the one dimension a reader has specified twice — thick on
-     sight, then 30% thinner — so a change to it should be deliberate. 28px
-     less 30% is 19.6, and h-5 is the 20px step. */
-  test('the bar is 20px tall', () => {
+  /* The height is the dimension a reader has specified three times — thick on
+     sight, then 30% thinner, then 30% thinner again — so a change to it should
+     be deliberate. 28 → 20 → 14, and h-3.5 is the 14px step.
+
+     The radius travels with it: at 6px on a 14px bar the corners would meet in
+     the middle and the thing would read as a pill. */
+  test('the bar is 14px tall, and its corners are proportionate to that', () => {
     const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
     const cls = bar(container).picture!.className
-    expect(cls).toContain('h-5')
-    expect(cls).not.toContain('h-7')
+    expect(cls).toContain('h-3.5')
+    for (const past of ['h-5', 'h-7', 'rounded-md', 'rounded-full']) {
+      expect(cls, past).not.toContain(past)
+    }
+    expect(cls).toContain('rounded')
   })
 })
