@@ -14,19 +14,47 @@ import { accountMoney } from './ui'
  *
  * Blue and red were asked for, and they are a good pair here: unlike red and
  * green they stay apart under the common forms of colour blindness. What they
- * do NOT have is a difference in LIGHTNESS — blue-600 and red-600 measure
- * 5.17:1 and 4.83:1 against white, which is 1.07:1 against each other. In
- * greyscale (a printed advice document, achromatopsia) the bar would be one
- * solid block with no join.
+ * do NOT have is a difference in LIGHTNESS — flat blue-600 and red-600 measure
+ * 5.17:1 and 4.83:1 against white, which is **1.07:1 against each other**. In
+ * greyscale (a printed advice document, achromatopsia) the bar was one solid
+ * block with no join.
  *
- * So the join is drawn, not implied: the liability segment carries a white left
- * border. It is INSIDE the segment's box, so it marks the boundary without
- * taking a pixel off either proportion.
+ * The gradients, asked for on 14 September, fix that as a side effect and are
+ * why the ramps run the way they do. **Each side runs light to dark, left to
+ * right, so the join is where the darkest blue meets the lightest red** —
+ * 1.83:1 rather than 1.07:1. Reversing either ramp would put dark against dark
+ * and give the bar its old problem back, which is the one thing to know before
+ * changing these.
+ *
+ * Every stop clears 3:1 against the white card, the same non-text floor the mix
+ * ring's palette holds itself to (see `--mix-1` in globals.css): sky-600 4.10,
+ * blue-700 6.70, rose-500 3.67, red-700 6.47. That rules out the prettier light
+ * ends — sky-500, rose-400, orange-500 and cyan-500 all measure under 3:1 and
+ * would fade into the card.
+ *
+ * Neither ramp borrows indigo, which globals.css reserves for the investment
+ * mix ring as "the only family on this page with no job".
+ *
+ * The join is still DRAWN as well: the liability segment carries a white left
+ * border, inside its own box, so it marks the boundary without taking a pixel
+ * off either proportion. Belt and braces, and it costs nothing.
  *
  * And the percentages are printed above the bar. Colour is never the only thing
  * carrying the reading (WCAG 1.4.1) — the bar is the picture, the labels are
  * the fact.
  */
+
+/*
+ * The two fills, named once so the legend chip and the segment it explains are
+ * painted from the same string and cannot drift apart.
+ *
+ * `bg-linear-to-r` is Tailwind v4's name for what v3 called `bg-gradient-to-r`.
+ * Written out in full rather than assembled, because Tailwind scans source text
+ * — a constructed class would never be generated, and the failure mode is a
+ * segment with no background at all.
+ */
+export const ASSET_FILL = 'bg-linear-to-r from-sky-600 to-blue-700'
+export const LIABILITY_FILL = 'bg-linear-to-r from-rose-500 to-red-700'
 export function BalanceBar({ totals }: { totals: BalanceTotals }) {
   const split = balanceSplit(totals)
   if (!split) return null
@@ -47,7 +75,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
           new arrangement to work out. */}
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="flex min-w-0 items-center gap-1.5">
-          <Swatch className="bg-blue-600" />
+          <Swatch className={ASSET_FILL} />
           <span className="truncate text-neutral-500">Assets</span>
           <span className="font-semibold tabular-nums text-neutral-900">{split.assets.text}</span>
         </span>
@@ -56,7 +84,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
             {split.liabilities.text}
           </span>
           <span className="truncate text-neutral-500">Liabilities</span>
-          <Swatch className="bg-red-600" />
+          <Swatch className={LIABILITY_FILL} />
         </span>
       </div>
 
@@ -80,14 +108,14 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
                distortion is under a percent, and the alternative is a debt
                that does not appear at all. Segments shrink to fit, so the pair
                still ends flush with the bar. */
-            className="min-w-[6px] bg-blue-600"
+            className={`min-w-[6px] ${ASSET_FILL}`}
           />
         ) : null}
         {split.liabilities.width > 0 ? (
           <div
             data-slot="bar-liabilities"
             style={{ flexBasis: `${split.liabilities.width}%` }}
-            className="min-w-[6px] border-l-2 border-white bg-red-600"
+            className={`min-w-[6px] border-l-2 border-white ${LIABILITY_FILL}`}
           />
         ) : null}
       </div>
