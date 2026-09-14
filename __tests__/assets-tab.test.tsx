@@ -249,23 +249,38 @@ describe('the Assets + Liabilities tab', () => {
     })
 
     /**
-     * **The bar sits above the net position**, asked for on 14 September: the
-     * two column totals give the figures and the net gives the difference, and
-     * neither shows the SHAPE of the sheet.
+     * **The bar sits inside the net position card, between its label and its
+     * figure** — moved there on 14 September from a card of its own above it.
+     * The two are readings of one subtraction, and a card apiece made them look
+     * like two separate facts.
      *
      * Order is asserted by document position rather than by reading the markup,
-     * so a refactor that moves one of them fails here.
+     * so a refactor that reshuffles the row fails here.
      */
-    test('a proportion bar sits above the net position, outside both columns', async () => {
+    test('the bar sits between the net position’s label and its figure', async () => {
       const panel = await openTab()
       const { grid } = columns(panel)
       const bar = panel.querySelector('[data-slot="balance-bar"]') as HTMLElement
-      const net = within(panel).getByText('Net position').closest('div') as HTMLElement
+      const label = within(panel).getByText('Net position')
+      const card = label.parentElement as HTMLElement
 
       expect(bar, 'no balance bar on a sheet with both sides').toBeTruthy()
       expect(grid.contains(bar), 'the bar is inside a column').toBe(false)
-      /* DOCUMENT_POSITION_FOLLOWING: the net card comes after the bar. */
-      expect(bar.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+      // One row: label, bar, figure — and the bar is the middle child of three.
+      expect(card.contains(bar), 'the bar is not in the net position card').toBe(true)
+      const kids = Array.from(card.children)
+      expect(kids).toHaveLength(3)
+      expect(kids[1]).toBe(bar)
+      expect(kids[0].textContent).toBe('Net position')
+      expect(kids[2].textContent).toContain('$708,000.00')
+
+      /* And it takes the middle: the two either side hold their width, the bar
+         gives up its own. Without this the figure would be pushed off the row
+         by a long label rather than the bar narrowing. */
+      expect(bar.className).toContain('flex-1')
+      expect(kids[0].className).toContain('shrink-0')
+      expect(kids[2].className).toContain('shrink-0')
     })
 
     /* The bar reads the same totals the two columns do — closed rows excluded —

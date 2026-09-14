@@ -187,6 +187,22 @@ describe('the balance bar', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  /**
+   * **It carries no chrome of its own.** It lives inside the net position card
+   * now, between that card's label and its figure; a border, a ground or a
+   * shadow here would draw a box inside a box.
+   */
+  test('it has no card of its own — it sits inside one', () => {
+    const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
+    const root = container.querySelector('[data-slot="balance-bar"]') as HTMLElement
+    for (const chrome of ['border', 'shadow', 'bg-white', 'px-4', 'py-3', 'rounded-lg']) {
+      expect(root.className, chrome).not.toContain(chrome)
+    }
+    // And it gives up width rather than forcing the row wider.
+    expect(root.className).toContain('flex-1')
+    expect(root.className).toContain('min-w-0')
+  })
+
   /* The height is the one dimension a reader has specified twice — thick on
      sight, then 30% thinner — so a change to it should be deliberate. 28px
      less 30% is 19.6, and h-5 is the 20px step. */

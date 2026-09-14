@@ -785,16 +785,23 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                         equal to the total above it, and a bar of one colour,
                         which between them say nothing twice. */}
                     {assetRows.length && liabilityRows.length ? (
-                      <div className="flex flex-col gap-3">
+                      /* Label, then the shape, then the figure. The bar sits
+                         BETWEEN them rather than in a card of its own: it and
+                         the net position are two readings of the same
+                         subtraction, and a card apiece made them look like two
+                         separate facts.
+
+                         `items-center`, not `items-baseline`: the middle column
+                         is two lines tall (its legend, then the bar) and has no
+                         single baseline to share with the two beside it. */
+                      <div className="flex items-center gap-4 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
+                        <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                          Net position
+                        </span>
                         <BalanceBar totals={sheet} />
-                        <div className="flex items-baseline justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                            Net position
-                          </span>
-                          <span className="text-[17px] font-bold tabular-nums text-neutral-900">
-                            {accountMoney.format(sheet.net)}
-                          </span>
-                        </div>
+                        <span className="shrink-0 text-[17px] font-bold tabular-nums text-neutral-900">
+                          {accountMoney.format(sheet.net)}
+                        </span>
                       </div>
                     ) : null}
                   </div>
