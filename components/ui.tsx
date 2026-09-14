@@ -545,6 +545,21 @@ export function Pill({
 export const accountMoney = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' })
 
 /**
+ * An amount OWED, as the balance sheet prints it: a leading minus.
+ *
+ * Liabilities are stored positive — the column decides the sign, not the row —
+ * so the sign is put back here, once, for display. A true minus (U+2212), not
+ * a hyphen: it is the width of a plus and sits on the maths axis, where a
+ * hyphen is short and low and reads as a dash in a name.
+ *
+ * This is the first half of what tells the two columns apart (decided 14
+ * September, after the two read as one list): the figures on the right are
+ * signed and a shade lighter, and their tiles are filled. See `BalanceItemTile`.
+ */
+export const owedMoney = (value: string | number | null | undefined) =>
+  `\u2212${accountMoney.format(Math.abs(Number(value ?? 0)))}`
+
+/**
  * An account's latest value with a direction mark: green up, red down.
  *
  * The comparison is against the average of the valuations in the 30 days before
@@ -891,20 +906,50 @@ const ITEM_GLYPH: Record<string, (p: { className?: string }) => ReactNode> = {
 }
 
 /**
- * An asset or a liability. Same square as an account, neutral tone, and the
- * type drawn on it.
+ * The two tile treatments the balance sheet uses, and the reason there are two.
+ *
+ * Both columns were neutral squares on 14 September and read as one list —
+ * with no hue to spend (gold is investments, emerald super, sky insurance, red
+ * and amber the pill tones) the two sides had nothing but their headings to
+ * tell them apart. The answer is TONE rather than colour: an asset is an open
+ * square, dark glyph on a pale ground; a liability is a filled one, pale glyph
+ * on a dark ground. Owned is light, owed is heavy. It costs no colour and it
+ * survives the closed state, where both collapse to the dormant grey — a
+ * repaid loan and a sold house are equally finished.
+ *
+ * neutral-50 on neutral-800 is #fafafa on #262626, 15.2:1 — both flat hex, so
+ * the figure is arithmetic, not a browser measurement.
+ */
+const TILE_OWNED = 'bg-neutral-100 text-neutral-700 ring-neutral-200'
+const TILE_OWED = 'bg-neutral-800 text-neutral-50 ring-neutral-800'
+
+/**
+ * An asset or a liability. Same square as an account, the type drawn on it,
+ * and the SIDE carried by the tile's tone — see `TILE_OWED` above.
+ *
+ * `side` is taken from the row rather than looked up from the type, because
+ * the database already derived it (`assets_liabilities.side` is a generated
+ * column) and a second mapping here could only ever disagree with the first.
  *
  * A closed row — a house sold, a loan repaid — gives up its type glyph for the
  * archive and takes the dormant grey, exactly as a closed account does. That
  * matters more here than there: closed items are excluded from every total on
  * the page, so the row has to look like it is not being counted.
  */
-export function BalanceItemTile({ type, status }: { type: string; status: string }) {
+export function BalanceItemTile({
+  type,
+  side,
+  status,
+}: {
+  type: string
+  side: string
+  status: string
+}) {
   const dormant = status !== 'active'
   const Glyph = ITEM_GLYPH[type] ?? BoxIcon
   return (
     <Tile
-      tone={dormant ? TILE_DORMANT : 'bg-neutral-100 text-neutral-700 ring-neutral-200'}
+      tone={dormant ? TILE_DORMANT : side === 'liability' ? TILE_OWED : TILE_OWNED}
       glyph={dormant ? <ArchiveIcon className={GLYPH} /> : <Glyph className={GLYPH} />}
       label={dormant ? (ITEM_STATUS_LABEL[status] ?? status) : undefined}
     />

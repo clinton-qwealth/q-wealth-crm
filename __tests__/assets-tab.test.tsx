@@ -9,7 +9,26 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
  * which side a row lands on, which rows a total counts, and that the headline
  * figures above stop being three copies of one number once this data exists.
  */
-const BALANCE = [
+/* Declared, not inferred: an inferred union of four literal shapes refuses a
+   fifth row built by spreading one of them with different nulls. */
+type BalanceFixture = {
+  item_id: string
+  item_type: string
+  side: string
+  label: string
+  value: string
+  valued_on: string
+  status: string
+  closed_on: string | null
+  institution: string | null
+  secured_against_id: string | null
+  secured_against: string | null
+  owners: string
+  owner_count: number
+  owner_shares: { party_id: string; name: string; share_percent: string }[]
+}
+
+const BALANCE: BalanceFixture[] = [
   /* Closed, and FIRST, so a page that forgot to sink it renders it at the head
      of the list and fails. The live rows behind it are in non-alphabetical
      order, so a sink that sorted by name instead of bucketing fails too. */
@@ -194,7 +213,7 @@ describe('the Assets + Liabilities tab', () => {
          $1,498,000 if it were counted. */
       expect(total(assets)!.textContent).toContain('$1,248,000.00')
       expect(total(assets)!.textContent).not.toContain('$1,498,000')
-      expect(total(liabilities)!.textContent).toContain('$540,000.00')
+      expect(total(liabilities)!.textContent).toContain('\u2212$540,000.00')
     })
 
     /** A total that quietly drops rows is worse than no total at all. */
@@ -265,27 +284,111 @@ describe('the Assets + Liabilities tab', () => {
     })
 
     /**
+     * **What separates the two columns, decided 14 September** after they read
+     * as one list: a liability's figure is SIGNED — a true minus, U+2212, not a
+     * hyphen — and a shade lighter, and its total is signed the same way. An
+     * asset's figure carries no sign at all. Both halves are asserted, because
+     * a hyphen would pass a loose "contains a dash" check and is the wrong
+     * glyph: short, low, and the one that appears in names.
+     */
+    test('a liability’s figure is signed with a true minus, and an asset’s is not', async () => {
+      const panel = await openTab()
+      const owed = rowFor(panel, 'Mercer Street mortgage')
+      expect(owed.textContent).toContain('\u2212$540,000.00')
+      expect(owed.textContent).not.toContain('-$')
+
+      const owned = rowFor(panel, 'Everyday account')
+      expect(owned.textContent).toContain('$48,000.00')
+      expect(owned.textContent).not.toMatch(/[\u2212-]\$48,000/)
+    })
+
+    test('and a shade lighter than an asset’s, without touching the row’s weight', async () => {
+      const panel = await openTab()
+      /* The INNERMOST span holding the figure: the lighter tone sits on an
+         inner span so `DataRow`'s own semibold, size and 900 still apply
+         around it. An asset's figure has no inner span at all — it sits
+         directly in the row's figure column. */
+      const figure = (text: string) =>
+        Array.from(rowFor(panel, text).querySelectorAll('span'))
+          .filter((el) => el.children.length === 0 && /\$[\d,]+\.\d\d$/.test(el.textContent ?? ''))
+          .at(-1)!
+      expect(figure('Mercer Street mortgage').className).toContain('text-neutral-600')
+      expect(figure('Mercer Street mortgage').parentElement!.className).toContain('text-neutral-900')
+      expect(figure('Everyday account').className).not.toContain('text-neutral-600')
+      expect(figure('Everyday account').className).toContain('text-neutral-900')
+    })
+
+    /**
      * The tile carries the type as a glyph, because it carries no colour — and
      * a closed row gives the glyph up for the archive and takes the dormant
      * grey, which here also means "not counted in the total below".
      */
-    test('the tile is neutral, and the closed row’s is grey and marked', async () => {
+    /**
+     * **Owned is an open square, owed is a filled one.** The other half of the
+     * 14 September separation: with no hue free to spend, the tile carries the
+     * side as tone — dark glyph on a pale ground for an asset, pale glyph on a
+     * dark ground for a liability. Neither borrows a colour that already means
+     * something else on this page.
+     */
+    test('an asset’s tile is open and a liability’s is filled, and neither takes a spoken-for hue', async () => {
       const panel = await openTab()
       const tile = (text: string) =>
         rowFor(panel, text).querySelector('span[aria-hidden="true"]') as HTMLElement
 
-      const live = tile('Mercer Street')
-      expect(live.className).toContain('bg-neutral-100')
-      /* Not one of the tones that already mean something else on this page. */
-      for (const spoken of ['bg-gold-50', 'bg-emerald-50', 'bg-sky-50']) {
-        expect(live.className).not.toContain(spoken)
-      }
+      const owned = tile('Mercer Street')
+      expect(owned.className).toContain('bg-neutral-100')
+      expect(owned.className).toContain('text-neutral-700')
 
-      const closed = tile('Aardvark Block')
-      expect(closed.className).toContain('text-neutral-500')
-      expect(closed.getAttribute('title')).toBe('Closed')
+      const owed = tile('Mercer Street mortgage')
+      expect(owed.className).toContain('bg-neutral-800')
+      expect(owed.className).toContain('text-neutral-50')
+      expect(owed.className).not.toBe(owned.className)
+
+      for (const t of [owned, owed]) {
+        for (const spoken of ['bg-gold-50', 'bg-emerald-50', 'bg-sky-50', 'bg-red-50', 'bg-amber-50']) {
+          expect(t.className).not.toContain(spoken)
+        }
+      }
+    })
+
+    /* Closed collapses both sides to the same dormant grey: a repaid loan and a
+       sold house are equally finished, and "not counted" outranks "which
+       side" once a row is out of the total. */
+    test('a closed row’s tile is the dormant grey whichever side it is on, and is marked', async () => {
+      balance = [
+        ...BALANCE,
+        {
+          ...BALANCE[3], item_id: 'b5', label: 'Old car loan', item_type: 'car_loan',
+          status: 'closed', closed_on: '2026-03-01', secured_against_id: null, secured_against: null,
+        },
+      ]
+      const panel = await openTab()
+      const tile = (text: string) =>
+        rowFor(panel, text).querySelector('span[aria-hidden="true"]') as HTMLElement
+
+      const soldAsset = tile('Aardvark Block')
+      const repaidLoan = tile('Old car loan')
+      expect(soldAsset.className).toContain('text-neutral-500')
+      expect(repaidLoan.className).toBe(soldAsset.className)
+      expect(repaidLoan.className).not.toContain('bg-neutral-800')
+
+      expect(soldAsset.getAttribute('title')).toBe('Closed')
       // And the word survives for a screen reader, since nothing else says it.
       expect(rowFor(panel, 'Aardvark Block').querySelector('.sr-only')!.textContent).toBe('Closed')
+      // The repaid loan is still signed — it is a debt that was, not an asset.
+      expect(rowFor(panel, 'Old car loan').textContent).toContain('\u2212$540,000.00')
+
+      /* And both closed figures are lighter still (400) — lighter than a live
+         liability's 600 — because a figure that is not in the total below
+         should not read with the weight of one that is. Found by mutation: the
+         closed branch could be removed and nothing here noticed. */
+      const figure = (text: string) =>
+        Array.from(rowFor(panel, text).querySelectorAll('span'))
+          .filter((el) => el.children.length === 0 && /\$[\d,]+\.\d\d$/.test(el.textContent ?? ''))
+          .at(-1)!
+      expect(figure('Aardvark Block').className).toContain('text-neutral-400')
+      expect(figure('Old car loan').className).toContain('text-neutral-400')
+      expect(figure('Old car loan').className).not.toContain('text-neutral-600')
     })
 
     /* Each type gets its OWN glyph — asserted by drawn path, not merely by

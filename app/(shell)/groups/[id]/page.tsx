@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
+import { accountMoney, owedMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
 import { balanceTotals, ITEM_LIVE, ITEM_TYPE_LABEL } from '@/lib/balance-sheet'
@@ -58,6 +58,12 @@ function ownerLine(item: BalanceItemRow): string {
   return item.owners ?? ''
 }
 
+/** A row's figure, signed if it is owed. One place decides, so a row and the
+ *  total under it cannot print the same debt two different ways. */
+function balanceMoney(item: { side: string; value: string | number | null }) {
+  return item.side === 'liability' ? owedMoney(item.value) : accountMoney.format(Number(item.value ?? 0))
+}
+
 /** One asset or liability, as a row of its section's sheet. */
 function balanceRow(item: BalanceItemRow) {
   return (
@@ -66,7 +72,7 @@ function balanceRow(item: BalanceItemRow) {
       /* Neutral tile, type glyph, and the archive plus a grey when the item is
          closed — the same language a dormant account speaks, and here it also
          says "not in the total below", which is true of both. */
-      leading={<BalanceItemTile type={item.item_type} status={item.status} />}
+      leading={<BalanceItemTile type={item.item_type} side={item.side} status={item.status} />}
       primary={item.label}
       secondary={[
         ITEM_TYPE_LABEL[item.item_type] ?? item.item_type,
@@ -78,10 +84,18 @@ function balanceRow(item: BalanceItemRow) {
       ]
         .filter(Boolean)
         .join(' \u00b7 ')}
+      /* The second half of what separates the columns: a liability's figure is
+         signed and a shade lighter than an asset's, so the right-hand column
+         reads as what comes off rather than a second list of the same kind. A
+         closed row is lighter still on both sides — it is not being counted. */
       meta={
-        <span className={item.status === ITEM_LIVE ? undefined : 'text-neutral-400'}>
-          {accountMoney.format(Number(item.value ?? 0))}
-        </span>
+        item.status !== ITEM_LIVE ? (
+          <span className="text-neutral-400">{balanceMoney(item)}</span>
+        ) : item.side === 'liability' ? (
+          <span className="text-neutral-600">{balanceMoney(item)}</span>
+        ) : (
+          balanceMoney(item)
+        )
       }
     />
   )
@@ -739,7 +753,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                           liabilityRows.length
                             ? {
                                 label: 'Total liabilities',
-                                value: accountMoney.format(sheet.liabilities),
+                                value: owedMoney(sheet.liabilities),
                                 note: closedNote(liabilityRows),
                               }
                             : undefined
