@@ -159,9 +159,10 @@ export const SHEET = `overflow-hidden ${SHEET_SURFACE}`
 export const WELL = 'bg-neutral-50'
 
 /**
- * The floor under the group page's working area: 70% of the viewport.
+ * The floor under the group page's working area: half the viewport.
  *
- * Asked for on 14 September. The centre column holds a tab strip and whatever
+ * Asked for on 14 September at 70% and brought down to 50% the same day, on
+ * sight. The centre column holds a tab strip and whatever
  * the active tab has, and some tabs have very little — a group with two assets
  * left a card barely taller than its own heading, sitting beside a file-notes
  * column three times its height. A working area that resizes to whatever
@@ -175,7 +176,7 @@ export const WELL = 'bg-neutral-50'
  * grey well and cancels the card's bottom padding to reach its edge; a minimum
  * on the card would leave the well at its content height with a white band
  * below it, which looks like a rendering fault rather than like space. Putting
- * the floor on the panel makes the well itself the thing that is 70vh.
+ * the floor on the panel makes the well itself the thing that is 50vh.
  *
  * `vh` rather than `dvh` on purpose: this is a floor, and `dvh` changes as a
  * mobile browser's address bar hides, which would reflow the page mid-scroll
@@ -185,7 +186,7 @@ export const WELL = 'bg-neutral-50'
  * a constructed `min-h-[${n}vh]` would never be generated. Same rule as the
  * gutter steps in `Tabs`.
  */
-export const WORKING_AREA = 'min-h-[70vh]'
+export const WORKING_AREA = 'min-h-[50vh]'
 
 /**
  * A dashed, quiet block standing where a component will go, saying what.

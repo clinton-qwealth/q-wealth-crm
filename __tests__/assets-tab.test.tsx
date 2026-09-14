@@ -244,6 +244,50 @@ describe('the Assets + Liabilities tab', () => {
       const panel = await openTab()
       expect(within(panel).queryByText('Net position')).toBeNull()
       expect(within(panel).getByText('No liabilities yet')).toBeTruthy()
+      // Nor a bar: one colour says nothing the total above it has not said.
+      expect(panel.querySelector('[data-slot="balance-bar"]')).toBeNull()
+    })
+
+    /**
+     * **The bar sits above the net position**, asked for on 14 September: the
+     * two column totals give the figures and the net gives the difference, and
+     * neither shows the SHAPE of the sheet.
+     *
+     * Order is asserted by document position rather than by reading the markup,
+     * so a refactor that moves one of them fails here.
+     */
+    test('a proportion bar sits above the net position, outside both columns', async () => {
+      const panel = await openTab()
+      const { grid } = columns(panel)
+      const bar = panel.querySelector('[data-slot="balance-bar"]') as HTMLElement
+      const net = within(panel).getByText('Net position').closest('div') as HTMLElement
+
+      expect(bar, 'no balance bar on a sheet with both sides').toBeTruthy()
+      expect(grid.contains(bar), 'the bar is inside a column').toBe(false)
+      /* DOCUMENT_POSITION_FOLLOWING: the net card comes after the bar. */
+      expect(bar.compareDocumentPosition(net) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    /* The bar reads the same totals the two columns do — closed rows excluded —
+       so the sold block cannot widen the blue. 1,248,000 against 540,000 is
+       70 / 30; counting it would be 1,498,000 against 540,000, or 73 / 27. */
+    test('the bar is drawn from the same totals, with the closed row left out', async () => {
+      const panel = await openTab()
+      const bar = panel.querySelector('[data-slot="balance-bar"]') as HTMLElement
+      expect(bar.textContent).toContain('70%')
+      expect(bar.textContent).toContain('30%')
+      expect(bar.textContent).not.toContain('73%')
+
+      /* The WIDTH is the unrounded figure, not the 70% on the label: the two
+         segments have to total exactly 100 or the bar shows a sliver of its
+         own ground at one end. */
+      const assets = bar.querySelector('[data-slot="bar-assets"]') as HTMLElement
+      const liabilities = bar.querySelector('[data-slot="bar-liabilities"]') as HTMLElement
+      expect(assets.className).toContain('bg-blue-600')
+      expect(parseFloat(assets.style.flexBasis)).toBeCloseTo(69.7987, 3)
+      expect(
+        parseFloat(assets.style.flexBasis) + parseFloat(liabilities.style.flexBasis),
+      ).toBe(100)
     })
   })
 
@@ -478,11 +522,11 @@ describe('the Assets + Liabilities tab', () => {
    * is only worth having if it is the same on all of them — a floor on the tall
    * tab alone would produce the jump it exists to remove.
    */
-  test('every tab panel has a floor of 70% of the viewport, carrying the grey ground', async () => {
+  test('every tab panel has a floor of half the viewport, carrying the grey ground', async () => {
     render(await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) }))
     /* Named, not swept up by role: the member panel on this same page has tabs
        of its own, and those deliberately DO NOT take the floor — they fill a
-       fixed-height slide-out, where a 70vh minimum would push the strip off the
+       fixed-height slide-out, where a viewport minimum would push the strip off the
        top. Listing the ids also fails if a tab is renamed without a thought for
        this. */
     const ids = ['workflows', 'accounts', 'assets-liabilities', 'goals']
@@ -504,8 +548,8 @@ describe('the Assets + Liabilities tab', () => {
   /* The figure itself, so a silent change to 40% fails here rather than
      quietly re-laying the page. Changing it deliberately means changing this
      line, which is the intent. */
-  test('and that floor is 70vh, not some other fraction', () => {
-    expect(WORKING_AREA).toBe('min-h-[70vh]')
+  test('and that floor is 50vh, not some other fraction', () => {
+    expect(WORKING_AREA).toBe('min-h-[50vh]')
   })
 
   test('with nothing recorded the tab still offers both sides', async () => {

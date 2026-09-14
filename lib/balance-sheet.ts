@@ -112,6 +112,60 @@ export function balanceTotals(rows: BalanceRow[]): BalanceTotals {
   }
 }
 
+/** One side of the split bar: how wide it is drawn, and what it is called. */
+export type SideShare = { width: number; text: string }
+
+export type BalanceSplit = { assets: SideShare; liabilities: SideShare }
+
+/**
+ * How the balance sheet divides between what is owned and what is owed, as two
+ * percentages of the two sides added together.
+ *
+ * **The denominator is assets PLUS liabilities, not assets alone.** A group
+ * with $1.2m of property and $540k of debt reads 70 / 30, which is the shape of
+ * the balance sheet; dividing the debt by the assets would give 45% and there
+ * would be no second number to draw beside it. This is a composition, not a
+ * ratio of one figure to another.
+ *
+ * `null` when there is nothing to divide — a bar of one colour, or of none,
+ * says less than no bar at all.
+ *
+ * ## The widths are exact and the labels are not
+ *
+ * `width` is unrounded and the two always total exactly 100, because the second
+ * is the first's complement: a bar whose segments came to 99.4% would show a
+ * sliver of its own ground at one end.
+ *
+ * The LABELS are whole percentages, and the liability's is the complement of
+ * the asset's ROUNDED value rather than its own rounding. Rounding the two
+ * independently produces "70% / 31%" whenever the split falls near a half
+ * (69.5 and 30.5 both round up), and a pair that does not add to 100 reads as
+ * an arithmetic error even though each number is correct on its own.
+ *
+ * Two guards stop a rounding from denying something the bar is drawing: a side
+ * that exists but rounds to nothing reads "<1%", and one that rounds to
+ * everything while the other still exists reads ">99%".
+ */
+export function balanceSplit(totals: BalanceTotals): BalanceSplit | null {
+  const base = totals.assets + totals.liabilities
+  if (!(base > 0)) return null
+
+  const assetWidth = (totals.assets / base) * 100
+  const liabilityWidth = 100 - assetWidth
+
+  const rounded = Math.round(assetWidth)
+  const text = (width: number, show: number) => {
+    if (width > 0 && show === 0) return '<1%'
+    if (width < 100 && show === 100) return '>99%'
+    return `${show}%`
+  }
+
+  return {
+    assets: { width: assetWidth, text: text(assetWidth, rounded) },
+    liabilities: { width: liabilityWidth, text: text(liabilityWidth, 100 - rounded) },
+  }
+}
+
 /**
  * One member's share of the balance sheet.
  *

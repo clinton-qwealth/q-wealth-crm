@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import {
   ASSET_TYPES,
+  balanceSplit,
   ITEM_TYPE_LABEL,
   LIABILITY_TYPES,
   balanceTotals,
@@ -133,6 +134,106 @@ describe('balanceTotals', () => {
       balanceTotals([row({ side: 'asset', value: '10' }), row({ side: 'liability', value: '25' })])
         .net,
     ).toBe(-15)
+  })
+})
+
+describe('balanceSplit', () => {
+  const split = (assets: number, liabilities: number) =>
+    balanceSplit({ assets, liabilities, net: assets - liabilities, closed: 0 })
+
+  /**
+   * **The denominator is both sides added together**, not the assets. A group
+   * with $1.2m of property and $540k of debt reads 70 / 30 — the shape of the
+   * sheet. Dividing the debt by the assets gives 45%, with no second number to
+   * draw beside it, and that is the mistake this test exists to catch.
+   */
+  test('divides the two sides by their sum, not one by the other', () => {
+    const s = split(1_200_000, 540_000)!
+    expect(s.assets.text).toBe('69%')
+    expect(s.liabilities.text).toBe('31%')
+    // The trap, stated as a number so its absence is unmistakable.
+    expect(Math.round((540_000 / 1_200_000) * 100)).toBe(45)
+    expect(s.liabilities.text).not.toBe('45%')
+  })
+
+  /* Exact and complementary, so a bar drawn from them never shows a sliver of
+     its own ground at one end. */
+  test('the widths always total exactly 100', () => {
+    for (const [a, l] of [[1, 2], [1_200_000, 540_000], [3, 7], [999_999, 1]] as const) {
+      const s = split(a, l)!
+      expect(s.assets.width + s.liabilities.width).toBe(100)
+    }
+  })
+
+  /**
+   * **The two labels always total 100 too.** Rounded independently, 69.5 and
+   * 30.5 both round up and the bar reads "70% / 31%" — a pair that does not add
+   * up reads as an arithmetic error even though each number is right on its
+   * own. The liability's label is the complement of the asset's rounded value.
+   */
+  test('and so do the labels, even where both sides would round up alone', () => {
+    const s = split(69.5, 30.5)!
+    expect(Math.round(30.5)).toBe(31) // what independent rounding would print
+    expect([s.assets.text, s.liabilities.text]).toEqual(['70%', '30%'])
+  })
+
+  /* A side that exists but rounds to nothing still says it exists — the bar is
+     drawing it, and a label reading 0% would deny what is on screen. */
+  test('a side too small to round to a percent reads “<1%”', () => {
+    const s = split(1_000_000, 1_000)!
+    expect(s.liabilities.text).toBe('<1%')
+    expect(s.assets.text).toBe('>99%')
+    expect(s.liabilities.width).toBeGreaterThan(0)
+  })
+
+  /** And the reverse: everything owed, almost nothing owned. */
+  test('the guards work the other way round too', () => {
+    const s = split(1_000, 1_000_000)!
+    expect(s.assets.text).toBe('<1%')
+    expect(s.liabilities.text).toBe('>99%')
+  })
+
+  /* Exactly one side, exactly 100 — no guard, because nothing is being denied. */
+  test('a sheet with no debts is a flat 100 / 0', () => {
+    const s = split(500_000, 0)!
+    expect([s.assets.text, s.liabilities.text]).toEqual(['100%', '0%'])
+    expect(s.liabilities.width).toBe(0)
+  })
+
+  test('an even split is 50 / 50', () => {
+    const s = split(250_000, 250_000)!
+    expect([s.assets.text, s.liabilities.text]).toEqual(['50%', '50%'])
+    expect(s.assets.width).toBe(50)
+  })
+
+  /** Nothing to divide is no bar at all — one colour, or none, says less than
+   *  an empty space does. */
+  test('nothing on either side has no split', () => {
+    expect(split(0, 0)).toBeNull()
+  })
+
+  /* Reachable: every row recorded at zero. The sum is not positive, so there is
+     still nothing to divide — and dividing by it would be an infinity. */
+  test('a zero sum is null rather than NaN', () => {
+    const s = balanceSplit({ assets: 0, liabilities: 0, net: 0, closed: 3 })
+    expect(s).toBeNull()
+  })
+
+  /** The totals it reads have already dropped the closed rows, so a sold house
+   *  cannot widen the blue. Asserted through `balanceTotals` rather than by
+   *  hand, so the two cannot drift. */
+  test('closed rows do not reach the bar', () => {
+    const live = balanceTotals([
+      row({ side: 'asset', value: '750000' }),
+      row({ side: 'liability', value: '250000' }),
+    ])
+    const withClosed = balanceTotals([
+      row({ side: 'asset', value: '750000' }),
+      row({ side: 'liability', value: '250000' }),
+      row({ side: 'asset', value: '2000000', status: 'closed' }),
+    ])
+    expect(balanceSplit(withClosed)).toEqual(balanceSplit(live))
+    expect(balanceSplit(live)!.assets.text).toBe('75%')
   })
 })
 

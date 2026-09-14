@@ -13,6 +13,7 @@ import { DataRow, DataSection } from '@/components/data-section'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
 import { AddBalanceItemModal } from '@/components/add-balance-item-modal'
+import { BalanceBar } from '@/components/balance-bar'
 import { GroupMembers } from '@/components/group-members'
 import { getGroupMemberDetail } from '@/lib/person'
 import { getGroupNotes } from '@/lib/notes'
@@ -774,21 +775,26 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                       </DataSection>
                     </div>
 
-                    {/* The one figure neither column can state, under both of
-                        them rather than inside either: net position is the
-                        subtraction, and putting it in a column would make it
-                        look like that column's total. Shown only once there is
-                        something on both sides — assets with no debts against
-                        them have a net position equal to the total above it,
-                        which says nothing. */}
+                    {/* What neither column can state, under both of them
+                        rather than inside either: the SHAPE of the sheet, then
+                        the subtraction. Putting either in a column would make
+                        it look like that column's total.
+
+                        Shown only once there is something on both sides —
+                        assets with no debts against them have a net position
+                        equal to the total above it, and a bar of one colour,
+                        which between them say nothing twice. */}
                     {assetRows.length && liabilityRows.length ? (
-                      <div className="flex items-baseline justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
-                          Net position
-                        </span>
-                        <span className="text-[17px] font-bold tabular-nums text-neutral-900">
-                          {accountMoney.format(sheet.net)}
-                        </span>
+                      <div className="flex flex-col gap-3">
+                        <BalanceBar totals={sheet} />
+                        <div className="flex items-baseline justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.05)]">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                            Net position
+                          </span>
+                          <span className="text-[17px] font-bold tabular-nums text-neutral-900">
+                            {accountMoney.format(sheet.net)}
+                          </span>
+                        </div>
                       </div>
                     ) : null}
                   </div>
