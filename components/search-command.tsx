@@ -62,7 +62,7 @@ export function SearchCommand() {
         className="relative flex h-8 w-44 items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 pl-2.5 pr-2 text-left text-sm text-neutral-400 outline-none transition-colors hover:border-neutral-300 hover:bg-white focus-visible:border-brand-300 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-brand/15 sm:w-64"
       >
         <SearchIcon />
-        <span className="flex-1 truncate">Search</span>
+        <span className="flex-1 truncate">Search or ask</span>
         <kbd
           aria-hidden
           className="pointer-events-none hidden select-none rounded border border-neutral-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-medium leading-none tracking-wide text-neutral-400 sm:block"
@@ -154,7 +154,27 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
         if (e.target === ref.current) onClose()
       }}
       aria-label="Search"
-      className="w-full max-w-[40rem] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 backdrop:bg-neutral-900/30 sm:mt-[12vh]"
+      /*
+       * `qw-modal m-auto w-[min(...)]` — the same three the other four modals
+       * take, and each one is load-bearing.
+       *
+       * **`m-auto` is what centres it, and leaving it out is why this opened
+       * against the left edge.** A browser's own stylesheet centres a modal
+       * dialog with `margin: auto`, but Tailwind's preflight resets every
+       * element's margin to zero, so the dialog falls back to its
+       * `inset-inline-start: 0` and sits hard left. Nothing in the component
+       * looks wrong; the centring was being removed by a stylesheet that never
+       * mentions dialogs.
+       *
+       * `w-[min(40rem, …)]` rather than `w-full max-w-[40rem]`: one declaration
+       * that is already the used width, so there is no state in which the
+       * element is full-bleed while a max-width reins it back in.
+       *
+       * `qw-modal` brings the fade-and-rise the other modals share, including
+       * the backdrop — it needs `@starting-style` and `allow-discrete`, which
+       * can only be written in the stylesheet.
+       */
+      className="qw-modal m-auto w-[min(40rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
     >
       <div className="flex items-center gap-2.5 border-b border-neutral-200 px-4">
         <span className="text-neutral-400">
@@ -179,8 +199,17 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
               go(hits[active])
             }
           }}
-          placeholder="Search groups, people and workflows"
-          aria-label="Search groups, people and workflows"
+          /*
+           * The same words as the control that opened it, and the accessible
+           * name matches them exactly. A label that differs from the visible
+           * text is a trap for anybody driving this by voice: they say what
+           * they can see, and nothing answers to it.
+           *
+           * What is actually searched is said in the empty state below, which
+           * is on screen at precisely the moment somebody needs to know.
+           */
+          placeholder="Search or ask"
+          aria-label="Search or ask"
           className="h-12 flex-1 bg-transparent text-sm text-neutral-900 outline-none placeholder:text-neutral-400"
         />
         <kbd className="select-none rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-sans text-[10px] font-medium leading-none tracking-wide text-neutral-400">
@@ -191,7 +220,9 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
       <div className="max-h-[60vh] overflow-y-auto px-2 py-2">
         {query.trim().length < MIN_QUERY ? (
           <p className="px-2 py-6 text-center text-sm text-neutral-400">
-            {tooShort ? `Keep typing — ${MIN_QUERY} characters or more.` : 'Start typing to search.'}
+            {tooShort
+              ? `Keep typing — ${MIN_QUERY} characters or more.`
+              : 'Search groups, people and workflows.'}
           </p>
         ) : hits.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-neutral-400">

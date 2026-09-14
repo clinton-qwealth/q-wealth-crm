@@ -66,7 +66,10 @@ describe('SearchCommand', () => {
    */
   test('the bar holds a button, not a search field', () => {
     render(<SearchCommand />)
-    const trigger = screen.getByRole('button', { name: /search/i })
+    const trigger = screen.getByRole('button', { name: /search or ask/i })
+    /* The visible words and the accessible name are the same, so somebody
+       driving this by voice can say what they can see. */
+    expect(trigger.textContent).toContain('Search or ask')
     expect(trigger.getAttribute('aria-haspopup')).toBe('dialog')
     expect(screen.queryByRole('searchbox')).toBeNull()
     expect(document.querySelector('dialog'), 'the dialog is mounted before it is opened').toBeNull()
@@ -77,7 +80,7 @@ describe('SearchCommand', () => {
     render(<SearchCommand />)
     await user.click(screen.getByRole('button', { name: /search/i }))
 
-    const field = screen.getByLabelText('Search groups, people and workflows')
+    const field = screen.getByLabelText('Search or ask')
     expect(field).toBeTruthy()
     expect(document.activeElement).toBe(field)
   })
@@ -88,7 +91,7 @@ describe('SearchCommand', () => {
     expect(document.querySelector('dialog')).toBeNull()
 
     await user.keyboard('{Meta>}k{/Meta}')
-    expect(screen.getByLabelText('Search groups, people and workflows')).toBeTruthy()
+    expect(screen.getByLabelText('Search or ask')).toBeTruthy()
   })
 
   /**
@@ -121,9 +124,12 @@ describe('SearchCommand', () => {
       return user
     }
 
-    test('nothing typed asks for a query rather than showing an empty list', async () => {
+    /* The bar and the field say the same three words, so the empty state is
+       where the areas being searched are named — on screen at exactly the
+       moment somebody needs to know what this box reaches. */
+    test('nothing typed names what will be searched', async () => {
       await open()
-      expect(screen.getByText('Start typing to search.')).toBeTruthy()
+      expect(screen.getByText('Search groups, people and workflows.')).toBeTruthy()
     })
 
     /* One keystroke must not sweep the database, and the modal says why it is
@@ -131,7 +137,7 @@ describe('SearchCommand', () => {
     test('one character waits, and asks the server nothing', async () => {
       const f = answerWith({ results })
       const user = await open()
-      await user.type(screen.getByLabelText('Search groups, people and workflows'), 'a')
+      await user.type(screen.getByLabelText('Search or ask'), 'a')
 
       expect(screen.getByText(/Keep typing/)).toBeTruthy()
       expect(f, 'a single letter went to the server').not.toHaveBeenCalled()
@@ -140,7 +146,7 @@ describe('SearchCommand', () => {
     test('a real query is sent once, and its sections are drawn in order', async () => {
       answerWith({ results })
       const user = await open()
-      await user.type(screen.getByLabelText('Search groups, people and workflows'), 'test')
+      await user.type(screen.getByLabelText('Search or ask'), 'test')
 
       await waitFor(() =>
         expect(document.querySelectorAll('[data-slot="search-section"]').length).toBe(5),
@@ -157,7 +163,7 @@ describe('SearchCommand', () => {
     test('a section with nothing in it is not drawn at all', async () => {
       answerWith({ results: { ...results, entities: [], providers: [] } })
       const user = await open()
-      await user.type(screen.getByLabelText('Search groups, people and workflows'), 'test')
+      await user.type(screen.getByLabelText('Search or ask'), 'test')
 
       await waitFor(() =>
         expect(document.querySelectorAll('[data-slot="search-section"]').length).toBe(3),
@@ -170,7 +176,7 @@ describe('SearchCommand', () => {
         results: { households: [], entities: [], providers: [], people: [], workflows: [] },
       })
       const user = await open()
-      await user.type(screen.getByLabelText('Search groups, people and workflows'), 'zzzz')
+      await user.type(screen.getByLabelText('Search or ask'), 'zzzz')
 
       await waitFor(() => expect(screen.getByText(/Nothing found for/)).toBeTruthy())
       expect(screen.getByText(/zzzz/)).toBeTruthy()
@@ -198,7 +204,7 @@ describe('SearchCommand', () => {
       const user = userEvent.setup()
       render(<SearchCommand />)
       await user.click(screen.getByRole('button', { name: /search/i }))
-      await user.type(screen.getByLabelText('Search groups, people and workflows'), 'test')
+      await user.type(screen.getByLabelText('Search or ask'), 'test')
       /* Waiting on the SECTIONS, not on a title: "Testsmith Household" is also
          the detail line on two other rows, so a text query matches three
          elements and throws. */
