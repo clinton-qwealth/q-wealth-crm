@@ -155,16 +155,28 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
       }}
       aria-label="Search"
       /*
-       * `qw-modal m-auto w-[min(...)]` — the same three the other four modals
-       * take, and each one is load-bearing.
+       * `qw-modal`, a horizontal centre, and one width — what every modal here
+       * takes, each one load-bearing.
        *
-       * **`m-auto` is what centres it, and leaving it out is why this opened
-       * against the left edge.** A browser's own stylesheet centres a modal
-       * dialog with `margin: auto`, but Tailwind's preflight resets every
+       * **`mx-auto` is what centres it, and leaving the margins off is why this
+       * opened against the left edge.** A browser's own stylesheet centres a
+       * modal dialog with `margin: auto`, but Tailwind's preflight resets every
        * element's margin to zero, so the dialog falls back to its
        * `inset-inline-start: 0` and sits hard left. Nothing in the component
        * looks wrong; the centring was being removed by a stylesheet that never
        * mentions dialogs.
+       *
+       * **Vertically it sits high rather than dead centre**, which is the one
+       * way it departs from the app's other modals — and deliberately. This is
+       * reached by typing, the list under it grows as results arrive, and a
+       * box that centres itself would slide down the screen as it filled. A
+       * fixed distance from the top keeps the field still while the answers
+       * change beneath it. The form dialogs stay centred: they are opened by a
+       * deliberate click and their height does not move.
+       *
+       * `mb-auto` is not decoration either — without it the bottom margin is
+       * preflight's zero, and the dialog stretches to the foot of the window
+       * instead of taking the height of what is in it.
        *
        * `w-[min(40rem, …)]` rather than `w-full max-w-[40rem]`: one declaration
        * that is already the used width, so there is no state in which the
@@ -174,7 +186,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
        * the backdrop — it needs `@starting-style` and `allow-discrete`, which
        * can only be written in the stylesheet.
        */
-      className="qw-modal m-auto w-[min(40rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
+      className="qw-modal mx-auto mb-auto mt-[10vh] w-[min(40rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
     >
       <div className="flex items-center gap-2.5 border-b border-neutral-200 px-4">
         <span className="text-neutral-400">

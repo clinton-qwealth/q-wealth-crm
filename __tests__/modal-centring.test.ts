@@ -43,9 +43,32 @@ describe('every modal dialog', () => {
     expect(new Set(modalClasses.map((m) => m.file)).size).toBeGreaterThanOrEqual(7)
   })
 
-  test('centres itself, rather than relying on the browser default', () => {
+  /**
+   * **Horizontally**, and that is the whole rule — a modal may sit wherever it
+   * likes vertically, but nothing should ever open against the left edge.
+   *
+   * Written as "auto on both sides" rather than as the literal class `m-auto`,
+   * which is what it said first. The search modal then moved to sit high on the
+   * page and took `mx-auto mb-auto mt-[10vh]` — correctly centred, and the test
+   * failed anyway, because it was checking a spelling rather than the property.
+   */
+  test('centres itself across the window, rather than relying on the browser', () => {
     for (const { file, classes } of modalClasses) {
-      expect(classes, `${file} opens against the left edge`).toContain('m-auto')
+      const centred = /\bm-auto\b/.test(classes) || /\bmx-auto\b/.test(classes)
+      expect(centred, `${file} opens against the left edge`).toBe(true)
+    }
+  })
+
+  /**
+   * A modal that pins its top has given up `m-auto`, and preflight's zero is
+   * what the other margins fall back to — so the bottom has to be named or the
+   * dialog stretches to the foot of the window instead of taking the height of
+   * what is in it.
+   */
+  test('and a modal that pins its top names its bottom too', () => {
+    for (const { file, classes } of modalClasses) {
+      if (!/\bmt-\[/.test(classes)) continue
+      expect(classes, `${file} pins its top and will stretch downward`).toMatch(/\bmb-auto\b/)
     }
   })
 
