@@ -159,6 +159,35 @@ export const SHEET = `overflow-hidden ${SHEET_SURFACE}`
 export const WELL = 'bg-neutral-50'
 
 /**
+ * The floor under the group page's working area: 70% of the viewport.
+ *
+ * Asked for on 14 September. The centre column holds a tab strip and whatever
+ * the active tab has, and some tabs have very little — a group with two assets
+ * left a card barely taller than its own heading, sitting beside a file-notes
+ * column three times its height. A working area that resizes to whatever
+ * happens to be in it reads as an empty page rather than as a page with room.
+ *
+ * It also stops the height JUMPING between tabs, which is the part a reader
+ * feels without being able to name: Accounts is tall, Goals is a placeholder,
+ * and switching between them used to move everything below the card.
+ *
+ * **It belongs on the PANEL, not on the card.** A grounded panel carries the
+ * grey well and cancels the card's bottom padding to reach its edge; a minimum
+ * on the card would leave the well at its content height with a white band
+ * below it, which looks like a rendering fault rather than like space. Putting
+ * the floor on the panel makes the well itself the thing that is 70vh.
+ *
+ * `vh` rather than `dvh` on purpose: this is a floor, and `dvh` changes as a
+ * mobile browser's address bar hides, which would reflow the page mid-scroll
+ * for no benefit to a MINIMUM.
+ *
+ * A token rather than a number passed in, because Tailwind scans source text —
+ * a constructed `min-h-[${n}vh]` would never be generated. Same rule as the
+ * gutter steps in `Tabs`.
+ */
+export const WORKING_AREA = 'min-h-[70vh]'
+
+/**
  * A dashed, quiet block standing where a component will go, saying what.
  *
  * Used on the group page where no group is visible, and across the workflow

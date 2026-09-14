@@ -134,7 +134,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const { default: GroupDetailPage } = await import('@/app/(shell)/groups/[id]/page')
-const { BALANCE_SPLIT, TAB_SPLIT } = await import('@/components/ui')
+const { BALANCE_SPLIT, TAB_SPLIT, WELL, WORKING_AREA } = await import('@/components/ui')
 
 beforeEach(() => {
   balance = BALANCE
@@ -467,6 +467,45 @@ describe('the Assets + Liabilities tab', () => {
     expect(offered).toContain('Mercer Street')
     expect(offered).toContain('Everyday account')
     expect(offered).not.toContain('Aardvark Block')
+  })
+
+  /**
+   * **The middle column keeps a working area**, asked for on 14 September: a
+   * group with two assets left the centre card barely taller than its own
+   * heading, beside a file-notes column three times its height.
+   *
+   * Asserted on the real page and across more than one tab, because the floor
+   * is only worth having if it is the same on all of them — a floor on the tall
+   * tab alone would produce the jump it exists to remove.
+   */
+  test('every tab panel has a floor of 70% of the viewport, carrying the grey ground', async () => {
+    render(await GroupDetailPage({ params: Promise.resolve({ id: 'g1' }) }))
+    /* Named, not swept up by role: the member panel on this same page has tabs
+       of its own, and those deliberately DO NOT take the floor — they fill a
+       fixed-height slide-out, where a 70vh minimum would push the strip off the
+       top. Listing the ids also fails if a tab is renamed without a thought for
+       this. */
+    const ids = ['workflows', 'accounts', 'assets-liabilities', 'goals']
+    for (const id of ids) {
+      const p = document.getElementById(`panel-${id}`)
+      expect(p, `no panel-${id}`).toBeTruthy()
+      expect(p!.className, id).toContain(WORKING_AREA)
+      // Same box as the well, or the grey stops short of the card's edge.
+      expect(p!.className, id).toContain(WELL)
+    }
+
+    /* And the member panel's tabs are untouched — the floor is the middle
+       column's, not every tab strip's in the app. */
+    const member = document.getElementById('panel-personal')
+    expect(member, 'the member panel no longer renders, so this proves nothing').toBeTruthy()
+    expect(member!.className).not.toContain(WORKING_AREA)
+  })
+
+  /* The figure itself, so a silent change to 40% fails here rather than
+     quietly re-laying the page. Changing it deliberately means changing this
+     line, which is the intent. */
+  test('and that floor is 70vh, not some other fraction', () => {
+    expect(WORKING_AREA).toBe('min-h-[70vh]')
   })
 
   test('with nothing recorded the tab still offers both sides', async () => {

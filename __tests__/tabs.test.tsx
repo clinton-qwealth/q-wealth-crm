@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Tabs } from '@/components/tabs'
+import { WELL, WORKING_AREA } from '@/components/ui'
 
 const items = [
   { id: 'one', label: 'Workflows', panel: <p>workflow content</p> },
@@ -210,6 +211,62 @@ describe('Tabs', () => {
         )
         expect(panel(container).className, `gutter ${gutter}`).toContain(cls)
         unmount()
+      }
+    })
+  })
+
+  /**
+   * `minPanel` — a floor under the panel's height, added 14 September so the
+   * group page's middle column keeps a working area whatever tab is open.
+   */
+  describe('the panel floor', () => {
+    const panels = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('[role="tabpanel"]')) as HTMLElement[]
+
+    /**
+     * **On every panel, not only the open one.** The floor exists so the
+     * container does not change height as the reader moves between tabs, and
+     * one tall panel among short ones would produce exactly the jump it is
+     * meant to remove.
+     */
+    test('applies to every panel, so the height does not jump between tabs', () => {
+      const { container } = render(<Tabs items={items} label="s" minPanel={WORKING_AREA} />)
+      expect(panels(container)).toHaveLength(3)
+      for (const p of panels(container)) expect(p.className).toContain(WORKING_AREA)
+    })
+
+    test('and is absent unless a caller asks for it', () => {
+      const { container } = render(<Tabs items={items} label="s" />)
+      for (const p of panels(container)) expect(p.className).not.toContain('min-h-')
+    })
+
+    /**
+     * **The floor and the grey well are the same box.** A grounded panel
+     * carries the well and cancels the card's bottom padding to reach its
+     * edge; if the height were applied to some outer element instead, the well
+     * would stop at its content and leave a white band below it — which reads
+     * as a rendering fault, not as space.
+     */
+    test('lands on the same element as the ground, so the well fills it', () => {
+      const { container } = render(
+        <Tabs items={items} label="s" ground minPanel={WORKING_AREA} />,
+      )
+      for (const p of panels(container)) {
+        expect(p.className).toContain(WELL)
+        expect(p.className).toContain(WORKING_AREA)
+      }
+    })
+
+    /* Under `fill` the panel is already stretching to a container with its own
+       height, and a floor on top of that would push the strip off the top of a
+       fixed-height box — the member panel's case. */
+    test('a filling panel ignores it, since it is already stretching', () => {
+      const { container } = render(
+        <Tabs items={items} label="s" fill minPanel={WORKING_AREA} />,
+      )
+      for (const p of panels(container)) {
+        expect(p.className).toContain('flex-1')
+        expect(p.className).not.toContain(WORKING_AREA)
       }
     })
   })

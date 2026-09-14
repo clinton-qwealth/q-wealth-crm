@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, owedMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT } from '@/components/ui'
+import { accountMoney, owedMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
 import { balanceTotals, ITEM_LIVE, ITEM_TYPE_LABEL } from '@/lib/balance-sheet'
@@ -555,6 +555,10 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
         <Card>
           <Tabs
             ground
+            /* A floor under the working area, so a quiet tab does not collapse
+               the middle column beside a tall file-notes list, and so the page
+               does not jump as tabs are switched. See `WORKING_AREA`. */
+            minPanel={WORKING_AREA}
             label="Group detail"
             items={[
               {

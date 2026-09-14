@@ -29,6 +29,7 @@ export function Tabs({
   label,
   fill = false,
   gutter = 4,
+  minPanel = '',
   flushTop = true,
   alignFirst = false,
   bleed = true,
@@ -56,6 +57,20 @@ export function Tabs({
    * means adding it in four places below rather than one.
    */
   gutter?: 4 | 5 | 6 | 8
+  /**
+   * A floor under every panel's height — pass `WORKING_AREA` from `ui.tsx`.
+   *
+   * On EVERY panel, not just the tall ones: the point is that the container
+   * does not change height as the reader moves between tabs, and a floor
+   * applied to one panel would do the opposite of that.
+   *
+   * A class string rather than a number because Tailwind scans source text, so
+   * the value has to exist literally somewhere — which is why it lives in
+   * `ui.tsx` as a named token and arrives here whole. Empty by default: a tab
+   * strip inside a slide-out panel or a narrow column has no business claiming
+   * a share of the viewport.
+   */
+  minPanel?: string
   /**
    * Pull the strip up into the container's top padding, so it caps a card.
    * False when something sits above it — in a panel with a header, the negative
@@ -303,6 +318,11 @@ export function Tabs({
               ? 'min-h-0 flex-1 overflow-y-auto pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20'
               : 'pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand/20',
             panelGround,
+            /* Last, so the ground it applies to is already decided — the floor
+               and the well have to be the same box or the grey stops short.
+               Ignored under `fill`, where the panel is already stretching to a
+               container that has its own height. */
+            fill ? '' : minPanel,
           ].join(' ')}
         >
           {opened.includes(tab.id) ? tab.panel : null}
