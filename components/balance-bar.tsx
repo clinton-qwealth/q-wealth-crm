@@ -12,49 +12,62 @@ import { accountMoney } from './ui'
  *
  * ## The colours, and why the join is marked
  *
- * Blue and red were asked for, and they are a good pair here: unlike red and
- * green they stay apart under the common forms of colour blindness. What they
- * do NOT have is a difference in LIGHTNESS — flat blue-600 and red-600 measure
- * 5.17:1 and 4.83:1 against white, which is **1.07:1 against each other**. In
- * greyscale (a printed advice document, achromatopsia) the bar was one solid
- * block with no join.
+ * **Soft tints, the same family the balance-sheet tiles wear** — asked for on
+ * 14 September after saturated blue and red read as too bright beside the rest
+ * of the page. The tiles are `bg-red-50` with a `red-700` glyph; these ramp
+ * from 100 to 400, which is the closest a FILLED area can come to that and
+ * still be seen at all.
  *
- * The gradients, asked for on 14 September, fix that as a side effect and are
- * why the ramps run the way they do. **Each side runs light to dark, left to
- * right, so the join is where the darkest blue meets the lightest red** —
- * 1.83:1 rather than 1.07:1. Reversing either ramp would put dark against dark
- * and give the bar its old problem back, which is the one thing to know before
- * changing these.
+ * **The ramps point inward: each side is palest at the bar's outer edge and
+ * strongest where the two meet.** That is the opposite of the usual stacked
+ * bar and it is deliberate — the join is the only thing on the bar that encodes
+ * the ratio, so the paint is heaviest exactly there and fades away from it.
  *
- * Every stop clears 3:1 against the white card, the same non-text floor the mix
- * ring's palette holds itself to (see `--mix-1` in globals.css): sky-600 4.10,
- * blue-700 6.70, rose-500 3.67, red-700 6.47. That rules out the prettier light
- * ends — sky-500, rose-400, orange-500 and cyan-500 all measure under 3:1 and
- * would fade into the card.
+ * ## What this costs, stated plainly
+ *
+ * blue-400 and red-400 measure 2.54:1 and 2.77:1 against the white card, and
+ * the pale ends measure 1.22:1. That is **under the 3:1 non-text floor** (WCAG
+ * 1.4.11) that the mix ring's palette holds itself to — a deliberate trade for
+ * the softer look, not an oversight.
+ *
+ * Two things carry the reading instead, and neither may be removed without
+ * putting the colours back up:
+ *
+ *   1. **The percentages are printed above the bar.** They are the fact; the
+ *      bar is the picture. This is what keeps the component compliant with
+ *      1.4.1 (Use of Colour) regardless of the fill.
+ *   2. **The join is drawn, not implied.** blue-400 against red-400 is 1.09:1 —
+ *      in greyscale, or to a viewer with no colour vision, the two segments are
+ *      the same tone. The white left border on the liability segment measures
+ *      2.54:1 and 2.77:1 against the two sides it separates, so the boundary
+ *      survives when the hues do not. It sits INSIDE the segment's box, so it
+ *      marks the join without taking a pixel off either proportion.
+ *
+ * The track behind them carries a hairline ring for the same reason: with a
+ * fill this pale, the bar's own extent needs an edge or it appears to start
+ * partway in.
  *
  * Neither ramp borrows indigo, which globals.css reserves for the investment
  * mix ring as "the only family on this page with no job".
- *
- * The join is still DRAWN as well: the liability segment carries a white left
- * border, inside its own box, so it marks the boundary without taking a pixel
- * off either proportion. Belt and braces, and it costs nothing.
- *
- * And the percentages are printed above the bar. Colour is never the only thing
- * carrying the reading (WCAG 1.4.1) — the bar is the picture, the labels are
- * the fact.
  */
 
 /*
- * The two fills, named once so the legend chip and the segment it explains are
- * painted from the same string and cannot drift apart.
+ * The two fills and the two legend chips, named once so a chip and the segment
+ * it explains cannot drift into different blues.
+ *
+ * A chip takes the ramp's STRONG stop rather than the ramp itself: at ten
+ * pixels square a gradient that begins at blue-100 is a pale smudge, and the
+ * chip's whole job is to say which colour this row is about.
  *
  * `bg-linear-to-r` is Tailwind v4's name for what v3 called `bg-gradient-to-r`.
  * Written out in full rather than assembled, because Tailwind scans source text
  * — a constructed class would never be generated, and the failure mode is a
  * segment with no background at all.
  */
-export const ASSET_FILL = 'bg-linear-to-r from-sky-600 to-blue-700'
-export const LIABILITY_FILL = 'bg-linear-to-r from-rose-500 to-red-700'
+export const ASSET_FILL = 'bg-linear-to-r from-blue-100 to-blue-400'
+export const ASSET_CHIP = 'bg-blue-400'
+export const LIABILITY_FILL = 'bg-linear-to-r from-red-400 to-red-100'
+export const LIABILITY_CHIP = 'bg-red-400'
 export function BalanceBar({ totals }: { totals: BalanceTotals }) {
   const split = balanceSplit(totals)
   if (!split) return null
@@ -75,7 +88,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
           new arrangement to work out. */}
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="flex min-w-0 items-center gap-1.5">
-          <Swatch className={ASSET_FILL} />
+          <Swatch className={ASSET_CHIP} />
           <span className="truncate text-neutral-500">Assets</span>
           <span className="font-semibold tabular-nums text-neutral-900">{split.assets.text}</span>
         </span>
@@ -84,7 +97,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
             {split.liabilities.text}
           </span>
           <span className="truncate text-neutral-500">Liabilities</span>
-          <Swatch className={LIABILITY_FILL} />
+          <Swatch className={LIABILITY_CHIP} />
         </span>
       </div>
 
@@ -94,7 +107,7 @@ export function BalanceBar({ totals }: { totals: BalanceTotals }) {
       <div
         role="img"
         aria-label={label}
-        className="mt-2 flex h-7 overflow-hidden rounded-md bg-neutral-100"
+        className="mt-2 flex h-5 overflow-hidden rounded-md bg-neutral-100 ring-1 ring-inset ring-neutral-200"
       >
         {/* Rendered only when there is something to draw. A zero side with a
             minimum width would put six pixels of red on a group that owes

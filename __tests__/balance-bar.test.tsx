@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import { render } from '@testing-library/react'
-import { ASSET_FILL, BalanceBar, LIABILITY_FILL } from '@/components/balance-bar'
+import {
+  ASSET_CHIP,
+  ASSET_FILL,
+  BalanceBar,
+  LIABILITY_CHIP,
+  LIABILITY_FILL,
+} from '@/components/balance-bar'
 import type { BalanceTotals } from '@/lib/balance-sheet'
 
 /**
@@ -43,17 +49,33 @@ describe('the balance bar', () => {
   })
 
   /**
-   * **The ramps run light to dark, so the join is the darkest blue against the
-   * lightest red** — 1.83:1, where two flat mid-tones measured 1.07:1 and the
-   * bar read as one block in greyscale. Reversing either ramp would put dark
-   * against dark and give that problem back, which no other assertion here
-   * would notice.
+   * **The ramps point inward: palest at the bar's outer edges, strongest where
+   * the two meet.** The join is the only thing on the bar that encodes the
+   * ratio, so the paint is heaviest exactly there. Flipping either ramp would
+   * put the pale ends together at the join and leave the boundary — the one
+   * place a reader looks — as the faintest part of the picture.
    */
-  test('each side ramps light to dark, so the two meet at their greatest difference', () => {
-    expect(ASSET_FILL).toContain('from-sky-600')
-    expect(ASSET_FILL).toContain('to-blue-700')
-    expect(LIABILITY_FILL).toContain('from-rose-500')
-    expect(LIABILITY_FILL).toContain('to-red-700')
+  test('each side is palest at its outer edge and strongest at the join', () => {
+    // Assets run left to right: pale at the left edge, strong at the join.
+    expect(ASSET_FILL).toContain('from-blue-100')
+    expect(ASSET_FILL).toContain('to-blue-400')
+    // Liabilities run the other way: strong at the join, pale at the right edge.
+    expect(LIABILITY_FILL).toContain('from-red-400')
+    expect(LIABILITY_FILL).toContain('to-red-100')
+  })
+
+  /**
+   * The tints are the tiles' family, asked for on 14 September — 100 through
+   * 400, not the 500-700 saturated steps this started with. Pinned as a RANGE
+   * rather than by naming the stops twice: what matters is that nothing here
+   * creeps back into the bright end of the palette.
+   */
+  test('both ramps stay in the soft end of the palette', () => {
+    for (const fill of [ASSET_FILL, LIABILITY_FILL, ASSET_CHIP, LIABILITY_CHIP]) {
+      const steps = [...fill.matchAll(/-(\d{3})\b/g)].map((m) => Number(m[1]))
+      expect(steps.length).toBeGreaterThan(0)
+      for (const step of steps) expect(step, fill).toBeLessThanOrEqual(400)
+    }
   })
 
   /**
@@ -69,14 +91,33 @@ describe('the balance bar', () => {
     }
   })
 
-  /** The legend chip is painted from the same string as the segment it
-   *  explains, so the two cannot drift into different blues. */
-  test('each legend chip is the same paint as its segment', () => {
+  /**
+   * A chip takes its ramp's STRONG stop — at ten pixels square a gradient
+   * starting at blue-100 is a pale smudge — but it has to be a stop that ramp
+   * actually contains, or the legend explains a colour the bar never draws.
+   */
+  test('each legend chip is a colour its own segment is painted in', () => {
     const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
     const chips = Array.from(container.querySelectorAll('span[aria-hidden="true"]'))
     expect(chips).toHaveLength(2)
-    expect(chips[0].className).toContain(ASSET_FILL)
-    expect(chips[1].className).toContain(LIABILITY_FILL)
+    expect(chips[0].className).toContain(ASSET_CHIP)
+    expect(chips[1].className).toContain(LIABILITY_CHIP)
+
+    // The chip's colour is one the ramp beside it is actually made of.
+    expect(ASSET_FILL).toContain(ASSET_CHIP.replace('bg-', ''))
+    expect(LIABILITY_FILL).toContain(LIABILITY_CHIP.replace('bg-', ''))
+  })
+
+  /**
+   * With a fill this pale the bar's own extent needs an edge, or it appears to
+   * start partway in: blue-100 measures 1.22:1 against the white card behind
+   * it. The track's ring is what says where the bar begins and ends.
+   */
+  test('the track carries an edge, since the fill is too pale to give it one', () => {
+    const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
+    const picture = bar(container).picture!
+    expect(picture.className).toContain('ring-1')
+    expect(picture.className).toContain('ring-inset')
   })
 
   /**
@@ -146,10 +187,13 @@ describe('the balance bar', () => {
     expect(container.innerHTML).toBe('')
   })
 
-  /* Thick, asked for by name. The height is the one dimension a reader
-     specified, so a change to it should be deliberate. */
-  test('the bar is thick', () => {
+  /* The height is the one dimension a reader has specified twice — thick on
+     sight, then 30% thinner — so a change to it should be deliberate. 28px
+     less 30% is 19.6, and h-5 is the 20px step. */
+  test('the bar is 20px tall', () => {
     const { container } = render(<BalanceBar totals={totals(750_000, 250_000)} />)
-    expect(bar(container).picture!.className).toContain('h-7')
+    const cls = bar(container).picture!.className
+    expect(cls).toContain('h-5')
+    expect(cls).not.toContain('h-7')
   })
 })

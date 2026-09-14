@@ -283,7 +283,7 @@ describe('the Assets + Liabilities tab', () => {
          own ground at one end. */
       const assets = bar.querySelector('[data-slot="bar-assets"]') as HTMLElement
       const liabilities = bar.querySelector('[data-slot="bar-liabilities"]') as HTMLElement
-      expect(assets.className).toContain('from-sky-600')
+      expect(assets.className).toContain('from-blue-100')
       expect(parseFloat(assets.style.flexBasis)).toBeCloseTo(69.7987, 3)
       expect(
         parseFloat(assets.style.flexBasis) + parseFloat(liabilities.style.flexBasis),
