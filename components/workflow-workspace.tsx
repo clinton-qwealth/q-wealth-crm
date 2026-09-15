@@ -131,6 +131,7 @@ export function WorkflowWorkspace({
           id={w.id}
           ownerStaffId={w.owner_staff_id}
           ownerName={w.owner_name}
+          groupName={w.group_name}
           createdAt={w.created_at}
           dueAt={w.due_at}
           description={w.description}

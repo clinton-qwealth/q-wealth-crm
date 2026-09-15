@@ -20,7 +20,7 @@ import {
   type WorkflowTask,
 } from '@/lib/workflow-board'
 import { dueState, formatCalendarDate, formatNoteDate, formatNoteDateTime, type DueState } from '@/lib/note-date'
-import { Pill, QUIET_ACTION, SHEET_SURFACE, type PillTone } from './ui'
+import { PANEL_GUTTER, Pill, QUIET_ACTION, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
 import { Tabs } from './tabs'
 import { ActivityFeed } from './activity-feed'
@@ -497,7 +497,7 @@ function TaskPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
+      <header className={`flex shrink-0 items-start justify-between gap-3 ${PANEL_GUTTER} pb-5 pt-8`}>
         <div className="min-w-0">
           {/* The eyebrow says WHERE the task is, not what it is. It read "Task"
               until 9 September — a word the drawer's shape already said — while
@@ -569,7 +569,7 @@ function TaskPanel({
           own bottom border just above the tab strip. Measured again at 55vh:
           the region takes the 384 it needs, does not scroll, and the box's
           bottom edge is visible. */}
-      <div className="max-h-[55vh] shrink-0 overflow-y-auto px-5 pb-4">
+      <div className={`max-h-[55vh] shrink-0 overflow-y-auto ${PANEL_GUTTER} pb-5`}>
         <FieldBox
           title="Details"
           action={saveWorkflowTaskDetails}
@@ -677,7 +677,7 @@ function TaskPanel({
 
       <Tabs
         fill
-        gutter={5}
+        gutter={8}
         flushTop={false}
         bleed={false}
         alignFirst
@@ -695,25 +695,27 @@ function TaskPanel({
                  centres it, so the slack on a wide panel becomes even margins
                  instead of an over-long line.
 
-                 `px-5` never comes off: it is the FLOOR for a narrow panel,
-                 where the cap is wider than the space available and therefore
-                 does nothing at all. Padding alone would take the same bite at
-                 every size — cramping the 32rem panel to fix the 42rem one —
-                 which is why both levers are here rather than one.
+                 The gutter never comes off: it is the FLOOR for a narrow
+                 panel, where the cap is wider than the space available and
+                 therefore does nothing at all. Padding alone would take the
+                 same bite at every size — cramping the 32rem panel to fix the
+                 42rem one — which is why both levers are here rather than one.
 
-                 px-5, the panel's own gutter, not px-6. At 6 the composer's
-                 left border sat 4px inside the Details box's directly above it
-                 — and 4px is not an inset, it is a near-miss, which reads as a
-                 mistake. Now the header text, the box border, the first tab
-                 label, the composer border and the other two tabs' content all
-                 share one left edge at 20px.
+                 `PANEL_GUTTER`, the token this panel shares with the member
+                 panel, rather than a number chosen here. It was 20px until
+                 15 September and is 32px now, and the reason it is a token is
+                 the reason it moved: the two panels are the same kind of
+                 surface and were a third of a gutter apart. The header text,
+                 the box border, the first tab label, the composer border and
+                 the other two tabs' content all share one left edge, and now
+                 so does every one of those on an individual's panel.
 
                  They sit on SEPARATE elements deliberately. Tailwind's box
                  model is border-box, so `max-w-xl px-5` on one element would
                  cap the whole thing at 36rem and leave the padding eating into
                  the measure rather than sitting outside it. The column is a
                  scale step inside the panel's: xl in 2xl. */
-              <div className="px-5 pb-6">
+              <div className={`${PANEL_GUTTER} pb-8`}>
                 <div className="mx-auto w-full max-w-xl">
                   {/* The feed replaced the comment field on 8 September. A post
                       is what a comment was trying to be — who said what, when —
@@ -736,7 +738,7 @@ function TaskPanel({
             id: 'history',
             label: 'History',
             panel: (
-              <div className="px-5 pb-6">
+              <div className={`${PANEL_GUTTER} pb-8`}>
                 <TaskHistory
                   actions={actions.filter((a) => a.task_id === task.id)}
                   viewerId={viewer.id}
@@ -748,7 +750,7 @@ function TaskPanel({
             id: 'tools',
             label: 'Tools and Actions',
             panel: (
-              <div className="px-5 pb-6">
+              <div className={`${PANEL_GUTTER} pb-8`}>
                 <TaskTools onEmail={() => setEmailOpen(true)} />
               </div>
             ),
@@ -896,14 +898,18 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
           The numbers are the reason, and they are the panel's, not the page's.
 
           This panel is 40% of the window between a 32rem floor and a 42rem
-          cap, and the tab's gutter takes 40px, so the row to divide is 472px
-          at most window sizes, 536 at 1440 and 632 once the cap is reached.
-          Three across is therefore 149px, 171px and 203px. FOUR across would
-          be 135px even at the widest Tailwind breakpoint — narrower than three
-          across is at an ordinary window — so a fourth column would make every
-          button tighter than the common case rather than using room that is
-          there. It was asked for as "three to four"; three is the half of that
-          range this panel can actually hold.
+          cap, and `PANEL_GUTTER` takes 64px, so the row to divide is 448px at
+          most window sizes, 550 at `2xl` and 608 once the cap is reached.
+          Three across is therefore 144px, 178px and 197px. FOUR across would
+          be 132px at `2xl`, which is the widest breakpoint a step could be
+          keyed on — narrower than three across is at an ordinary window — so a
+          fourth column would make every button tighter than the common case
+          rather than using room that is there. It was asked for as "three to
+          four"; three is the half of that range this panel can hold.
+
+          These figures moved on 15 September, when the panel's gutter went
+          from 20px to 32px to match an individual's panel: 12px came off each
+          column and the conclusion did not change.
 
           A grid rather than the wrapping flex of fixed-width cells this
           replaced. That flex existed so the squares packed left and left their
@@ -962,7 +968,7 @@ function ToolTile({ tool }: { tool: Tool }) {
       <Glyph className="h-[18px] w-[18px] shrink-0" />
       {/* Clamped, not truncated: the longest of these is a sentence, and a
           name you cannot read is the one thing a launcher must not do. Two
-          lines is what 149px holds — "How long will my money last" is the one
+          lines is what 144px holds — "How long will my money last" is the one
           that needs both. */}
       <span className="line-clamp-2 text-xs font-medium leading-snug">{name}</span>
     </button>

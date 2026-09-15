@@ -297,26 +297,65 @@ describe('the workflow detail page', () => {
     expect(bar.compareDocumentPosition(fields) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  test('owner on its own row, the two dates side by side beneath, description last', () => {
+  /**
+   * **The client group sits directly under the owner**, added 15 September, and
+   * the order is the assertion: those two name the people on either side of the
+   * work — who is running it, and whose it is — so they belong together and
+   * above the dates.
+   *
+   * Both take a full row. Two across gives a cell about 120px at this column's
+   * width, which is why the owner has always spanned: "Clinton Hatcher" is
+   * about 105px before its initials tile, and "Testsmith Household" is longer
+   * still. The dates share a row because a rendered date is about 66px and
+   * does not vary.
+   */
+  test('owner then client group, each on its own row, the dates paired, description last', () => {
     const { container } = show()
     const grid = container.querySelector('form dl')!
     const fields = [...grid.children] as HTMLElement[]
     expect(fields.map((f) => f.querySelector('dt')!.textContent)).toEqual([
-      'Owner',
+      'Workflow owner',
+      'Client group',
       'Date started',
       'Due date',
       'Description',
     ])
-    /* Owner and description take the full row; the dates share one.
+    /* Owner, group and description take the full row; the dates share one.
        `col-span-full`, not `col-span-2`: the shared Field crosses whatever
        grid it lands in, because the task panel's is three across. */
     expect(fields[0].className).toContain('col-span-full')
-    expect(fields[1].className).not.toContain('col-span-full')
+    expect(fields[1].className).toContain('col-span-full')
     expect(fields[2].className).not.toContain('col-span-full')
-    expect(fields[3].className).toContain('col-span-full')
+    expect(fields[3].className).not.toContain('col-span-full')
+    expect(fields[4].className).toContain('col-span-full')
     expect(grid.textContent).toContain('Sarah Chen')
+    expect(grid.textContent).toContain('Testsmith Household')
     expect(grid.textContent).toContain('6 Jul 2026')
     expect(grid.textContent).toContain('30 Sep 2026')
+  })
+
+  /**
+   * **Two labelled fields, not a name with a household under it.**
+   *
+   * A staff member's name with a client group's directly beneath and no label
+   * between them reads as though the adviser belongs to the client. The labels
+   * are what keep the two apart — which is also why "Owner" became "Workflow
+   * owner" on the same day, rather than staying a word that could mean either.
+   */
+  test('the owner and the group are separately labelled, so neither reads as the other’s', () => {
+    const { container } = show()
+    const labels = [...container.querySelectorAll('form dl dt')].map((d) => d.textContent)
+
+    expect(labels).toContain('Workflow owner')
+    expect(labels).toContain('Client group')
+    // The bare word is gone: it is the one that could mean either of them.
+    expect(labels).not.toContain('Owner')
+
+    // And each value sits under its own label rather than sharing one.
+    const groupLabel = [...container.querySelectorAll('form dl dt')].find(
+      (d) => d.textContent === 'Client group',
+    )!
+    expect(groupLabel.nextElementSibling!.textContent).toBe('Testsmith Household')
   })
 
   test('the owner carries an initials tile, the site’s mark for a person; unassigned carries none', () => {
@@ -361,8 +400,9 @@ describe('the workflow detail page', () => {
 
   test('no owner reads "Unassigned" — the board’s word for it — not a dash', () => {
     const { container } = show({ ...card, owner_name: null, owner_staff_id: null })
-    const owner = [...container.querySelectorAll('dt')].find((d) => d.textContent === 'Owner')!
-      .nextElementSibling as HTMLElement
+    const owner = [...container.querySelectorAll('dt')].find(
+      (d) => d.textContent === 'Workflow owner',
+    )!.nextElementSibling as HTMLElement
     expect(owner.textContent).toBe('Unassigned')
     // Quieter than a real name, as an absent value should be.
     expect(owner.className).toContain('text-neutral-400')
@@ -534,7 +574,7 @@ describe('the workflow detail page', () => {
     const box = screen.getByRole('button', { name: 'Edit details' }).closest('form')! as HTMLElement
     await user.click(within(box).getByRole('button', { name: 'Edit details' }))
 
-    const owner = within(box).getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
+    const owner = within(box).getByRole<HTMLSelectElement>('combobox', { name: 'Workflow owner' })
     expect(owner.value).toBe('s1')
     expect([...owner.options].map((o) => o.textContent)).toEqual([
       'Unassigned',
@@ -549,6 +589,13 @@ describe('the workflow detail page', () => {
     // property of the work, so there is no input for it.
     expect(within(box).queryByLabelText('Date started')).toBeNull()
     expect(within(box).getByText('6 Jul 2026')).toBeTruthy()
+
+    /* And neither is the client group. `set_workflow_details()` does not accept
+       it, so moving work to a different client must not travel on this save —
+       but it is still SHOWN, because a box that hid it while editing would look
+       like it holds fewer facts than it does. */
+    expect(within(box).queryByLabelText('Client group')).toBeNull()
+    expect(within(box).getByText('Testsmith Household')).toBeTruthy()
   })
 
   test('saving sends the three editable fields and closes the section', async () => {
@@ -558,7 +605,7 @@ describe('the workflow detail page', () => {
     await user.click(within(box).getByRole('button', { name: 'Edit details' }))
     await user.clear(within(box).getByLabelText('Description'))
     await user.type(within(box).getByLabelText('Description'), 'Rewritten.')
-    await user.selectOptions(within(box).getByRole('combobox', { name: 'Owner' }), 's2')
+    await user.selectOptions(within(box).getByRole('combobox', { name: 'Workflow owner' }), 's2')
     await user.click(within(box).getByRole('button', { name: 'Save' }))
 
     const sent = vi.mocked(actions.saveWorkflowDetails).mock.calls.at(-1)![1]
@@ -585,7 +632,7 @@ describe('the workflow detail page', () => {
     const user = userEvent.setup()
     show({ ...card, owner_staff_id: 'gone', owner_name: 'Departed Adviser' })
     await user.click(screen.getByRole('button', { name: 'Edit details' }))
-    const owner = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Owner' })
+    const owner = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Workflow owner' })
     expect(owner.value).toBe('gone')
     expect([...owner.options].map((o) => o.textContent)).toContain('Departed Adviser')
   })

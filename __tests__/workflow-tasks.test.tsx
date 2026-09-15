@@ -1,5 +1,6 @@
 import type { TaskAction, WorkflowTask } from '@/lib/workflow-board'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { PANEL_GUTTER } from '@/components/ui'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
@@ -480,6 +481,47 @@ describe('the task panel', () => {
   const boxOf = (panel: HTMLElement, name: string) =>
     within(panel).getByRole('button', { name }).closest('form')! as HTMLElement
 
+  /**
+   * **This panel sits on the same gutter as an individual's**, asked for on
+   * 15 September as "the same padding, I want to keep it uniform". It was 20px
+   * here and 32px there — a third of a gutter apart on two surfaces that are
+   * the same kind of thing: a native dialog over the workspace, with a header,
+   * a tabbed body and sometimes a footer.
+   *
+   * Both now take `PANEL_GUTTER` rather than each writing a number, so they
+   * cannot drift again by construction — and this asserts the token actually
+   * reached every section, because eight independent class lists across two
+   * files is eight chances to change one and miss seven.
+   *
+   * The equivalent test on the member panel is _"the header, the body and the
+   * footer share one gutter"_, written the same way for the same reason.
+   */
+  test('every section sits on the shared panel gutter', async () => {
+    const { user, panel } = await open()
+    await user.click(within(panel).getByRole('tab', { name: 'Tools and Actions' }))
+
+    const gutters = ['header', '[role="tabpanel"]:not([hidden]) > div']
+      .map((sel) => panel.querySelector(sel))
+      .map((el) => (el?.getAttribute('class') ?? '').match(/\bpx-\d+\b/)?.[0])
+
+    expect(gutters, 'a section carries no horizontal padding at all').not.toContain(undefined)
+    expect(new Set(gutters), 'the sections are on different left edges').toEqual(
+      new Set([PANEL_GUTTER]),
+    )
+  })
+
+  /* The strip is padded by its own PROP, not by the token — `Tabs` takes a
+     number, because Tailwind scans source text and a constructed `-mx-${n}`
+     would never be generated. So it is the one place that can go stale while
+     everything around it looks right, which is what this covers. At gutter 8
+     with `alignFirst`, the left gives back the button's own 12px. */
+  test('and the tab strip is padded to match, so the first label lines up', async () => {
+    const { panel } = await open()
+    const strip = panel.querySelector('[role="tablist"]')!
+    expect(strip.className).toContain('pr-8')
+    expect(strip.className).toContain('pl-5')
+  })
+
   test('three tabs — Activity, History, Tools and Actions — with Activity showing first', async () => {
     const { panel } = await open()
     expect(within(panel).getAllByRole('tab').map((t) => t.textContent)).toEqual([
@@ -770,11 +812,13 @@ describe('the task panel', () => {
     /**
      * **Three across, two on a narrow panel — and four deliberately absent.**
      *
-     * The panel is 40% of the window between a 32rem floor and a 42rem cap, so
-     * the row to divide is 472px at most window sizes and 632px at the widest.
-     * Three across is 149–203px; FOUR would be 135px even at `2xl`, narrower
-     * than three is at an ordinary window. So a fourth column would make every
-     * button tighter than the common case rather than using room that is there.
+     * The panel is 40% of the window between a 32rem floor and a 42rem cap and
+     * its gutter is 32px a side, so the row to divide is 448px at most window
+     * sizes and 608px at the widest. Three across is 144–197px; FOUR would be
+     * 132px at `2xl`, the widest breakpoint a step could be keyed on, and so
+     * narrower than three is at an ordinary window. A fourth column would make
+     * every button tighter than the common case rather than using room that is
+     * there.
      *
      * jsdom has no layout engine, so this asserts the mechanism rather than
      * pixels — and it asserts the ABSENCE of a fourth step, because that is the

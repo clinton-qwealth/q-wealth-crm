@@ -156,6 +156,30 @@ export const SHEET = `overflow-hidden ${SHEET_SURFACE}`
  * offered as the alternative (separation by hue rather than tone) and declined
  * to keep the palette in one neutral family.
  */
+/**
+ * The gutter every slide-out panel sits on: 32px.
+ *
+ * **One token because there are two panels and they must not drift.** The
+ * member record panel (an individual) and the task panel (a task) are the same
+ * kind of surface — a native `dialog` over the workspace, a header, a tabbed
+ * body, sometimes a footer — and a reader moving between them reads the second
+ * as the same thing as the first. The member panel was widened 20 → 24 → 32 on
+ * 11 September, a step at a time on sight; the task panel stayed at 20 and the
+ * two were a third of a gutter apart until 15 September, when this was asked
+ * for as "the same padding, I want to keep it uniform".
+ *
+ * It could only drift because nothing held them together: four places in each
+ * panel carry it — the header, each tab's body, the footer, and the tab
+ * strip's own prop — and eight independent class lists is eight chances to
+ * change one and miss seven.
+ *
+ * **The strip is the one place this token cannot reach.** `Tabs` takes its
+ * gutter as a NUMBER, because Tailwind scans source text and a constructed
+ * `-mx-${n}` would never be generated — so `gutter={8}` is written out at each
+ * call site and the tests are what keep it in step with this.
+ */
+export const PANEL_GUTTER = 'px-8'
+
 export const WELL = 'bg-neutral-50'
 
 /**

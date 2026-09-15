@@ -20,7 +20,7 @@ import {
 import type { Address, PersonDetail, Subscription, VerificationEntry } from '@/lib/person'
 import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Tabs } from './tabs'
-import { GroupTile, Pill } from './ui'
+import { GroupTile, PANEL_GUTTER, Pill } from './ui'
 import { useServerState } from './use-server-state'
 import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER, MARITAL_STATUS, maritalLabel } from '@/lib/countries'
 
@@ -1708,7 +1708,7 @@ export function MemberPanel({
           * 40px from the panel's edge.
           */}
         <div className="flex h-full flex-col">
-          <header className="flex shrink-0 items-start justify-between gap-3 px-8 pb-5 pt-8">
+          <header className={`flex shrink-0 items-start justify-between gap-3 ${PANEL_GUTTER} pb-5 pt-8`}>
             <div className="min-w-0">
               <div className="flex items-center gap-2.5">
                 <h2
@@ -1773,7 +1773,7 @@ export function MemberPanel({
                     id: 'personal',
                     label: 'Personal',
                     panel: (
-                      <div className="flex flex-col gap-4 px-8 pb-8">
+                      <div className={`flex flex-col gap-4 ${PANEL_GUTTER} pb-8`}>
                         <EditableSection
                           title="Identity"
                           partyId={person.party_id}
@@ -1954,7 +1954,7 @@ export function MemberPanel({
                     id: 'contact',
                     label: 'Contact',
                     panel: (
-                      <div className="flex flex-col gap-7 px-8 pb-8">
+                      <div className={`flex flex-col gap-7 ${PANEL_GUTTER} pb-8`}>
                         <EditableSection
                           title="Reachable on"
                           partyId={person.party_id}
@@ -2030,7 +2030,7 @@ export function MemberPanel({
                     id: 'compliance',
                     label: 'Compliance',
                     panel: (
-                      <div className="flex flex-col gap-7 px-8 pb-8">
+                      <div className={`flex flex-col gap-7 ${PANEL_GUTTER} pb-8`}>
                         <Section title="Standing with the firm">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Roles" value={person.roles.map((r) => r.role.replace(/_/g, ' ')).join(', ')} />
@@ -2055,7 +2055,7 @@ export function MemberPanel({
                     id: 'estate',
                     label: 'Estate',
                     panel: (
-                      <div className="flex flex-col gap-7 px-8 pb-8">
+                      <div className={`flex flex-col gap-7 ${PANEL_GUTTER} pb-8`}>
                         <Section title="Estate">
                           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                             <Row label="Date of death" value={person.date_of_death} />
@@ -2082,7 +2082,7 @@ export function MemberPanel({
                     id: 'memberships',
                     label: 'Memberships',
                     panel: (
-                      <div className="flex flex-col gap-7 px-8 pb-8">
+                      <div className={`flex flex-col gap-7 ${PANEL_GUTTER} pb-8`}>
                         {/* Boxed like the other tabs' sections, but with no
                             title of its own — "Groups" above a "Group" column
                             header read as the same word twice. */}
@@ -2120,7 +2120,7 @@ export function MemberPanel({
                     id: 'activity',
                     label: 'Activity',
                     panel: (
-                      <div className="flex flex-col gap-7 px-8 pb-8">
+                      <div className={`flex flex-col gap-7 ${PANEL_GUTTER} pb-8`}>
                         <Section title="Identity verification">
                           <VerificationHistory entries={person.verifications} />
                         </Section>
@@ -2153,7 +2153,7 @@ export function MemberPanel({
                 ]}
               />
 
-              <footer className="flex shrink-0 justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
+              <footer className={`flex shrink-0 justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 ${PANEL_GUTTER} py-5`}>
                 <button
                   type="button"
                   onClick={close}
@@ -2167,7 +2167,7 @@ export function MemberPanel({
 
           {mode === 'search' ? (
             <>
-              <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className={`flex-1 overflow-y-auto ${PANEL_GUTTER} py-6`}>
                 <label className="flex flex-col gap-1.5">
                   <span className={LABEL}>Search people already on file</span>
                   <input
@@ -2224,7 +2224,7 @@ export function MemberPanel({
                 ) : null}
               </div>
 
-              <footer className="flex items-center justify-between gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
+              <footer className={`flex items-center justify-between gap-2 border-t border-neutral-100 bg-neutral-50/60 ${PANEL_GUTTER} py-5`}>
                 <button
                   type="button"
                   onClick={() => setMode('create')}
@@ -2251,7 +2251,7 @@ export function MemberPanel({
             >
               <input type="hidden" name="group_id" value={groupId} />
 
-              <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className={`flex-1 overflow-y-auto ${PANEL_GUTTER} py-6`}>
                 <div className="flex flex-col gap-6">
                   <Section title="Identity">
                     <div className="grid grid-cols-6 gap-3">
@@ -2359,7 +2359,7 @@ export function MemberPanel({
                 </div>
               </div>
 
-              <footer className="flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 px-8 py-5">
+              <footer className={`flex justify-end gap-2 border-t border-neutral-100 bg-neutral-50/60 ${PANEL_GUTTER} py-5`}>
                 <button
                   type="button"
                   onClick={close}

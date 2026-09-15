@@ -13,15 +13,19 @@ import { InitialsTile } from './ui'
  * the border, the title, the pencil, Cancel and Save, the "nothing submittable
  * while reading" rule and the close-on-save behaviour all live in one place.
  *
- * Three of the four fields are editable. **Date started is not**, because it is
- * `created_at` — a record of when the row was made, not a property of the work.
- * Editing it would be falsifying the record, so it renders as a value in both
- * modes and the absence of an input is the answer.
+ * Three of the five fields are editable. **Date started is not**, because it
+ * is `created_at` — a record of when the row was made, not a property of the
+ * work. **Nor is the client group**, added 15 September: `workflows.group_id`
+ * is set when the work is created and `set_workflow_details()` does not accept
+ * it, so moving a piece of work to a different client is not a detail
+ * correction and must not travel on this save. Both render as values in either
+ * mode, and the absence of an input is the answer.
  */
 export function WorkflowDetails({
   id,
   ownerStaffId,
   ownerName,
+  groupName,
   createdAt,
   dueAt,
   description,
@@ -30,6 +34,8 @@ export function WorkflowDetails({
   id: string
   ownerStaffId: string | null
   ownerName: string | null
+  /** Whose work this is. Read-only here — see the note above. */
+  groupName: string
   /** A timestamptz — an instant. Rendered in the reader's timezone. */
   createdAt: string
   /** A `date` — a calendar day. Rendered by splitting the string. */
@@ -55,10 +61,24 @@ export function WorkflowDetails({
            "Unassigned", not an em-dash: it is the word the board's filter and
            this box's own picker use for the same state, and unowned work is a
            fact worth naming rather than a gap. The initials tile is the site's
-           mark for a person, so the owner reads as who, not what. */
+           mark for a person, so the owner reads as who, not what.
+
+           **The client group sits directly under the owner**, added
+           15 September, and takes a full row for the same reason the owner
+           does: two across gives a cell about 120px, and "Testsmith Household"
+           does not fit that any more than "Clinton Hatcher" did.
+
+           It is a SEPARATE labelled field rather than a second line under the
+           owner's name, and that is what makes the pair readable: a staff
+           member's name with a household's beneath it and no label between
+           them reads as though the adviser belongs to the client. The labels
+           keep "who is running this" and "whose work it is" apart — and the
+           owner's was renamed from "Owner" to "Workflow owner" the same day
+           for exactly that reason. Sentence case, like the three labels
+           beside it. */
         <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
           <Field
-            label="Owner"
+            label="Workflow owner"
             value={ownerName ?? 'Unassigned'}
             muted={!ownerName}
             span
@@ -70,6 +90,7 @@ export function WorkflowDetails({
               ) : undefined
             }
           />
+          <Field label="Client group" value={groupName} span />
           <Field label="Date started" value={formatNoteDate(createdAt)} />
           <Field label="Due date" value={dueAt ? formatCalendarDate(dueAt) : null} />
           <Field label="Description" value={description} wrap span />
@@ -81,7 +102,7 @@ export function WorkflowDetails({
            used at that width. The read-only view keeps them in one row because
            a rendered date needs only its own text. */
         <div className="flex flex-col gap-3">
-          <EditField label="Owner">
+          <EditField label="Workflow owner">
             <select name="owner_staff_id" defaultValue={ownerStaffId ?? ''} className={FIELD_INPUT}>
               <option value="">Unassigned</option>
               {staff.map((s) => (
@@ -97,6 +118,13 @@ export function WorkflowDetails({
               ) : null}
             </select>
           </EditField>
+
+          {/* Read-only in edit mode, like Date started: the group is not a
+              detail of the work, it is which client the work is for, and
+              `set_workflow_details()` does not accept it. Rendering it without
+              an input is the honest answer — leaving it out entirely would make
+              the box look like it holds fewer facts than it does. */}
+          <ReadonlyField label="Client group" value={groupName} />
 
           <ReadonlyField label="Date started" value={formatNoteDate(createdAt)} />
 
