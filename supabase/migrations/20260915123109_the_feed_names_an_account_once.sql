@@ -21,12 +21,21 @@
 -- ACTIVE is harmless, and the label is built from the fields that actually
 -- identify the account.
 --
--- THE LABEL IS SEEDED EXACTLY ONCE, and the condition is what makes that safe:
--- only while `product_display_name` is still null, which is true before the
--- first feed run for an account and false forever after, because the column is
--- sticky (a provider that stops sending a product name does not clear it). So
--- an adviser who renames the account keeps that name for good — a label the
--- feed rewrote nightly would make the field useless to the people who own it.
+-- THE LABEL IS SEEDED EXACTLY ONCE: only while `product_display_name` is still
+-- null, which is true before the first feed run for an account and false
+-- forever after, because the column is sticky (a provider that stops sending a
+-- product name does not clear it). So an adviser who renames the account keeps
+-- that name for good — a label the feed rewrote nightly would make the field
+-- useless to the people who own it.
+--
+-- THE ONE COST, STATED PLAINLY BECAUSE A BRANCH PROBE CAUGHT IT: a label typed
+-- BEFORE the account is first matched is replaced by that first run. There is
+-- no way to tell a name somebody chose from the placeholder the modal obliged
+-- them to type, so the rule is "name it after linking, not before". The probe
+-- created an account called "Reece - family super, DO NOT RENAME" and the first
+-- run duly renamed it, which is why the previous label is now written into the
+-- landing row's note as `label_seeded:was=<old label>` — the feed overwrites it
+-- once, and never loses it.
 --
 -- The format is the holder and the product, which is what distinguishes two
 -- accounts inside one household: "Orlando Alvarado — HUB24 Investment" beside
@@ -46,7 +55,7 @@ comment on column public.financial_accounts.product_display_name is
   'The provider''s own name for the product this account sits in, e.g. "HUB24 Invest (CHOICE Dimensional Nil MFF) ACTIVE" — a fee-schedule identifier, refreshed by each feed run and sticky (a run that reports none leaves the last one standing). NOT a name for the account: eleven of the first twenty accounts shared one string and every closed account''s contains the word ACTIVE. See financial_accounts.label.';
 
 comment on column public.financial_accounts.label is
-  'What staff call this account. The adviser owns it. A feed seeds it ONCE, on the first run that reports a product for the account, and never touches it again — so a rename sticks. Manually created accounts are never touched at all.';
+  'What staff call this account. The adviser owns it. A feed seeds it ONCE, on the first run that reports a product for the account, and never touches it again — so a rename made after that first run sticks. A name typed BEFORE the first match is replaced by it, and the old one is recorded on the landing row as label_seeded:was=... Accounts with no provider feed are never touched at all.';
 
 -- Accounts a feed has already matched keep their label (there is no way to know
 -- whether it was chosen or typed in a hurry) but gain the product now, from
@@ -93,6 +102,7 @@ declare
   v_strange     text;
   v_first       boolean;
   v_label       text;
+  v_was         text;
   v_known       text[] := array[
     'SharesAustralian', 'SharesInternational',
     'FixedInterestAustralian', 'FixedInterestInternational',
@@ -196,7 +206,7 @@ begin
     -- Has any feed ever reported a product for this account? Only while the
     -- answer is no may the label be seeded, and the column is sticky below, so
     -- the answer turns to yes exactly once and stays there.
-    select (a.product_display_name is null) into v_first
+    select (a.product_display_name is null), a.label into v_first, v_was
       from public.financial_accounts a where a.id = r.account_id;
 
     -- "Orlando Alvarado — HUB24 Investment". Either half may be missing, and
@@ -218,9 +228,12 @@ begin
                                          then v_label else label end
      where id = r.account_id;
 
+    -- The old label is kept in the note, so a name the feed replaced can always
+    -- be read back and restored.
     if v_first and v_label is not null then
       update ingest.hub24_accounts
-         set promotion_note = concat_ws(' ', promotion_note, 'label_seeded')
+         set promotion_note = concat_ws(' ', promotion_note,
+               'label_seeded:was=' || coalesce(v_was, ''))
        where id = r.id;
       v_labelled := v_labelled + 1;
     end if;
