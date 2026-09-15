@@ -446,7 +446,7 @@ const Ring = memo(function Ring({
  *
  * | Mark | Means | Where |
  * | --- | --- | --- |
- * | **Dashed** border | planned, **not built** | `Placeholder`, `ReservedColumn`, the Tools tab's inactive tiles |
+ * | **Dashed** border | planned, **not built** | `Placeholder`, `ReservedColumn`, the Tools and Actions tab's inactive buttons |
  * | **Pulsing** grey bars | **arriving**, wait a moment | `PageSkeleton` behind every `loading.tsx` |
  * | Solid flat grey (this) | **built, and empty** | here |
  *

@@ -205,7 +205,7 @@ describe('SearchCommand', () => {
      * **The Knowledgebase is named as unbuilt rather than left out.**
      *
      * Dashed, which in this app means "planned, not built" — the same mark the
-     * Tools tab's inactive tiles and the reserved column wear. Leaving it out
+     * Tools and Actions tab's inactive buttons and the reserved column wear. Leaving it out
      * would make the list look complete and the section look decided.
      */
     test('the Knowledgebase says it is not built, rather than being absent', async () => {

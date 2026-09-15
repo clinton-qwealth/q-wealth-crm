@@ -379,7 +379,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
         {/* Drawn as one more SECTION rather than a note under the list, so the
             eye that has learned the headings above meets it the same way. The
             row inside is dashed, which in this app means "planned, not built":
-            the Tools tab's inactive tiles, the reserved column, the Read more
+            the Tools and Actions tab's inactive buttons, the reserved column, the Read more
             on a file note. Leaving it out entirely would make the list look
             complete and the section look decided. */}
         <section data-slot="search-knowledgebase" className="mb-1 mt-1">

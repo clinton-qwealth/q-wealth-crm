@@ -192,7 +192,7 @@ export function WorkflowWorkspace({
               /* Named, not guessed. What belongs here is being decided; a
                  dashed blank that says so beats inventing a timeline and
                  dressing the guess up as a feature — the same treatment the
-                 Tools tab's unbuilt tiles and the group page's blank beside
+                 Tools and Actions tab's unbuilt buttons and the group page's blank beside
                  the workflow cards take. */
               panel: (
                 <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">

@@ -66,7 +66,7 @@ export function EmailTool({
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
-  /* Opened by rendering, not by a click: the Tools tab decides when this
+  /* Opened by rendering, not by a click: the Tools and Actions tab decides when this
      exists, so the dialog shows itself on mount and the tab drops it on close. */
   useEffect(() => {
     dialogRef.current?.showModal()

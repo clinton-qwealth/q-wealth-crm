@@ -234,7 +234,7 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
 }
 
 /**
- * A workflow's recorded task actions — what people did from a Tools tab.
+ * A workflow's recorded task actions — what people did from a Tools and Actions tab.
  *
  * Every action on the WORKFLOW, so the task panel filters to its own task
  * exactly as it does with posts. One query per page rather than one per task,

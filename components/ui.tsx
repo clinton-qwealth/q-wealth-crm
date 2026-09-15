@@ -294,7 +294,7 @@ export const BALANCE_SPLIT = 'grid grid-cols-1 gap-4 lg:grid-cols-2'
  * The right half of a `TAB_SPLIT`, before anything has been decided for it.
  *
  * Dashed, because in this app dashed means **planned, not built** — the same
- * mark the Goals tab and the Tools tab's inactive tiles wear, and deliberately
+ * mark the Goals tab and the Tools and Actions tab's inactive buttons wear, and deliberately
  * NOT what a loading skeleton wears. It is meant to look like a placeholder
  * rather than an empty region, so the space can be seen and decided on instead
  * of being filled with a guess dressed up as a feature.

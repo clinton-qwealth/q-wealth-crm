@@ -237,12 +237,40 @@ export function EnvelopeIcon({ className = 'h-4 w-4' }: { className?: string }) 
   )
 }
 
-/* ---- The task panel's Tools tab ------------------------------------------
-   Five glyphs for the actions and apps a task will offer. All on the STROKE
+/* ---- The task panel's Tools and Actions tab -------------------------------
+   Seven glyphs for the actions and tools a task will offer. All on the STROKE
    convention above, so they sit at the same weight as the ledger's tiles —
-   a tool tile is 64px where a ledger tile is 36px, and a glyph that thickened
-   with its container would look like a different family. Email and SMS reuse
+   these draw at 18px beside a name where a ledger tile's draws at 18px inside
+   a 36px square, so the weight has to carry across both. Email and SMS reuse
    EnvelopeIcon and SmsIcon rather than gaining near-copies. */
+
+/** A clipboard with ruled lines: a form sent out to be filled in. Distinct
+ *  from DocumentIcon, which is a loose page and means a file note — a fact
+ *  find is a questionnaire somebody works through, and the board is the part
+ *  that says so. */
+export function ClipboardIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M7.25 3.5H5.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V4a.5.5 0 0 0-.5-.5h-1.75" />
+      <rect x="7.25" y="2" width="5.5" height="3" rx=".75" />
+      <path d="M7.75 9.5h4.5M7.75 12.75h3" />
+    </svg>
+  )
+}
+
+/** A dial with its needle low-left: a rating on a scale, which is what a risk
+ *  profile produces. Deliberately NOT ShieldTickIcon (superannuation) or
+ *  TrendUpIcon (an investment account) — both already name a kind of holding,
+ *  and a risk profile is a measurement of the client, not of their money. */
+export function GaugeIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3 14.5a7.5 7.5 0 1 1 14 0" />
+      <path d="M10 14.25 6.75 9.5" />
+      <circle cx="10" cy="14.75" r="1.1" />
+    </svg>
+  )
+}
 
 /** A signature over a baseline: sending a document to be signed. */
 export function SignatureIcon({ className = 'h-4 w-4' }: { className?: string }) {

@@ -31,8 +31,10 @@ import { PriorityGlyph, PriorityPicker } from './priority-picker'
 import {
   CalendarIcon,
   ChevronDownIcon,
+  ClipboardIcon,
   DocumentPlusIcon,
   EnvelopeIcon,
+  GaugeIcon,
   HourglassIcon,
   PathwayIcon,
   PlusIcon,
@@ -744,7 +746,7 @@ function TaskPanel({
           },
           {
             id: 'tools',
-            label: 'Tools',
+            label: 'Tools and Actions',
             panel: (
               <div className="px-5 pb-6">
                 <TaskTools onEmail={() => setEmailOpen(true)} />
@@ -770,11 +772,12 @@ function TaskPanel({
 }
 
 /**
- * The Tools tab: what a person can DO from this task, in two sections.
+ * The Tools and Actions tab: what a person can DO from this task, in two
+ * sections — Actions, then Tools, which between them are the tab's own name.
  *
- * **Every tile is inactive**, and that is the point of building it now — the
- * set can be argued about before any of it is wired, which is cheaper than
- * arguing after. Each becomes live as its action is built.
+ * **Every button but one is inactive**, and that is the point of building it
+ * now — the set can be argued about before any of it is wired, which is
+ * cheaper than arguing after. Each becomes live as its action is built.
  *
  * **A button is a rectangle with its glyph on the left**, changed 15 September
  * 2026 from a 64px square with the label centred beneath it. The reference was
@@ -819,29 +822,48 @@ type Tool = {
   onOpen?: () => void
 }
 
-/* Things done TO the client or the file — a verb each. Email and SMS reuse the
-   file-note glyphs, because an email is an email wherever it is met. */
+/*
+ * Things done TO the client or the file — a verb each. Email and SMS reuse the
+ * file-note glyphs, because an email is an email wherever it is met.
+ *
+ * **Ordered by what the action does to the client, not by when it was added.**
+ * The two sends come first, then the three things that go OUT for the client
+ * to complete or sign, then the two that happen on this side of the desk. The
+ * two Requests landed on 15 September and went into the middle group rather
+ * than on the end, because "DocuSign, Request Fact Find, Request Risk Profile"
+ * is one errand three ways and reads as a set — appending them would have put
+ * them after "Launch workflow", which is not.
+ */
 const TASK_ACTIONS: Tool[] = [
   { id: 'email', name: 'Email', Glyph: EnvelopeIcon },
   { id: 'sms', name: 'SMS', Glyph: SmsIcon },
   { id: 'docusign', name: 'DocuSign', detail: 'Send to sign', Glyph: SignatureIcon },
+  { id: 'request-fact-find', name: 'Request Fact Find', detail: 'Send to the client', Glyph: ClipboardIcon },
+  { id: 'request-risk-profile', name: 'Request Risk Profile', detail: 'Send to the client', Glyph: GaugeIcon },
   { id: 'generate-document', name: 'Generate document', Glyph: DocumentPlusIcon },
   { id: 'launch-workflow', name: 'Launch workflow', Glyph: WorkflowIcon },
 ]
 
-/* Separate tools opened from a task, not actions taken on it — which is why
-   they are their own section rather than four more Actions. Each carries what
-   it models, because the names do not say on their own. */
-const TASK_APPS: Tool[] = [
+/*
+ * Separate tools opened from a task, not actions taken on it — which is why
+ * they are their own section rather than three more Actions. Each carries what
+ * it models, because the names do not say on their own.
+ *
+ * **Named `Tools` from 15 September**, where it had been `Apps`. The tab is now
+ * "Tools and Actions", so the two section headings are the tab's own name split
+ * in two; a section called Apps under a tab called Tools would have been a
+ * third word for the same idea.
+ */
+const TASK_TOOLS: Tool[] = [
   { id: 'pathway-to-wealth', name: 'Pathway to Wealth', detail: 'Wealth modelling', Glyph: PathwayIcon },
   { id: 'money-last', name: 'How long will my money last', detail: 'Projection modelling', Glyph: HourglassIcon },
   { id: 'star-calculator', name: 'STAR Calculator', detail: 'Investment modelling', Glyph: StarIcon },
 ]
 
 function TaskTools({ onEmail }: { onEmail: () => void }) {
-  /* Email is live; the other seven are not. The set is written once above and
-     the one wired action is attached here, so a tile becomes active by gaining
-     a handler rather than by being moved into a different list. */
+  /* Email is live; the other nine are not. The set is written once above and
+     the one wired action is attached here, so a button becomes active by
+     gaining a handler rather than by being moved into a different list. */
   const actions = TASK_ACTIONS.map((t) => (t.id === 'email' ? { ...t, onOpen: onEmail } : t))
   const live = actions.filter((t) => t.onOpen).length
 
@@ -856,7 +878,7 @@ function TaskTools({ onEmail }: { onEmail: () => void }) {
         becomes live as its action is built.
       </p>
       <ToolSection title="Actions" tools={actions} />
-      <ToolSection title="Apps" tools={TASK_APPS} />
+      <ToolSection title="Tools" tools={TASK_TOOLS} />
     </div>
   )
 }
@@ -952,7 +974,7 @@ function ToolTile({ tool }: { tool: Tool }) {
  *
  * It said "changes to this task are not recorded yet" from the day it was
  * built, because `workflow_tasks` carries no audit trigger. It now has a real
- * source for HALF the answer — the actions taken from the Tools tab — and the
+ * source for HALF the answer — the actions taken from the Tools and Actions tab — and the
  * empty state says plainly which half is still missing, rather than implying
  * nothing is recorded at all.
  *
@@ -973,7 +995,7 @@ function TaskHistory({ actions, viewerId }: { actions: TaskAction[]; viewerId: s
         </ol>
       ) : (
         <p className="text-xs leading-relaxed text-neutral-400">
-          Nothing recorded yet. An action taken from the Tools tab appears here.
+          Nothing recorded yet. An action taken from the Tools and Actions tab appears here.
         </p>
       )}
 
@@ -1014,7 +1036,7 @@ const ACTION_SENTENCE: Record<TaskActionKind, { verb: string; preposition: strin
 /**
  * A glyph per kind, so the pill is recognisable before it is read.
  *
- * The SAME glyph the Tools tab launches the action with — an Email in the
+ * The SAME glyph the Tools and Actions tab launches the action with — an Email in the
  * history and the Email tile that produced it must not be two different marks,
  * or the history stops reading as a record of what was done here.
  */

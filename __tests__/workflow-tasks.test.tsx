@@ -480,12 +480,12 @@ describe('the task panel', () => {
   const boxOf = (panel: HTMLElement, name: string) =>
     within(panel).getByRole('button', { name }).closest('form')! as HTMLElement
 
-  test('three tabs — Activity, History, Tools — with Activity showing first', async () => {
+  test('three tabs — Activity, History, Tools and Actions — with Activity showing first', async () => {
     const { panel } = await open()
     expect(within(panel).getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Activity',
       'History',
-      'Tools',
+      'Tools and Actions',
     ])
     expect(within(panel).getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true')
   })
@@ -618,26 +618,47 @@ describe('the task panel', () => {
   })
 
   /**
-   * The Tools tab, built 9 September. Every tile is deliberately inactive, so
-   * the assertions are about the SET and about the honesty of the disabled
-   * state — not about behaviour, because there is none yet.
+   * The Tools and Actions tab, built 9 September and renamed from "Tools" on
+   * 15 September. Every button but Email is deliberately inactive, so the
+   * assertions are about the SET and about the honesty of the disabled state —
+   * not about behaviour, because there is none yet.
    */
-  describe('the Tools tab', () => {
+  describe('the Tools and Actions tab', () => {
     const tools = async () => {
       const { user, panel } = await open()
-      await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
-      return within(panel).getByRole('tabpanel', { name: 'Tools' })
+      await user.click(within(panel).getByRole('tab', { name: 'Tools and Actions' }))
+      return within(panel).getByRole('tabpanel', { name: 'Tools and Actions' })
     }
 
-    test('two sections, Actions then Apps, each an h3 under the panel’s h2', async () => {
+    /* The two headings ARE the tab's name, split in two — which is why the
+       second was renamed from "Apps" on 15 September. A section called Apps
+       under a tab called Tools and Actions would be a third word for the same
+       idea, and this is the assertion that keeps the three in step. */
+    test('two sections, Actions then Tools, which are the tab’s own name', async () => {
       const panel = await tools()
       const headings = within(panel)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent)
-      expect(headings).toEqual(['Actions', 'Apps'])
+      expect(headings).toEqual(['Actions', 'Tools'])
+
+      /* The tab's name read off the DOM rather than written here a second
+         time: the panel is labelled by its tab, so this follows the link and
+         compares the rendered name against the rendered headings. Written as a
+         literal on both sides it would pass with the tab renamed and the
+         sections left behind, which is the drift it exists to catch. */
+      const tab = document.getElementById(panel.getAttribute('aria-labelledby')!)!
+      expect(tab.getAttribute('role')).toBe('tab')
+      for (const heading of headings) expect(tab.textContent).toContain(heading!)
     })
 
-    test('the eight tools, in order, each a rectangle with its glyph on the left', async () => {
+    /**
+     * **The ORDER is the assertion, not just the membership.** The two Requests
+     * were added on 15 September into the middle of Actions rather than at the
+     * end: DocuSign, Request Fact Find and Request Risk Profile are one errand
+     * three ways and read as a set, where appending them would have put them
+     * after "Launch workflow", which is not one of them.
+     */
+    test('the ten tools, in order, each a rectangle with its glyph on the left', async () => {
       const panel = await tools()
       const names = within(panel)
         .getAllByRole('button')
@@ -647,6 +668,8 @@ describe('the task panel', () => {
         'Email',
         'SMS — not built yet',
         'DocuSign — Send to sign — not built yet',
+        'Request Fact Find — Send to the client — not built yet',
+        'Request Risk Profile — Send to the client — not built yet',
         'Generate document — not built yet',
         'Launch workflow — not built yet',
         'Pathway to Wealth — Wealth modelling — not built yet',
@@ -667,6 +690,28 @@ describe('the task panel', () => {
         // And nothing is a 64px square any more.
         expect(button.innerHTML).not.toContain('h-16')
       }
+    })
+
+    /**
+     * **Ten buttons, ten different glyphs.**
+     *
+     * The glyph is the only thing distinguishing one of these at a glance —
+     * the names wrap to two lines and several start with the same word, so two
+     * buttons drawing the same icon is a reader's problem, not a tidiness one.
+     * Found by mutation: giving Request Fact Find and Request Risk Profile the
+     * same clipboard passed everything else here, because every other
+     * assertion is about names.
+     *
+     * Compared by drawn path data rather than by "there is an svg", which all
+     * ten would satisfy however many of them were copies.
+     */
+    test('no two tools draw the same glyph', async () => {
+      const panel = await tools()
+      const buttons = within(panel).getAllByRole('button')
+      const glyphs = buttons.map((b) => b.querySelector('svg')!.innerHTML)
+
+      expect(glyphs).toHaveLength(10)
+      expect(new Set(glyphs).size, 'two tools share a glyph').toBe(glyphs.length)
     })
 
     /**
@@ -705,10 +750,10 @@ describe('the task panel', () => {
      * order rather than being seven stops that do nothing. The mutation to
      * catch is somebody making them look inactive while still clickable.
      */
-    test('Email is live; the other seven are genuinely disabled and say why', async () => {
+    test('Email is live; the other nine are genuinely disabled and say why', async () => {
       const panel = await tools()
       const buttons = within(panel).getAllByRole<HTMLButtonElement>('button')
-      expect(buttons).toHaveLength(8)
+      expect(buttons).toHaveLength(10)
 
       const [email, ...rest] = buttons
       expect(email.disabled).toBe(false)
@@ -796,7 +841,7 @@ describe('the task panel', () => {
 
     const openEmail = async () => {
       const { user, panel } = await open()
-      await user.click(within(panel).getByRole('tab', { name: 'Tools' }))
+      await user.click(within(panel).getByRole('tab', { name: 'Tools and Actions' }))
       await user.click(within(panel).getByRole('button', { name: 'Email' }))
       return { user, dialog: screen.getByRole('dialog', { name: 'Draft Email' }) }
     }

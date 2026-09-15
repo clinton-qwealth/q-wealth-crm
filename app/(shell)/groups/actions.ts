@@ -1247,7 +1247,7 @@ export async function redactPostMedia(workflowId: string, mediaId: string): Prom
 }
 
 /**
- * Record an action taken from a task's Tools tab. Today: an email.
+ * Record an action taken from a task's Tools and Actions tab. Today: an email.
  *
  * **Nothing is sent.** This writes what the person did, and the naming is
  * deliberate throughout — `recordTaskAction`, not `sendEmail` — because a

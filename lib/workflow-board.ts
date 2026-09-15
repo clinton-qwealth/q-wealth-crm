@@ -410,7 +410,7 @@ export function isEmailFont(value: unknown): value is string {
  */
 export const EMAIL_HEADING_LEVELS = [1] as const
 
-/** What a task's Tools tab can record. One today; the check constraint holds the same set. */
+/** What a task's Tools and Actions tab can record. One today; the check constraint holds the same set. */
 export const TASK_ACTION_KINDS = ['email'] as const
 export type TaskActionKind = (typeof TASK_ACTION_KINDS)[number]
 
@@ -477,7 +477,7 @@ export function joinAddresses(addresses: readonly string[]): string {
 }
 
 /**
- * One recorded action from a task's Tools tab, as the History tab reads it.
+ * One recorded action from a task's Tools and Actions tab, as the History tab reads it.
  *
  * `recipient` and `sender` are what was USED, not a live lookup — a record has
  * to say where the thing actually went, so a client changing their address

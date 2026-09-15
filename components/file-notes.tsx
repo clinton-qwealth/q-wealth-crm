@@ -177,7 +177,7 @@ export function NoteRecord({
                 {note.body_is_truncated ? <span className="text-neutral-400">…</span> : null}
               </p>
               {note.body_is_truncated ? (
-                /* Dashed and disabled, the same treatment the Tools tab gives a
+                /* Dashed and disabled, the same treatment the Tools and Actions tab gives a
                    tile that has no action yet. A live-looking control that did
                    nothing would be worse than one that says what it is. */
                 <button
