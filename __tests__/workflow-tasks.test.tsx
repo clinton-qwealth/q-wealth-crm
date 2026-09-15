@@ -637,7 +637,7 @@ describe('the task panel', () => {
       expect(headings).toEqual(['Actions', 'Apps'])
     })
 
-    test('the eight tools, in order, each a square tile with a glyph', async () => {
+    test('the eight tools, in order, each a rectangle with its glyph on the left', async () => {
       const panel = await tools()
       const names = within(panel)
         .getAllByRole('button')
@@ -653,13 +653,51 @@ describe('the task panel', () => {
         'How long will my money last — Projection modelling — not built yet',
         'STAR Calculator — Investment modelling — not built yet',
       ])
-      // A square: the same height and width class on the tile face, with a glyph in it.
+
+      /* The glyph is the button's FIRST child and the name its second — which
+         is what "on the left" means in a row, and the thing a refactor that
+         put the name first would break silently. The old square had the glyph
+         in a 64px face with the label beneath it, so this is the assertion
+         that changed shape on 15 September. */
       for (const button of within(panel).getAllByRole('button')) {
-        const face = button.firstElementChild!
-        expect(face.className).toContain('h-16')
-        expect(face.className).toContain('w-16')
-        expect(face.querySelector('svg')).toBeTruthy()
+        expect(button.className).toContain('items-center')
+        const [glyph, label] = [...button.children]
+        expect(glyph.tagName.toLowerCase()).toBe('svg')
+        expect(label.textContent?.trim()).not.toBe('')
+        // And nothing is a 64px square any more.
+        expect(button.innerHTML).not.toContain('h-16')
       }
+    })
+
+    /**
+     * **The detail came off the face and has to still be in the name.**
+     *
+     * "Send to sign" and "Wealth modelling" were a second line under the
+     * centred label; at 150px beside a name that may already wrap there is no
+     * room for them. Dropping them from the button is fine; dropping them from
+     * the ACCESSIBLE name would mean a screen reader got less than the screen
+     * does, which is the trade this asserts did not happen.
+     *
+     * **This REVERSES a test written on 9 September** — _"an app shows what it
+     * models beneath its name"_, which asserted the descriptor was rendered
+     * and not only announced. That was a real decision and it is being undone
+     * deliberately, so the assertion is inverted rather than deleted: the name
+     * is on the button, the descriptor is not, and both are in the label.
+     */
+    test('a tool with a detail shows only its name, but is still announced with it', async () => {
+      const panel = await tools()
+      const docusign = within(panel).getByRole('button', { name: /DocuSign/ })
+
+      expect(docusign.textContent).toBe('DocuSign')
+      expect(docusign.textContent).not.toContain('Send to sign')
+      expect(docusign.getAttribute('aria-label')).toContain('Send to sign')
+      expect(docusign.getAttribute('title')).toContain('Send to sign')
+
+      /* The NAME is still drawn in full, including the long one — that half of
+         the old test still holds, and it is the half that matters most: a
+         launcher whose labels are hidden is not a launcher. */
+      expect(within(panel).getByText('How long will my money last')).toBeTruthy()
+      expect(within(panel).queryByText('Projection modelling')).toBeNull()
     })
 
     /**
@@ -681,33 +719,49 @@ describe('the task panel', () => {
         expect(b.getAttribute('aria-label')).toContain('not built yet')
       }
       // The count is derived from which tiles have a handler, not written twice.
-      expect(panel.textContent).toContain('One tile is live; the rest are inactive')
+      expect(panel.textContent).toContain('One is live; the rest are inactive')
     })
 
     /**
-     * TWO alignments, doing different jobs: the cells pack against the left,
-     * and each cell centres its own content. jsdom has no layout engine, so
-     * this asserts the mechanism rather than the pixels — a wrapping flex row
-     * of fixed-width items (left-packed, slack on the right) whose buttons
-     * centre their glyph and label.
+     * **Three across, two on a narrow panel — and four deliberately absent.**
      *
-     * A grid of equal shares is what the first half replaced: it spread the
-     * cells across the whole column, so the tiles were evenly spaced but
-     * aligned to nothing.
+     * The panel is 40% of the window between a 32rem floor and a 42rem cap, so
+     * the row to divide is 472px at most window sizes and 632px at the widest.
+     * Three across is 149–203px; FOUR would be 135px even at `2xl`, narrower
+     * than three is at an ordinary window. So a fourth column would make every
+     * button tighter than the common case rather than using room that is there.
+     *
+     * jsdom has no layout engine, so this asserts the mechanism rather than
+     * pixels — and it asserts the ABSENCE of a fourth step, because that is the
+     * decision somebody would otherwise undo without noticing it was one.
      */
-    test('the cells pack from the left, and each centres its own label', async () => {
+    test('three columns, two on a narrow panel, and no fourth step', async () => {
       const panel = await tools()
       const list = within(panel).getAllByRole('list')[0]
-      // Left-packed: wrapping flex of fixed-width items, not a spreading grid.
-      expect(list.className).toContain('flex-wrap')
-      expect(list.className).not.toContain('grid')
+
+      expect(list.className).toContain('grid-cols-2')
+      expect(list.className).toContain('sm:grid-cols-3')
+      expect(list.className).not.toMatch(/grid-cols-4/)
+      // A grid of equal shares now, not the wrapping flex of fixed-width cells
+      // the squares needed to pack themselves against the left edge.
+      expect(list.className).not.toContain('flex-wrap')
       for (const item of list.querySelectorAll('li')) {
-        expect(item.className).toMatch(/\bw-\d/)
+        expect(item.className).not.toMatch(/\bw-\d/)
       }
-      // Centred within the cell: the label sits under its own glyph.
-      const button = within(panel).getAllByRole('button')[0]
-      expect(button.className).toContain('items-center')
-      expect(button.className).toContain('text-center')
+    })
+
+    /**
+     * A one-line name and a two-line one sit side by side — "SMS" beside
+     * "Generate document" — so the button has to fill the cell its row
+     * stretched, or the shorter one leaves a step in the row.
+     */
+    test('a button fills its cell, so a row of them is one height', async () => {
+      const panel = await tools()
+      for (const item of panel.querySelectorAll('li')) {
+        // The li stretches with the row; the button has to take all of it.
+        expect(item.className).toContain('flex')
+        expect(item.querySelector('button')!.className).toContain('h-full')
+      }
     })
 
     /**
@@ -715,16 +769,18 @@ describe('the task panel', () => {
      * a solid border, so the promotion is visible rather than silent — which
      * is the whole reason the inactive ones were drawn dashed to begin with.
      */
-    test('an inactive tile is dashed rather than dimmed; a live one is solid', async () => {
+    test('an inactive button is dashed rather than dimmed; a live one is solid', async () => {
       const panel = await tools()
       const [email, sms] = within(panel).getAllByRole('button')
 
-      const live = email.firstElementChild!
-      expect(live.className).not.toContain('border-dashed')
+      /* The border is on the BUTTON now, not on a square inside it — one
+         border per control rather than a box inside a box, which is what
+         keeps "dashed means planned" legible when the control IS the box. */
+      expect(email.className).toContain('border')
+      expect(email.className).not.toContain('border-dashed')
 
-      const inactive = sms.firstElementChild!
-      expect(inactive.className).toContain('border-dashed')
-      expect(inactive.className).not.toMatch(/opacity-(40|50)/)
+      expect(sms.className).toContain('border-dashed')
+      expect(sms.className).not.toMatch(/opacity-(40|50)/)
     })
 
     /**
@@ -1249,12 +1305,6 @@ describe('the task panel', () => {
     })
   })
 
-  /** An app's name does not say what it does, so the descriptor is rendered, not only announced. */
-    test('an app shows what it models beneath its name', async () => {
-      const panel = await tools()
-      expect(within(panel).getByText('Projection modelling')).toBeTruthy()
-      expect(within(panel).getByText('How long will my money last')).toBeTruthy()
-    })
   })
 
   test('the Details box is bordered, carries a pencil, and renders nothing submittable while reading', async () => {

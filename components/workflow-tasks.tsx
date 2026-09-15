@@ -776,11 +776,19 @@ function TaskPanel({
  * set can be argued about before any of it is wired, which is cheaper than
  * arguing after. Each becomes live as its action is built.
  *
- * **A tile is a square with a glyph, and a label beneath it.** The whole cell
- * is the button rather than just the square: one click target, one accessible
- * name, and a disabled state that covers the label too. A glyph-only square
- * would have been closer to the request, but "How long will my money last" is
- * not a thing anyone recognises from an hourglass — and a tooltip is not a
+ * **A button is a rectangle with its glyph on the left**, changed 15 September
+ * 2026 from a 64px square with the label centred beneath it. The reference was
+ * the card grid on `platform.claude.com/docs` — an icon, a name, several across.
+ *
+ * The square version put each label under its own glyph, which reads well and
+ * costs width: a 96px cell for a 64px tile, so five Actions filled the column
+ * and a long name wrapped to two centred lines. A rectangle spends that width
+ * on the NAME instead, which is the part a launcher is scanned for.
+ *
+ * The whole rectangle is the button, not a glyph inside it: one click target,
+ * one accessible name, and a disabled state that covers the label too. A
+ * glyph-only button would be smaller still, but "How long will my money last"
+ * is not a thing anyone recognises from an hourglass — and a tooltip is not a
  * label, because it needs a pointer to find.
  *
  * **Dashed, not dimmed.** The house already uses a dashed border for a
@@ -793,7 +801,18 @@ function TaskPanel({
 type Tool = {
   id: string
   name: string
-  /** What the app does, for a name that does not say. Shown under the name. */
+  /**
+   * What the app does, for a name that does not say — "Send to sign" under
+   * DocuSign, "Wealth modelling" under Pathway to Wealth.
+   *
+   * **Not drawn on the button since 15 September.** It was a second line under
+   * a centred label on a 96px square; on a 150px rectangle beside a name that
+   * may already need two lines there is no room for it that does not clamp
+   * mid-word, and a detail cut in half is worse than one a hover away. It is
+   * still in the accessible name and the tooltip, so nothing was lost that a
+   * reader could not reach — only its glance-level version, and only on the
+   * four tools that have one.
+   */
   detail?: string
   Glyph: (props: { className?: string }) => ReactNode
   /** Absent means the tile is inactive — nothing is wired to it yet. */
@@ -831,7 +850,7 @@ function TaskTools({ onEmail }: { onEmail: () => void }) {
       <p className="text-xs leading-relaxed text-neutral-500">
         What can be done from this task.{' '}
         <span className="font-medium text-neutral-700">
-          {live === 1 ? 'One tile is live; the rest are inactive' : `${live} tiles are live`}
+          {live === 1 ? 'One is live; the rest are inactive' : `${live} are live`}
         </span>{' '}
         — the inactive ones are here so the set can be judged before anything is wired, and each
         becomes live as its action is built.
@@ -851,27 +870,28 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
   return (
     <section>
       <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">{title}</h3>
-      {/* CELLS PACKED FROM THE LEFT; CONTENT CENTRED INSIDE EACH ONE. Two
-          different alignments, and they are doing different jobs.
+      {/* THREE ACROSS, TWO ON A NARROW PANEL — and four is deliberately absent.
+          The numbers are the reason, and they are the panel's, not the page's.
 
-          A grid divided the whole column into equal shares, which at 565px
-          made each 132px and left the tiles evenly spaced but aligned to
-          nothing. Fixed-width items that wrap pack against the left instead
-          and leave the slack at the right, where it reads as room rather than
-          as gaps — and wrapping does the responsive work, so no breakpoint is
-          needed: five fit the 565px column, four fit a narrow panel, three fit
-          a phone.
+          This panel is 40% of the window between a 32rem floor and a 42rem
+          cap, and the tab's gutter takes 40px, so the row to divide is 472px
+          at most window sizes, 536 at 1440 and 632 once the cap is reached.
+          Three across is therefore 149px, 171px and 203px. FOUR across would
+          be 135px even at the widest Tailwind breakpoint — narrower than three
+          across is at an ordinary window — so a fourth column would make every
+          button tighter than the common case rather than using room that is
+          there. It was asked for as "three to four"; three is the half of that
+          range this panel can actually hold.
 
-          96px an item, not 112: it is what lets all five Actions sit on one
-          row (5 x 96 + 4 x 12 of gap = 528 of 565), and it keeps the label
-          close enough under its own glyph to read as belonging to it. The cost
-          is that a 64px tile centred in 96px sits 16px in from the panel's
-          gutter rather than flush against it — accepted, because a label
-          centred under its icon is what was asked for and a left-aligned label
-          under a centred one looks like a mistake. */}
-      <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-5">
+          A grid rather than the wrapping flex of fixed-width cells this
+          replaced. That flex existed so the squares packed left and left their
+          slack at the right edge; a rectangle has no such problem, because it
+          fills its share and the name simply gets more room. `items-stretch`
+          is the grid's own default and is what keeps a two-line name the same
+          height as a one-line one beside it. */}
+      <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {tools.map((tool) => (
-          <li key={tool.id} className="w-24">
+          <li key={tool.id} className="flex">
             <ToolTile tool={tool} />
           </li>
         ))}
@@ -883,50 +903,46 @@ function ToolSection({ title, tools }: { title: string; tools: Tool[] }) {
 function ToolTile({ tool }: { tool: Tool }) {
   const { name, detail, Glyph, onOpen } = tool
   const live = Boolean(onOpen)
+  /* The detail is off the face now, so it has to be in the name — otherwise
+     "DocuSign" reaches a screen reader with less than the screen carries. */
+  const described = detail ? `${name} — ${detail}` : name
   return (
     <button
       type="button"
-      /* A real `disabled` on an unwired tile, not `aria-disabled`: it leaves
+      /* A real `disabled` on an unwired button, not `aria-disabled`: it leaves
          the tab order, so a keyboard user is not walked through controls that
          do nothing. */
       disabled={!live}
       /* The reason belongs in the name, because "dimmed" on its own does not
          say whether this is broken, forbidden, or simply not built yet. */
-      aria-label={live ? name : `${name}${detail ? ` — ${detail}` : ''} — not built yet`}
-      title={live ? name : 'Not built yet'}
+      aria-label={live ? described : `${described} — not built yet`}
+      title={live ? described : `${described} — not built yet`}
       onClick={onOpen}
-      className={`flex w-full flex-col items-center gap-2 text-center ${
-        live ? 'group cursor-pointer' : 'cursor-not-allowed'
+      /* SOLID for a live button, dashed for one that is not. Dashed is this
+         app's placeholder mark — the template-name chip, the blank beside a
+         group's workflow cards — so a button going live is visible rather than
+         silent, which is the whole reason the inactive ones were drawn that way
+         in the first place.
+
+         `h-full` because the `li` stretches to its row and the button has to
+         fill it; without it a one-line name would sit in a shorter box than the
+         two-line one beside it and the row would look ragged. */
+      className={`flex h-full w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+        live
+          ? 'cursor-pointer border-neutral-300 bg-white text-neutral-800 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700'
+          : 'cursor-not-allowed border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-500'
       }`}
     >
-      {/* SOLID for a live tile, dashed for one that is not. Dashed is this
-          app's placeholder mark — the template-name chip, the blank beside a
-          group's workflow cards — so a tile going live is visible rather than
-          silent, which is the whole reason the inactive ones were drawn that
-          way in the first place. */}
-      <span
-        className={`flex h-16 w-16 items-center justify-center rounded-xl border transition-colors ${
-          live
-            ? 'border-neutral-300 bg-white text-neutral-600 group-hover:border-brand-300 group-hover:bg-brand-50 group-hover:text-brand-700'
-            : 'border-dashed border-neutral-300 bg-neutral-50/60 text-neutral-400'
-        }`}
-      >
-        <Glyph className="h-6 w-6" />
-      </span>
-      <span className="flex flex-col gap-0.5">
-        {/* Clamped, not truncated: the longest of these is a sentence, and a
-            name you cannot read is the one thing a launcher must not do. */}
-        <span
-          className={`line-clamp-2 text-xs font-medium leading-snug ${
-            live ? 'text-neutral-800' : 'text-neutral-600'
-          }`}
-        >
-          {name}
-        </span>
-        {detail ? (
-          <span className="line-clamp-2 text-[11px] leading-snug text-neutral-400">{detail}</span>
-        ) : null}
-      </span>
+      {/* The glyph takes the button's own colour rather than carrying its own,
+          so the hover moves both together and there is one state to reason
+          about. `shrink-0` because the name beside it wraps and a flex item
+          with text will otherwise squeeze its sibling before wrapping. */}
+      <Glyph className="h-[18px] w-[18px] shrink-0" />
+      {/* Clamped, not truncated: the longest of these is a sentence, and a
+          name you cannot read is the one thing a launcher must not do. Two
+          lines is what 149px holds — "How long will my money last" is the one
+          that needs both. */}
+      <span className="line-clamp-2 text-xs font-medium leading-snug">{name}</span>
     </button>
   )
 }
