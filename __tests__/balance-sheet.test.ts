@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { migrationSource } from './helpers/migration'
 import { describe, expect, test } from 'vitest'
 import {
   ASSET_TYPES,
@@ -10,10 +10,7 @@ import {
   type BalanceRow,
 } from '@/lib/balance-sheet'
 
-const MIGRATION = readFileSync(
-  'supabase/migrations/20260914030405_a_group_s_assets_and_liabilities.sql',
-  'utf8',
-)
+const MIGRATION = migrationSource('a_group_s_assets_and_liabilities')
 
 const row = (o: Partial<BalanceRow> & { value: string | number | null }): BalanceRow => ({
   item_id: Math.random().toString(36).slice(2),

@@ -44,7 +44,10 @@ const person: PersonDetail = {
   date_of_birth: '1985-04-12',
   date_of_death: null,
   gender: 'Female',
-  marital_status: 'Married',
+  /* A CODED value whose label differs from it, deliberately: `married` renders
+     as "Married" either way, so a test built on it would pass with the label
+     map deleted. `de_facto` renders as "De facto" only if the map ran. */
+  marital_status: 'de_facto',
   tfn_status: 'provided',
   place_of_birth: 'Colombo, Sri Lanka',
   smoker: false,
@@ -237,6 +240,99 @@ describe('MemberPanel', () => {
    * columns, and the one you came in through is marked rather than described
    * separately.
    */
+  /**
+   * **Marital status became a picklist on 15 September 2026**, in the UI and in
+   * the database on the same day — `public.marital_status`, an enum of six.
+   *
+   * It had been free text since July, and production showed what that costs:
+   * three rows carrying a value and two spellings between them, `married` twice
+   * and `Married` once. A select cannot produce that.
+   */
+  describe('marital status', () => {
+    const openPersonal = async () => {
+      const user = userEvent.setup()
+      const { container } = open('view')
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      return { user, container }
+    }
+
+    /* The stored value is a KEY now, so something has to turn it into words.
+       The fixture is `de_facto`, which renders as "De facto" only if the label
+       map ran — `married` would read correctly with the map deleted. */
+    test('reads as words, not as the stored key', async () => {
+      await openPersonal()
+      expect(screen.getByText('De facto')).toBeDefined()
+      expect(screen.queryByText('de_facto'), 'the raw key is on screen').toBeNull()
+    })
+
+    test('is a select over the six values, not a text box', async () => {
+      const { user, container } = await openPersonal()
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+
+      const select = await screen.findByRole<HTMLSelectElement>('combobox', {
+        name: 'Marital status',
+      })
+      expect(select.tagName).toBe('SELECT')
+      /* The placeholder first, then the six in the order the list declares —
+         which is the order the database enum declares, asserted below. */
+      expect([...select.options].map((o) => o.value)).toEqual([
+        '', 'single', 'married', 'de_facto', 'separated', 'divorced', 'widowed',
+      ])
+      expect([...select.options].map((o) => o.textContent)).toEqual([
+        'Not recorded', 'Single', 'Married', 'De facto', 'Separated', 'Divorced', 'Widowed',
+      ])
+      // And the field it replaced is gone — a free-text input here would
+      // still submit, and the database would refuse it at the save.
+      expect(
+        container.querySelector('dialog input[name="marital_status"]'),
+        'a text input for marital status is still rendered',
+      ).toBeNull()
+    })
+
+    test('opens on the value already stored', async () => {
+      const { user } = await openPersonal()
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const select = await screen.findByRole<HTMLSelectElement>('combobox', {
+        name: 'Marital status',
+      })
+      expect(select.value).toBe('de_facto')
+    })
+
+    /** What reaches the server is the KEY, which is what the enum accepts. */
+    test('saves the coded value, not the label', async () => {
+      const { user } = await openPersonal()
+      await user.click(screen.getAllByRole('button', { name: /edit/i })[0])
+      const select = await screen.findByRole('combobox', { name: 'Marital status' })
+      await user.selectOptions(select, 'widowed')
+      await user.click(screen.getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(actions.patchMember).toHaveBeenCalled())
+      const form = vi.mocked(actions.patchMember).mock.calls.at(-1)![1] as FormData
+      expect(form.get('marital_status')).toBe('widowed')
+      expect(form.get('marital_status')).not.toBe('Widowed')
+    })
+
+    /* The create form is the other write path into the same column, and it is
+       the one most easily forgotten — it is a different component. */
+    test('the add-member form offers the same select', async () => {
+      const user = userEvent.setup()
+      render(
+        <MemberPanel groupId="g1" groupName="Testsmith Household" members={[]} initialMode="search">
+          trigger
+        </MemberPanel>,
+      )
+      await user.click(screen.getByRole('button', { name: 'trigger' }))
+      await user.click(await screen.findByRole('button', { name: /add someone new|new person|create/i }))
+
+      const select = await screen.findByRole<HTMLSelectElement>('combobox', {
+        name: 'Marital status',
+      })
+      expect([...select.options].map((o) => o.value)).toEqual([
+        '', 'single', 'married', 'de_facto', 'separated', 'divorced', 'widowed',
+      ])
+    })
+  })
+
   describe('the Memberships tab', () => {
     const openTab = async () => {
       const user = userEvent.setup()

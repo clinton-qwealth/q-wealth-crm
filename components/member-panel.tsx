@@ -22,7 +22,7 @@ import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon
 import { Tabs } from './tabs'
 import { GroupTile, Pill } from './ui'
 import { useServerState } from './use-server-state'
-import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER } from '@/lib/countries'
+import { COUNTRIES, countryName, EMPLOYMENT_STATUS, employmentLabel, GENDER, MARITAL_STATUS, maritalLabel } from '@/lib/countries'
 
 const FIELD =
   'w-full rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15'
@@ -1784,7 +1784,7 @@ export function MemberPanel({
                               <div className="flex flex-col gap-4">
                                 <Row span="full" label="Full name" value={[person.title, person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')} />
                                 <Row span="full" label="Gender" value={person.gender} />
-                                <Row span="full" label="Marital status" value={person.marital_status} />
+                                <Row span="full" label="Marital status" value={maritalLabel(person.marital_status)} />
                                 <Row span="full" label="Place of birth" value={person.place_of_birth} />
                               </div>
                               <div className="flex flex-col gap-4">
@@ -1819,7 +1819,7 @@ export function MemberPanel({
                               <Field label="Known as" name="preferred_name" defaultValue={person.preferred_name} className="sm:col-span-6" />
                               <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person.date_of_birth} className="sm:col-span-6" />
                               <Select label="Gender" name="gender" defaultValue={person.gender} options={GENDER} className="sm:col-span-6" />
-                              <Field label="Marital status" name="marital_status" defaultValue={person.marital_status} className="sm:col-span-6" />
+                              <Select label="Marital status" name="marital_status" defaultValue={person.marital_status} options={MARITAL_STATUS} className="sm:col-span-6" />
                               <Field label="Place of birth" name="place_of_birth" defaultValue={person.place_of_birth} className="sm:col-span-6" />
                               <Select
                                 label="Smoker status"
@@ -2262,7 +2262,7 @@ export function MemberPanel({
                       <Field label="Known as" name="preferred_name" defaultValue={person?.preferred_name} className="col-span-3" placeholder="Optional" />
                       <Field label="Date of birth" name="date_of_birth" type="date" defaultValue={person?.date_of_birth} className="col-span-3" />
                       <Select label="Gender" name="gender" defaultValue={person?.gender} options={GENDER} className="col-span-3" placeholder="Optional" />
-                      <Field label="Marital status" name="marital_status" defaultValue={person?.marital_status} className="col-span-3" placeholder="Optional" />
+                      <Select label="Marital status" name="marital_status" defaultValue={person?.marital_status} options={MARITAL_STATUS} className="col-span-3" placeholder="Optional" />
                     </div>
                   </Section>
 

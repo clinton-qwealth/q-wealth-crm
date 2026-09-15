@@ -103,9 +103,50 @@ export const GENDER: { value: string; label: string }[] = [
   { value: 'Prefer not to say', label: 'Prefer not to say' },
 ]
 
+/*
+ * Marital status, 15 September 2026. A CODED list like employment status
+ * rather than display strings like gender above, because this one is backed by
+ * a Postgres enum — `public.marital_status` — so the stored value is a key and
+ * the label belongs here, in one place, beside the list that produces it.
+ *
+ * The column was free text until that day and production proved exactly why
+ * that is not good enough: it held `married` twice and `Married` once, which is
+ * two vocabularies for one fact and the thing an enum exists to prevent. The
+ * migration lower-cased before casting.
+ *
+ * Six values, the set an Australian fact-find carries. **Nothing for
+ * "declined"**, deliberately, where employment status has `not_disclosed`: the
+ * column is nullable and blank already means "not recorded". Adding a seventh
+ * value later is a one-line migration — but it cannot be used in the same
+ * transaction that adds it, which is why the list was settled before the enum
+ * was written rather than after.
+ */
+export const MARITAL_STATUS: { value: string; label: string }[] = [
+  { value: 'single', label: 'Single' },
+  { value: 'married', label: 'Married' },
+  { value: 'de_facto', label: 'De facto' },
+  { value: 'separated', label: 'Separated' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'widowed', label: 'Widowed' },
+]
+
 const EMPLOYMENT_LABEL = new Map(EMPLOYMENT_STATUS.map((e) => [e.value, e.label]))
+const MARITAL_LABEL = new Map(MARITAL_STATUS.map((m) => [m.value, m.label]))
 
 export function employmentLabel(value?: string | null) {
   if (!value) return null
   return EMPLOYMENT_LABEL.get(value) ?? value
+}
+
+/**
+ * The words for a stored marital status.
+ *
+ * Falls back to the stored value rather than to nothing, the same rule
+ * `employmentLabel` follows: a value this list has not been taught about is
+ * still a fact about a client, and showing `de_facto` is a great deal better
+ * than showing an empty field where something is recorded.
+ */
+export function maritalLabel(value?: string | null) {
+  if (!value) return null
+  return MARITAL_LABEL.get(value) ?? value
 }

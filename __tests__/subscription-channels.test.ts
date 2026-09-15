@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { migrationSource } from './helpers/migration'
 import { resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 
@@ -21,10 +22,7 @@ import { describe, expect, test } from 'vitest'
  * component whose imports reach server actions, and the migration is SQL.
  */
 const panel = readFileSync(resolve(__dirname, '../components/member-panel.tsx'), 'utf8')
-const migration = readFileSync(
-  resolve(__dirname, '../supabase/migrations/20260911091500_a_client_s_communication_subscriptions.sql'),
-  'utf8',
-)
+const migration = migrationSource('a_client_s_communication_subscriptions')
 
 /*
  * Scoped to the CHANNELS array rather than matched across the file. The first
