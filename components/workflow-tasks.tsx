@@ -326,12 +326,12 @@ export function WorkflowTasks({
           </p>
         </>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
             <PlusIcon className="h-4 w-4" />
           </span>
-          <p className="mt-3 text-sm font-medium text-neutral-700">No tasks yet</p>
-          <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+          <p className="mt-3 text-center text-sm font-medium text-neutral-700">No tasks yet</p>
+          <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
             Tasks will be generated from the workflow template. Until then, add them here.
           </p>
         </div>

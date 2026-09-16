@@ -77,12 +77,17 @@ export function DataSection({
   const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children)
   if (!hasRows) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+      /* NOT `text-center` on this container. `text-align` is inherited, and
+         `emptyAction` is caller-supplied — every caller passes a modal, whose
+         <dialog> lives here in the DOM however the top layer paints it, so a
+         centred container centred every label in the form. The paragraphs that
+         actually want centring say so themselves. Found 16 Sep 2026. */
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
           <PlusIcon className="h-4 w-4" />
         </span>
-        <p className="mt-3 text-sm font-medium text-neutral-700">{empty.title}</p>
-        <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+        <p className="mt-3 text-center text-sm font-medium text-neutral-700">{empty.title}</p>
+        <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
           {empty.description}
         </p>
         <div className="mt-4">

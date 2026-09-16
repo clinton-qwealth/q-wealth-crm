@@ -196,11 +196,11 @@ export function WorkflowWorkspace({
                  Tools and Actions tab's unbuilt buttons and the group page's blank beside
                  the workflow cards take. */
               panel: (
-                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
-                  <p className="text-sm font-medium text-neutral-700">
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+                  <p className="text-center text-sm font-medium text-neutral-700">
                     Activity history is not built yet
                   </p>
-                  <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+                  <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
                     What this shows is still being decided. The workflow’s posts and its
                     recorded actions both exist and both carry their workflow, so the data is
                     already there.

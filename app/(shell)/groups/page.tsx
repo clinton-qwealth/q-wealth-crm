@@ -74,9 +74,9 @@ export default async function GroupsIndexPage() {
              and telling them the wrong one of those sends them to the wrong
              person. Dashed, the house treatment for a screen that is empty
              rather than broken. */
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
-            <p className="text-sm font-medium text-neutral-700">No client groups to show</p>
-            <p className="mt-1 max-w-sm text-xs leading-relaxed text-neutral-500">
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+            <p className="text-center text-sm font-medium text-neutral-700">No client groups to show</p>
+            <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
               You see the groups you own or have been given access to. If you expect one here,
               ask an administrator to check who it is assigned to.
             </p>

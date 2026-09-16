@@ -208,19 +208,21 @@ export function WorkflowSection({
 
   if (!live.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
+      /* Not `text-center` — StartWorkflowModal renders its <dialog> here, and
+         `text-align` inherits into it; see data-section.tsx. */
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-400 ring-1 ring-neutral-200">
           <PlusIcon className="h-4 w-4" />
         </span>
-        <p className="mt-3 text-sm font-medium text-neutral-700">No workflows running</p>
-        <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+        <p className="mt-3 text-center text-sm font-medium text-neutral-700">No workflows running</p>
+        <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
           Onboarding, annual reviews and advice production appear here once started.
         </p>
         <div className="mt-4">
           <StartWorkflowModal groupId={groupId} />
         </div>
         {cancelled ? (
-          <p className="mt-4 text-xs text-neutral-400">
+          <p className="mt-4 text-center text-xs text-neutral-400">
             {cancelled} cancelled workflow{cancelled === 1 ? ' is' : 's are'} not shown.
           </p>
         ) : null}

@@ -134,6 +134,25 @@ button:disabled,
  * values, since the element is display:none until it opens.
  */
 dialog.qw-modal {
+  /*
+   * `text-align` is INHERITED, and a <dialog> sits wherever its trigger sits in
+   * the DOM — the top layer changes where it PAINTS, not where it lives. So a
+   * modal whose trigger is handed to a centred container inherits that centring
+   * and every label, heading and hint inside it comes out centred.
+   *
+   * That is not hypothetical: the add-asset, add-liability, add-account,
+   * add-policy and add-note modals are all passed as an empty state's
+   * `emptyAction`, and every empty state is `text-center`. The result was a form
+   * that was centred the first time a section was filled and left-aligned ever
+   * after, because the second record renders the toolbar's copy of the same
+   * trigger instead. Found 16 Sep 2026.
+   *
+   * Stated here rather than on each modal so it holds for every modal ever
+   * added, under any ancestor. The empty states were fixed too — they now
+   * centre their own paragraphs rather than their whole subtree — but a dialog
+   * should not depend on where its trigger was mounted.
+   */
+  text-align: left;
   opacity: 0;
   transform: translateY(12px) scale(0.99);
   transition:
@@ -202,6 +221,9 @@ dialog.qw-modal[open]::backdrop {
  * default `max-height: calc(100% - 6px)` would otherwise leave a hairline gap.
  */
 dialog.qw-drawer {
+  /* Same reason as .qw-modal above: a drawer inherits the text alignment of
+     whatever its trigger was mounted under. */
+  text-align: left;
   margin: 0 0 0 auto;
   height: 100%;
   max-height: 100%;

@@ -53,13 +53,15 @@ export function WorkflowNotes({
          file one from this screen. Without that sentence an adviser looking at
          an empty column has no idea whether the feature is missing or the notes
          are. */
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10 text-center">
-        <p className="text-sm font-medium text-neutral-700">No file notes filed here yet</p>
+      /* Not `text-center` — `emptyAction` is caller-supplied and `text-align`
+         inherits into it; see data-section.tsx. The paragraphs centre themselves. */
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+        <p className="text-center text-sm font-medium text-neutral-700">No file notes filed here yet</p>
         {/* Says where a note comes from without promising a button. The action
             is withheld on finished work — see the workspace — so copy that
             claimed "add one here" would be wrong on exactly the screens where
             an adviser most needs to know why they cannot. */}
-        <p className="mt-1 max-w-xs text-xs leading-relaxed text-neutral-500">
+        <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
           Notes filed under this workflow appear here. An existing note is filed from the
           group’s own list, with <span className="font-medium text-neutral-600">Add to
           workflow</span>.
