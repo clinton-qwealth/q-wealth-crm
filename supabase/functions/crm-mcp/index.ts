@@ -392,7 +392,7 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     {
       title: 'List unmatched integration notes',
       description:
-        'Meeting notes ingested from integrations (e.g. Fyxer) not yet filed to a client. Visible to the meeting host and Services/Admin.',
+        'Meeting notes ingested from integrations (e.g. Fyxer) not yet filed to a client. Visible to the meeting host and Services/Admin. Use file_note_to_client to file one.',
       inputSchema: {},
     },
     async () => {
@@ -418,7 +418,16 @@ function buildServer(db: SupabaseClient, staff: Staff) {
         'it is NOT a live balance and may be days or months old, so always state the as-at date when reporting a value. ' +
         'change_amount and change_pct compare latest_value against baseline_value, the average of the valuations in the ' +
         '30 days BEFORE the latest one. baseline_points is how many valuations that average came from; 0 means no trend ' +
-        'can be stated at all. All amounts are AUD.',
+        'can be stated at all. All amounts are AUD. ' +
+        'valuation_source says who recorded latest_value: manual means a staff member typed it, integration means a ' +
+        'provider feed wrote it and valuation_source_system names which one. ' +
+        'available_cash is cash available to trade as at snapshot_as_at - a CURRENT figure, not a series, and it is ' +
+        'already INSIDE latest_value, so never add the two. ' +
+        'allocation is how the account is invested, as a list of {asset_class, weight}. Weights are FRACTIONS OF ONE ' +
+        '(0.2456 is 24.56%), they MAY BE NEGATIVE - a short overlay or a pending settlement is real - and they are as ' +
+        'the provider reported them, so they need not total exactly 1. allocation_as_at dates them and can be OLDER ' +
+        'than snapshot_as_at, because a feed run refreshes cash every day but skips the allocation when its own checks ' +
+        'fail. Always state allocation_as_at when reporting a mix.',
       inputSchema: {
         party_id: z.string().uuid().optional(),
         group_id: z.string().uuid().optional(),
@@ -439,9 +448,30 @@ function buildServer(db: SupabaseClient, staff: Staff) {
       const ids = [...new Set((owners ?? []).map((o) => (o as Record<string, unknown>).account_id as string))]
       if (ids.length === 0) return ok([])
 
+      /*
+       * An explicit column list, not `select('*')`, and the reason is one
+       * column.
+       *
+       * `financial_accounts_summary` gained `product_display_name` on
+       * 16 September. It reads like an account's name and is a fee-schedule
+       * identifier: eleven of the first twenty HUB24 accounts shared one
+       * string, and every CLOSED account's contains the word ACTIVE. A model
+       * handed that alongside `label` will present it as the account's name,
+       * and unlike a screen there is no designer between the value and the
+       * reader. So it is withheld here deliberately - the web app shows it
+       * under a "Product" heading, where saying ACTIVE is harmless.
+       *
+       * A star select would also mean every future column reaches a language
+       * model the day it is added, unexplained.
+       */
       const { data, error } = await db
         .from('financial_accounts_summary')
-        .select('*')
+        .select(
+          'account_id, account_type, label, account_number, status, opened_on, closed_on, ' +
+            'provider, owners, owner_count, latest_value, valued_on, change_amount, change_pct, ' +
+            'baseline_value, baseline_points, available_cash, snapshot_as_at, ' +
+            'valuation_source, valuation_source_system, allocation, allocation_as_at',
+        )
         .in('account_id', ids)
         .order('label')
       if (error) return fail(error.message)

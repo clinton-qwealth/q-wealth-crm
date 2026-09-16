@@ -271,6 +271,106 @@ export async function createPolicy(
 
 export type MemberState = { error: string } | { ok: true } | null
 
+// ---------------------------------------------------------------------------
+// Correcting an account or a policy
+// ---------------------------------------------------------------------------
+//
+// The three fields on each that a PERSON owns, and nothing else. Everything
+// else about an account now belongs to the provider feed — value, cash,
+// product, allocation are all refreshed daily by ingest.promote() and a hand
+// edit would be gone by morning — which is why the drawer shows them without a
+// pencil beside them.
+//
+// Both follow patchMember exactly: a patch built by KEY PRESENCE from whatever
+// the submitted form actually carried, one RPC, one revalidate. A form holding
+// only a name produces a one-key patch and the database leaves the owners
+// alone.
+
+export type RecordDetailState = { error: string } | { ok: true } | null
+
+/**
+ * `owner_party_ids` is read behind a sentinel, and the sentinel is load-bearing.
+ *
+ * `formData.getAll('owner_party_ids')` returns `[]` in two opposite situations:
+ * when the owner editor was never on the form at all, and when it was there
+ * with every box unticked. Under patch semantics those mean "leave the owners
+ * exactly as they are" and "remove every owner" — so without something to tell
+ * them apart, emptying the list would silently do nothing at all.
+ *
+ * The editor renders a hidden input alongside its checkboxes; its presence is
+ * what says the set was on the form and is being submitted.
+ */
+function readPartySet(formData: FormData, field: string, sentinel: string): string[] | undefined {
+  if (!formData.has(sentinel)) return undefined
+  return formData.getAll(field).map(String).filter(Boolean)
+}
+
+export async function saveAccountDetails(
+  _prev: RecordDetailState,
+  formData: FormData,
+): Promise<RecordDetailState> {
+  const accountId = String(formData.get('account_id') ?? '')
+  if (!accountId) return { error: 'No account selected.' }
+
+  const patch: Record<string, unknown> = {}
+  if (formData.has('label')) patch.label = String(formData.get('label')).trim()
+  if (formData.has('account_type')) patch.account_type = String(formData.get('account_type'))
+  const owners = readPartySet(formData, 'owner_party_ids', 'owners_present')
+  if (owners) patch.owner_party_ids = owners
+
+  if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
+  if ('label' in patch && !patch.label) return { error: 'Give the account a name.' }
+  /* Caught here so an emptied list is a sentence rather than a round trip. The
+     database refuses it too — this is the friendlier of two identical answers,
+     not the only one. */
+  if (owners && owners.length === 0) return { error: 'Choose at least one owner.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_financial_account_patch', {
+    p_account_id: accountId,
+    p_patch: patch,
+  })
+  /* Passed through, not rewritten. The database's refusals here are already
+     sentences an adviser can act on — "One of those owners is not someone you
+     can add to this account" — and rewriting them would lose exactly that one. */
+  if (error) return { error: error.message }
+
+  /* The route pattern, not one path: a jointly owned account belongs to two
+     groups, and an owner edit can move it between them. */
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function savePolicyDetails(
+  _prev: RecordDetailState,
+  formData: FormData,
+): Promise<RecordDetailState> {
+  const policyId = String(formData.get('policy_id') ?? '')
+  if (!policyId) return { error: 'No policy selected.' }
+
+  const patch: Record<string, unknown> = {}
+  if (formData.has('label')) patch.label = String(formData.get('label')).trim()
+  const owners = readPartySet(formData, 'owner_party_ids', 'owners_present')
+  const lives = readPartySet(formData, 'life_insured_party_ids', 'lives_present')
+  if (owners) patch.owner_party_ids = owners
+  if (lives) patch.life_insured_party_ids = lives
+
+  if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
+  if ('label' in patch && !patch.label) return { error: 'Give the policy a name.' }
+  if (owners && owners.length === 0) return { error: 'Choose at least one owner.' }
+  if (lives && lives.length === 0) return { error: 'Name at least one life insured.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_insurance_policy_patch', {
+    p_policy_id: policyId,
+    p_patch: patch,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 /** Shared by create and update: the panel's field set, read off the form. */
 function readPersonFields(formData: FormData) {
   const str = (k: string) => String(formData.get(k) ?? '').trim()

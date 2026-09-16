@@ -124,3 +124,86 @@ describe('DataSection', () => {
     expect(name.parentElement!.children).toHaveLength(2)
   })
 })
+
+/**
+ * The row's optional click target, added 16 September for the account and
+ * policy drawers.
+ *
+ * The rule the tests below encode is that a row only behaves like a control
+ * when it actually is one — the balance-sheet rows and the file-notes rows open
+ * nothing, and a hover tint or a button role on those would promise something
+ * that does not happen.
+ */
+describe('DataRow with a trigger', () => {
+  const noop = () => {}
+
+  test('a row without one renders no button and no hover tint', () => {
+    const { container } = render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="Untouchable" meta="$1.00" />
+      </DataSection>,
+    )
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('li')!.className).not.toContain('hover:bg-neutral-50')
+  })
+
+  test('a row with one renders exactly one button, named as given', () => {
+    const { container } = render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow
+          primary="Netwealth Wrap"
+          meta="$1.00"
+          trigger={{ label: 'Open account: Netwealth Wrap', onClick: noop }}
+        />
+      </DataSection>,
+    )
+    expect(container.querySelectorAll('button')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Open account: Netwealth Wrap' })).toBeTruthy()
+    expect(container.querySelector('li')!.className).toContain('hover:bg-neutral-50')
+  })
+
+  /* A control inside a control is invalid, and the meta column is where a
+     valuation picker is the obvious next thing to land. */
+  test('and the meta column stays outside it', () => {
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow
+          primary="Netwealth Wrap"
+          meta={<span>$626,559.81</span>}
+          trigger={{ label: 'Open account: Netwealth Wrap', onClick: noop }}
+        />
+      </DataSection>,
+    )
+    const button = screen.getByRole('button', { name: 'Open account: Netwealth Wrap' })
+    expect(button.textContent).toContain('Netwealth Wrap')
+    expect(button.textContent).not.toContain('626,559.81')
+  })
+
+  /**
+   * A class assertion, justified the way `modal-centring` justifies its own:
+   * jsdom has no CSS engine, and `SHEET` is `overflow-hidden`, so an outer ring
+   * on the first or last row is shaved by the sheet's own clip. Nothing that
+   * renders can see that; the class is the only evidence there is.
+   */
+  test('and its focus ring is inset, so the sheet cannot clip it', () => {
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="A" trigger={{ label: 'Open account: A', onClick: noop }} />
+      </DataSection>,
+    )
+    expect(screen.getByRole('button', { name: 'Open account: A' }).className).toContain(
+      'ring-inset',
+    )
+  })
+
+  test('and clicking it calls what it was given', () => {
+    let opened = 0
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow primary="A" trigger={{ label: 'Open account: A', onClick: () => (opened += 1) }} />
+      </DataSection>,
+    )
+    screen.getByRole('button', { name: 'Open account: A' }).click()
+    expect(opened).toBe(1)
+  })
+})

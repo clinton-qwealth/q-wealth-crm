@@ -165,3 +165,94 @@ describe('the investment-mix ramp', () => {
     }
   })
 })
+
+/**
+ * The same four inks, now on a second ground — the allocation bars' track.
+ *
+ * The ramp was measured against the white sheet because that is what a donut
+ * arc sits on. An allocation bar sits on a filled track instead, which is a
+ * LIGHTER ground than white is dark, so every ratio here is smaller than the
+ * one above it. That is the whole reason this block exists: a palette can clear
+ * its floor in one place and fail it a component later, and nothing else in the
+ * suite would notice — `allocation-bars` paints `var(--mix-1)` and jsdom has no
+ * idea what that resolves to.
+ *
+ * The greys are read OUT OF THE COMPONENT rather than written down here, so
+ * changing a class re-points the measurement instead of quietly leaving it
+ * measuring a colour the page no longer uses.
+ */
+const BARS = readFileSync(resolve(process.cwd(), 'components/allocation-bars.tsx'), 'utf8')
+
+/** Tailwind v4's neutral scale, the steps this component draws with. */
+const NEUTRAL: Record<string, string> = {
+  '100': '#f5f5f5',
+  '200': '#e5e5e5',
+  '400': '#a3a3a3',
+  '500': '#737373',
+  '600': '#525252',
+  '700': '#404040',
+}
+
+const stepFrom = (pattern: RegExp, what: string) => {
+  const m = BARS.match(pattern)
+  if (!m) throw new Error(`${what} is not where mix-palette expects it in allocation-bars.tsx`)
+  const hex = NEUTRAL[m[1]]
+  if (!hex) throw new Error(`neutral-${m[1]} (${what}) is not in this file's scale`)
+  return hex
+}
+
+const TRACK = stepFrom(/h-2\.5 rounded bg-neutral-(\d+)/, 'the bar track')
+const NEGATIVE = stepFrom(/r\.negative \? 'bg-neutral-(\d+)'/, 'the negative bar')
+const ZERO_RULE = stepFrom(/w-px bg-neutral-(\d+)/, 'the zero rule')
+
+describe('the allocation bars, on their own track', () => {
+  test('every family ink clears the 3:1 non-text floor against the track', () => {
+    for (const [i, colour] of RAMP.entries()) {
+      expect(
+        contrast(colour, TRACK),
+        `--mix-${i + 1} (${colour}) on the bar track (${TRACK})`,
+      ).toBeGreaterThan(3)
+    }
+  })
+
+  /**
+   * The negative bar is not decoration — it is the one mark saying a holding is
+   * short. It was neutral-400 when this block was written, measuring 2.29:1,
+   * and the bar was there to be squinted at rather than seen.
+   */
+  test('and so does the negative bar', () => {
+    expect(contrast(NEGATIVE, TRACK), `the negative bar (${NEGATIVE})`).toBeGreaterThan(3)
+  })
+
+  /**
+   * The zero rule is what tells a reader WHICH SIDE a bar is on, so it is
+   * load-bearing in exactly the same way.
+   */
+  test('and the zero rule, on the track and on the sheet it overhangs', () => {
+    expect(contrast(ZERO_RULE, TRACK), `the zero rule (${ZERO_RULE}) on the track`).toBeGreaterThan(3)
+    expect(contrast(ZERO_RULE, GROUND), `the zero rule (${ZERO_RULE}) on the sheet`).toBeGreaterThan(3)
+  })
+
+  /**
+   * The trap the obvious fix walks into. `--mix-4` IS neutral-500, and `other`
+   * is in the cash family — so deepening the negative bar one step would have
+   * made a negative `other` bar the same grey as the positive `cash` bar
+   * directly above it, at which point the tone stops carrying the sign at all.
+   */
+  test('the negative grey is not one of the family inks', () => {
+    for (const [i, colour] of RAMP.entries()) {
+      /* The ramp's own criterion, reused rather than re-argued: lightness
+         separates two colours of the same hue, chroma separates a grey from a
+         saturated one. neutral-600 and indigo-700 sit 0.002 apart in luminance
+         and are still nothing alike, which the first version of this assertion
+         got wrong. */
+      const dLum = Math.abs(luminance(NEGATIVE) - luminance(colour))
+      const dSat = Math.abs(saturation(NEGATIVE) - saturation(colour))
+      expect(
+        colour !== NEGATIVE && (dLum > 0.03 || dSat > 0.25),
+        `the negative bar (${NEGATIVE}) is indistinguishable from --mix-${i + 1} (${colour}): ` +
+          `\u0394luminance ${dLum.toFixed(3)}, \u0394saturation ${dSat.toFixed(2)}`,
+      ).toBe(true)
+    }
+  })
+})

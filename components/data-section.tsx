@@ -202,6 +202,7 @@ export function DataRow({
   primary,
   secondary,
   meta,
+  trigger,
 }: {
   /** A tile or glyph before the text, e.g. AccountTypeTile. Optional: a list
    *  with nothing meaningful to draw is better off without a decorative one. */
@@ -209,6 +210,25 @@ export function DataRow({
   primary: string
   secondary?: string
   meta?: ReactNode
+  /**
+   * Makes the row's tile and text one button, for a list with a drawer to open.
+   *
+   * ONE prop, not two, so the click target and its accessible name cannot be
+   * added separately and end up disagreeing. Supplied by the two lists that
+   * have a record to show, absent everywhere else — so a row nobody can open
+   * neither lights up under the pointer nor announces itself as a control.
+   * Not speculative: two callers on the day it lands, none without them, which
+   * is the bar the two removed props below set.
+   *
+   * `label` is the button's accessible NAME, given rather than derived. The
+   * noun differs by list, and the row's own text — name, type, owners, value,
+   * direction — would make a paragraph of it.
+   *
+   * `meta` stays OUTSIDE the button. A control inside a control is invalid, and
+   * the accounts row already carries `AccountValue` on the right, which is
+   * where a valuation picker is the obvious next thing to land.
+   */
+  trigger?: { label: string; onClick: () => void }
   /*
    * A `badge` prop sat here until 11 September, holding a status pill to the
    * right of the name. It was removed rather than left unused, the same call
@@ -222,17 +242,46 @@ export function DataRow({
    * LEADING TILE, which is a fixed 36px square and cannot squeeze anything.
    */
 }) {
+  {/* One span, with nothing to compete for the width — see the note on the
+      removed `badge` prop above. */}
+  const text = (
+    <span className="min-w-0 flex-1 basis-40">
+      <span className="block truncate text-sm font-semibold text-neutral-900">{primary}</span>
+      {secondary ? (
+        <span className="block truncate text-xs text-neutral-500">{secondary}</span>
+      ) : null}
+    </span>
+  )
+
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-3">
-      {leading}
-      <span className="min-w-0 flex-1 basis-40">
-        {/* One span, with nothing to compete for the width — see the note on
-            the removed `badge` prop above. */}
-        <span className="block truncate text-sm font-semibold text-neutral-900">{primary}</span>
-        {secondary ? (
-          <span className="block truncate text-xs text-neutral-500">{secondary}</span>
-        ) : null}
-      </span>
+    <li
+      /* The tint is on the ROW, not on the button, because the button covers
+         only the left of it — a hover that lit the name and left the figure
+         beside it dead would read as two rows. Conditioned on `trigger` so a
+         row that opens nothing does not pretend otherwise. */
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-3${
+        trigger ? ' transition-colors hover:bg-neutral-50' : ''
+      }`}
+    >
+      {trigger ? (
+        <button
+          type="button"
+          onClick={trigger.onClick}
+          aria-label={trigger.label}
+          /* The ring is INSET. `SHEET` is `overflow-hidden`, so an outer ring on
+             the first or last row is shaved by the sheet's own clip — the same
+             reason the member rows carry one. */
+          className="-m-1 flex min-w-0 flex-1 basis-40 items-center gap-3 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+        >
+          {leading}
+          {text}
+        </button>
+      ) : (
+        <>
+          {leading}
+          {text}
+        </>
+      )}
       {meta ? (
         /* Opposite the text, at the right edge, where a column of figures lines
            up and can be read downward.

@@ -1059,7 +1059,10 @@ export function NoteTypeGlyph({ type, className = 'h-3 w-3' }: { type: string; c
   return <Glyph className={className} />
 }
 
-const coverMoney = new Intl.NumberFormat('en-AU', {
+/* Exported for the policy drawer, which prints each cover on its own line: a
+   list whose figures rounded differently from the summary above it would read
+   as two different quantities. */
+export const coverMoney = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
   maximumFractionDigits: 0,

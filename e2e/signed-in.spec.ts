@@ -112,6 +112,63 @@ test.describe('authenticated staff access', () => {
   })
 
   /**
+   * The account drawer's MODALITY — the half jsdom cannot see.
+   *
+   * The unit tests cover what the drawer renders, and they are blind to the
+   * four things that made a native `<dialog>` worth using in the first place:
+   * the top layer, an inert background, focus genuinely held inside, and
+   * Escape handled by the browser. jsdom stubs `showModal()` by toggling an
+   * attribute and moves no focus at all, so a hand-rolled panel with none of
+   * this would pass every test in `__tests__` untouched. This is the test that
+   * would not pass.
+   */
+  test('the account drawer is modal, and closing it returns the reader', async ({ page }) => {
+    await page.goto('/groups')
+    await page.getByRole('tab', { name: 'Accounts' }).click()
+
+    const row = page.getByRole('button', { name: /^Open / }).first()
+    /* Skipped rather than failed on a database with no accounts in it: this
+       spec runs against whatever data the environment has, and an empty
+       accounts list is a legitimate state, not a regression. */
+    test.skip((await row.count()) === 0, 'This group has no accounts to open.')
+
+    await row.click()
+    const drawer = page.locator('dialog[open]')
+    await expect(drawer).toBeVisible()
+
+    /* Initial focus lands on the heading, so a screen reader announces the
+       ACCOUNT. Neither hand-rolled drawer did this: the first tabbable thing
+       was the close button, and the reader heard "Close panel". */
+    const headingFocused = await page.evaluate(
+      () => document.activeElement?.tagName === 'H2',
+    )
+    expect(headingFocused, 'focus did not land on the drawer heading').toBe(true)
+
+    /*
+     * The background is genuinely INERT, not merely covered.
+     *
+     * A `.focus()` on an element behind a modal dialog is refused by the
+     * browser — nothing moves. An overlay div with a high z-index looks
+     * identical on screen and fails this outright, which is exactly why it is
+     * worth one round trip to assert.
+     */
+    const escaped = await page.evaluate(() => {
+      const behind = document.querySelector<HTMLElement>('[role="tab"]')
+      behind?.focus()
+      return document.activeElement === behind
+    })
+    expect(escaped, 'the page behind the drawer is still focusable').toBe(false)
+
+    await page.keyboard.press('Escape')
+    await expect(drawer).toHaveCount(0)
+
+    /* And the reader is put back where they were. This is the browser's own
+       behaviour and it only works because the trigger still exists — one
+       dialog for the list, rows keyed by id, so nothing is remounted. */
+    await expect(row).toBeFocused()
+  })
+
+  /**
    * Signing out has to actually restore the boundary, not just clear the visible
    * chrome. This is the case a cookie-handling mistake breaks.
    */

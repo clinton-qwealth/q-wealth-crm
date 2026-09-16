@@ -115,6 +115,26 @@ export function SmsIcon({ className = base }: IconProps) {
   )
 }
 
+/**
+ * The dismiss cross on a drawer or a modal.
+ *
+ * Deliberately NOT `CrossIcon`, which is a quarter-point heavier and paired
+ * with `TickIcon` as a pass/fail mark. This one is a control, not a verdict,
+ * and it sat inlined in two panels at 1.5 before it was given a name.
+ */
+export function CloseIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className={className} aria-hidden="true">
+      <path
+        d="M4 4l8 8M12 4l-8 8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 /* The mirror of TickIcon — same box, same stroke weight, so a pass mark and a
    fail mark read as one pair rather than two designs. */
 export function CrossIcon({ className = base }: IconProps) {

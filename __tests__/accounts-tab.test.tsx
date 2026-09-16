@@ -199,6 +199,26 @@ const investmentSection = (accounts: HTMLElement) => {
   return left
 }
 
+/**
+ * The status marks on one row, and only the ones a STATUS puts there.
+ *
+ * This was `:scope > .sr-only` until 16 September, when the row's tile and text
+ * moved inside a button so the row could open a drawer — which pushed the mark
+ * one level down and, worse, made the "a live row is not marked at all"
+ * assertion pass for the wrong reason. Anchoring on the tile instead of on a
+ * depth says what is actually meant: the mark belongs to the TILE, and
+ * `AccountValue`'s own sr-only "increasing" in the meta column is not a status.
+ */
+const rowMarks = (row: Element) =>
+  Array.from(row.querySelectorAll('.sr-only')).filter((el) => {
+    /* The tile's own mark: an `aria-hidden` square carrying the word as a
+       `title`, with the readable copy beside it. The trend arrow inside
+       `AccountValue` is `aria-hidden` too but carries no title, which is what
+       keeps "increasing" out of this list. */
+    const before = el.previousElementSibling
+    return before?.getAttribute('aria-hidden') === 'true' && before.hasAttribute('title')
+  })
+
 describe('the Accounts tab’s investment section', () => {
   test('sits in a two-column split, records on the left and the donut on the right', async () => {
     const { accounts } = await panels()
@@ -290,22 +310,22 @@ describe('the Accounts tab’s investment section', () => {
       const row = Array.from(investmentSection(accounts).querySelectorAll('li')).find((li) =>
         li.textContent?.includes('Aardvark Legacy'),
       )!
-      const marks = row.querySelectorAll(':scope > .sr-only')
+      const marks = rowMarks(row)
       expect(marks).toHaveLength(1)
       expect(marks[0].textContent).toBe('Closed')
       // On the tile, which is hidden from assistive tech — hence the sr-only.
       expect(row.querySelector('[title="Closed"]')!.getAttribute('aria-hidden')).toBe('true')
     })
 
-    /* Scoped to the row's own children, because `AccountValue` carries an
-       sr-only "increasing"/"decreasing" of its own inside the meta column —
-       which a broader selector picked up, and which is not a status mark. */
+    /* Scoped to the row's TILE, because `AccountValue` carries an sr-only
+       "increasing"/"decreasing" of its own inside the meta column — which a
+       broader selector picked up, and which is not a status mark. */
     test('and a live row is not marked at all', async () => {
       const { accounts } = await panels()
       const row = Array.from(investmentSection(accounts).querySelectorAll('li')).find((li) =>
         li.textContent?.includes('Joint Super'),
       )!
-      expect(row.querySelectorAll(':scope > .sr-only')).toHaveLength(0)
+      expect(rowMarks(row)).toHaveLength(0)
       /* Also scoped: a valued row carries a `title` on its trend arrow,
          spelling out the 30-day comparison. That is not a status tooltip. */
       expect(row.querySelector(':scope > [title]'), 'a live tile needs no tooltip').toBeNull()

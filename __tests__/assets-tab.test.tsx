@@ -563,7 +563,15 @@ describe('the Assets + Liabilities tab', () => {
     }
 
     /* And the member panel's tabs are untouched — the floor is the middle
-       column's, not every tab strip's in the app. */
+       column's, not every tab strip's in the app.
+
+       The panel has to be OPENED to check that now. Since 16 September the
+       shared `Drawer` renders nothing while closed, so a group's members no
+       longer put their whole records in the document — which is the point of
+       it, and which made this probe unreachable on a page at rest. Opening one
+       is a stronger check anyway: it reads the markup in the state a person
+       actually sees. */
+    fireEvent.click(screen.getByRole('button', { name: /Janet Testsmith/ }))
     const member = document.getElementById('panel-personal')
     expect(member, 'the member panel no longer renders, so this proves nothing').toBeTruthy()
     expect(member!.className).not.toContain(WORKING_AREA)

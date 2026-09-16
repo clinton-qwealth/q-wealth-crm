@@ -2,14 +2,15 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, owedMoney, coverSummary, ACCOUNT_LIVE, AccountTypeTile, AccountValue, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, PolicyTile, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
+import { accountMoney, owedMoney, ACCOUNT_LIVE, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
 import { balanceTotals, ITEM_LIVE, ITEM_TYPE_LABEL } from '@/lib/balance-sheet'
 import { PhoneIcon } from '@/components/icons'
-import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { AccountDonut } from '@/components/account-donut'
 import { DataRow, DataSection } from '@/components/data-section'
+import { AccountList, type AccountRow } from '@/components/account-list'
+import { PolicyList, type PolicyRow } from '@/components/policy-list'
 import { AddAccountModal } from '@/components/add-account-modal'
 import { AddPolicyModal } from '@/components/add-policy-modal'
 import { AddBalanceItemModal } from '@/components/add-balance-item-modal'
@@ -205,34 +206,10 @@ async function getGroupContacts(groupId: string) {
   return { phone: (best?.value as string | null) ?? null, adviser }
 }
 
-type PolicyRow = {
-  policy_id: string
-  label: string
-  policy_number: string
-  status: string
-  insurer: string | null
-  owners: string | null
-  lives_insured: string | null
-  cover_types: string | null
-  total_lump_sum_cover: string | number | null
-  total_monthly_benefit: string | number | null
-  premium: string | number | null
-  premium_frequency: string | null
-}
-
-type AccountRow = {
-  account_id: string
-  account_type: string
-  label: string
-  status: string
-  owners: string | null
-  latest_value: string | number | null
-  valued_on: string | null
-  change_amount: string | number | null
-  change_pct: string | number | null
-  baseline_value: string | number | null
-  baseline_points: number | null
-}
+/* `AccountRow` and `PolicyRow` moved to the list components on 16 September,
+   because that is where the fields are now read. The page's job is to fetch
+   the rows and hand them over; what a drawer needs from them is the drawer's
+   business. */
 
 /**
  * The group's members, its accounts, its policies, and the providers on file.
@@ -300,14 +277,6 @@ async function getAccountsData(groupId: string) {
     members,
     providers,
   }
-}
-
-
-const COVER_TYPE_LABEL: Record<string, string> = {
-  life: 'Life',
-  tpd: 'TPD',
-  trauma: 'Trauma',
-  income_protection: 'Income protection',
 }
 
 
@@ -604,42 +573,13 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                             'Investment and superannuation accounts owned by this group\u2019s members.',
                         }}
                       >
-                        {accounts.length
-                          ? accounts.map((a) => (
-                              <DataRow
-                                key={a.account_id}
-                                /* The tile carries the status: a live account
-                                   keeps its type colour and glyph, a suspended
-                                   or closed one turns grey and swaps the glyph
-                                   for a pause or an archive. It replaced a pill
-                                   beside the name on 11 September, which was
-                                   truncating the name to fit itself. */
-                                leading={
-                                  <AccountTypeTile type={a.account_type} status={a.status} />
-                                }
-                                primary={a.label}
-                                /* One heading now covers both kinds of account, so the
-                                   row has to say which this is — and it is the only
-                                   place the type is stated once a dormant tile has
-                                   given up its glyph for the status. */
-                                secondary={[
-                                  ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type,
-                                  a.owners,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                                meta={
-                                  <AccountValue
-                                    value={a.latest_value}
-                                    changeAmount={a.change_amount}
-                                    changePct={a.change_pct}
-                                    baselineValue={a.baseline_value}
-                                    baselinePoints={a.baseline_points}
-                                  />
-                                }
-                              />
-                            ))
-                          : undefined}
+                        {accounts.length ? (
+                          <AccountList
+                            accounts={accounts}
+                            members={ownerOptions}
+                            groupName={group.name}
+                          />
+                        ) : undefined}
                       </DataSection>
                       {/* The reserved half, no longer reserved — a trial as of
                           10 September. The Workflows tab still shows
@@ -667,25 +607,13 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                           'Life, TPD, trauma and income protection cover held by this group\u2019s members.',
                       }}
                     >
-                      {policies.length
-                        ? policies.map((p) => (
-                            <DataRow
-                              key={p.policy_id}
-                              leading={<PolicyTile status={p.status} />}
-                              primary={p.label}
-                              secondary={[
-                                p.cover_types
-                                  ?.split(', ')
-                                  .map((c) => COVER_TYPE_LABEL[c] ?? c)
-                                  .join(', '),
-                                p.lives_insured,
-                              ]
-                                .filter(Boolean)
-                                .join(' \u00b7 ')}
-                              meta={coverSummary(p.total_lump_sum_cover, p.total_monthly_benefit) ?? undefined}
-                            />
-                          ))
-                        : undefined}
+                      {policies.length ? (
+                        <PolicyList
+                          policies={policies}
+                          members={ownerOptions}
+                          groupName={group.name}
+                        />
+                      ) : undefined}
                     </DataSection>
                   </div>
                 ),

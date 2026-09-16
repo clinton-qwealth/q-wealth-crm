@@ -18,7 +18,8 @@ import {
   attestVerification,
 } from '@/app/(shell)/groups/actions'
 import type { Address, PersonDetail, Subscription, VerificationEntry } from '@/lib/person'
-import { CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
+import { CloseIcon, CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
+import { Drawer } from './drawer'
 import { Tabs } from './tabs'
 import { GroupTile, PANEL_GUTTER, Pill } from './ui'
 import { useServerState } from './use-server-state'
@@ -1603,7 +1604,7 @@ export function MemberPanel({
   initialMode?: Mode
   initialPartyId?: string
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null)
+  const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<Mode>(initialMode)
   const [partyId, setPartyId] = useState<string | undefined>(initialPartyId)
 
@@ -1616,36 +1617,38 @@ export function MemberPanel({
   const [matches, setMatches] = useState<PersonMatch[]>([])
   const [searching, startSearch] = useTransition()
 
-  const open = () => {
+  const show = () => {
     setMode(initialMode)
     setPartyId(initialPartyId)
-    dialogRef.current?.showModal()
+    setOpen(true)
   }
-  const close = () => dialogRef.current?.close()
+  const close = () => setOpen(false)
 
-  // A successful save closes the panel. Each action has its own state, so both
-  // are watched rather than one combined flag.
+  /*
+   * A successful save closes the panel. Each action has its own state, so both
+   * are watched rather than one combined flag.
+   *
+   * `react-hooks/set-state-in-effect` fires here and is answered rather than
+   * worked around. The rule is aimed at state derived from other state, which
+   * should be computed during render; this is a response to an EXTERNAL event —
+   * a server action resolving — which `useActionState` surfaces only as a
+   * changed value, so an effect is the only place to notice it.
+   *
+   * The other modals dodge it by calling `dialogRef.current?.close()`, an
+   * imperative DOM call the rule cannot see. That is not available here on
+   * purpose: `Drawer` owns its element precisely so the open state has one
+   * source of truth, and reaching around it for a lint result would reintroduce
+   * the bug the component was written to prevent.
+   */
   useEffect(() => {
     for (const s of [createState, linkState]) {
       if (s && 'ok' in s) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         close()
         break
       }
     }
   }, [createState, linkState])
-
-  // Escape closes the dialog without telling React, so state is reset on close
-  // rather than on open — otherwise a reopened panel shows the previous mode.
-  useEffect(() => {
-    const el = dialogRef.current
-    if (!el) return
-    const onClose = () => {
-      setQuery('')
-      setMatches([])
-    }
-    el.addEventListener('close', onClose)
-    return () => el.removeEventListener('close', onClose)
-  }, [])
 
   const runSearch = (value: string) => {
     setQuery(value)
@@ -1673,19 +1676,32 @@ export function MemberPanel({
 
   return (
     <>
-      <button type="button" onClick={open} className={triggerClass}>
+      <button type="button" onClick={show} className={triggerClass}>
         {children}
       </button>
 
-      <dialog
-        ref={dialogRef}
-        aria-labelledby="member-panel-title"
-        onClick={(e) => {
-          // Clicking the backdrop lands on the dialog itself; clicks inside the
-          // panel land on the panel.
-          if (e.target === dialogRef.current) close()
+      {/* The shared drawer. This component's own dialog was one of the two it
+          was extracted from — see drawer.tsx.
+
+          The header below is NOT `DrawerHeader`, and deliberately: this panel's
+          heading carries an inline verify control and a membership sub-line and
+          has no eyebrow, so it is a different shape rather than the same one
+          configured differently. What it gives up by staying hand-written is
+          the initial focus on the heading, which is named as deferred.
+
+          Escape and the backdrop both close without telling React, and the
+          search state has to be reset on every one of those paths — which is
+          what `onClose` is for. It fires for the buttons too, because setting
+          `open` false closes the element and the element then reports it. */}
+      <Drawer
+        open={open}
+        onClose={() => {
+          setOpen(false)
+          setQuery('')
+          setMatches([])
         }}
-        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-[34rem] lg:w-[45%] lg:min-w-[34rem] lg:max-w-[46rem]"
+        labelledBy="member-panel-title"
+        width="record"
       >
         {/*
           * **One gutter, 32px, and every section of the panel is on it** — the
@@ -1740,15 +1756,7 @@ export function MemberPanel({
               aria-label="Close panel"
               className="-mr-1 shrink-0 rounded-md p-1.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
             >
-              <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-              </svg>
+              <CloseIcon />
             </button>
           </header>
 
@@ -2378,7 +2386,7 @@ export function MemberPanel({
             </form>
           ) : null}
         </div>
-      </dialog>
+      </Drawer>
     </>
   )
 }

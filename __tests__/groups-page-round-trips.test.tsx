@@ -143,6 +143,13 @@ describe('/groups/[id] round-trip depth', () => {
     expect(calls).not.toContain('financial_accounts_summary')
     expect(calls).not.toContain('insurance_policy_parties')
     expect(calls).not.toContain('insurance_policies_summary')
+    /* The account drawer's allocation. Appended to the group view as a jsonb
+       column on 16 September rather than read from its own table, because a
+       seventh read is a seventh round trip and a read keyed by the account ids
+       would be a third wave. A drawer that fetched on open would hide the same
+       cost behind a click and look perfectly correct on screen — so this line,
+       not the screen, is what holds the design to it. */
+    expect(calls).not.toContain('financial_account_allocations')
     /* Still 2 with the balance sheet added on 14 September: one more read on a
        wave that was already running costs no depth, and a fifth read chained
        after it would read 3 here. */

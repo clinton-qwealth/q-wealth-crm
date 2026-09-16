@@ -22,6 +22,7 @@ import {
 import { dueState, formatCalendarDate, formatNoteDate, formatNoteDateTime, type DueState } from '@/lib/note-date'
 import { PANEL_GUTTER, Pill, QUIET_ACTION, SHEET_SURFACE, type PillTone } from './ui'
 import { EditField, Field, FieldBox, FIELD_INPUT, ReadonlyField } from './field-box'
+import { Drawer, DrawerHeader } from './drawer'
 import { Tabs } from './tabs'
 import { ActivityFeed } from './activity-feed'
 import { EmailTool } from './email-tool'
@@ -127,24 +128,13 @@ export function WorkflowTasks({
      file-notes picker was built to avoid. The selected id is state; the panel
      reads the task out of the same array the rows do, so it cannot show a
      stale copy after a revalidation. */
-  const panelRef = useRef<HTMLDialogElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selected = tasks.find((t) => t.id === selectedId) ?? null
 
-  function openTask(id: string) {
-    setSelectedId(id)
-    panelRef.current?.showModal()
-  }
-
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el) return
-    // Escape and the backdrop both close a native dialog without going through
-    // our handler, so the id is cleared from the element's own close event.
-    const onClose = () => setSelectedId(null)
-    el.addEventListener('close', onClose)
-    return () => el.removeEventListener('close', onClose)
-  }, [])
+  /* The id is the whole of the panel's state. `Drawer` follows it and reports
+     every close back — including Escape and a backdrop click, which the browser
+     performs without telling React — so there is no element handle to keep in
+     step with it here. */
 
   function toggle(task: WorkflowTask) {
     const next = task.status === 'done' ? 'open' : 'done'
@@ -239,7 +229,7 @@ export function WorkflowTasks({
                         the task is. */}
                     <button
                       type="button"
-                      onClick={() => openTask(t.id)}
+                      onClick={() => setSelectedId(t.id)}
                       aria-label={`Open task: ${t.subject}`}
                       className="-m-1 min-w-0 flex-1 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                     >
@@ -337,19 +327,13 @@ export function WorkflowTasks({
         </div>
       )}
 
-      {/* The panel. The same drawer as the member record panel — a native
-          dialog, so the background really is inert and focus really is held —
-          and the same width, because it holds the same kind of thing: one
-          record, read at length. */}
-      <dialog
-        ref={panelRef}
-        aria-labelledby="task-panel-title"
-        onClick={(e) => {
-          // A backdrop click lands on the dialog itself; a click inside the
-          // panel lands on the panel.
-          if (e.target === panelRef.current) panelRef.current?.close()
-        }}
-        className="qw-drawer w-full border-l border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/20 sm:w-lg lg:w-[40%] lg:min-w-lg lg:max-w-2xl"
+      {/* The panel. The shared drawer, which this component's own dialog was one
+          of the two originals of — see drawer.tsx for why it was extracted. */}
+      <Drawer
+        open={selected !== null}
+        onClose={() => setSelectedId(null)}
+        labelledBy="task-panel-title"
+        width="panel"
       >
         {selected ? (
           <TaskPanel
@@ -364,10 +348,10 @@ export function WorkflowTasks({
             staff={staff}
             entities={entities}
             viewer={viewer}
-            onClose={() => panelRef.current?.close()}
+            onClose={() => setSelectedId(null)}
           />
         ) : null}
-      </dialog>
+      </Drawer>
     </div>
   )
 }
@@ -496,47 +480,39 @@ function TaskPanel({
   )
 
   return (
-    <div className="flex h-full flex-col">
-      <header className={`flex shrink-0 items-start justify-between gap-3 ${PANEL_GUTTER} pb-5 pt-8`}>
-        <div className="min-w-0">
-          {/* The eyebrow says WHERE the task is, not what it is. It read "Task"
-              until 9 September — a word the drawer's shape already said — while
-              the client sat at the end of the marks row in the quietest type on
-              it, and the workflow's name was nowhere. The panel covers 40% of
-              the screen and hides the page behind it, so the one place both
-              names are worth repeating is the one place you cannot see them. */}
-          <p
-            className="truncate text-[11px] font-semibold uppercase tracking-widest text-brand"
-            title={`${groupName} · ${workflowName}`}
-          >
-            {groupName} · {workflowName}
-          </p>
-          <h2
-            id="task-panel-title"
-            className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900"
-          >
-            {task.subject}
-          </h2>
-          {/* Two pills, one idiom. The row held four facts in three treatments
-              — two pills, a bare glyph and a grey sentence — and the one task
-              type, "Checkbox", was a pill that said the same thing on every
-              task. Status and priority are the two states a task has; drawn
-              the same way, they read as a pair. */}
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {/* One pill driven by a map rather than three conditionals, so a
-                fourth status could not arrive without a tone. */}
+    <>
+      {/* The eyebrow says WHERE the task is, not what it is. It read "Task"
+          until 9 September — a word the drawer's shape already said — while the
+          client sat at the end of the marks row in the quietest type on it, and
+          the workflow's name was nowhere. The panel covers 40% of the screen and
+          hides the page behind it, so the one place both names are worth
+          repeating is the one place you cannot see them.
+
+          Two pills, one idiom. The row held four facts in three treatments — two
+          pills, a bare glyph and a grey sentence — and the one task type,
+          "Checkbox", was a pill that said the same thing on every task. Status
+          and priority are the two states a task has; drawn the same way, they
+          read as a pair. Each is driven by a map rather than by conditionals, so
+          a fourth status could not arrive without a tone. */}
+      <DrawerHeader
+        id="task-panel-title"
+        eyebrow={`${groupName} · ${workflowName}`}
+        title={task.subject}
+        onClose={onClose}
+        pills={
+          <>
             <Pill tone={TASK_STATUS_TONE[task.status]}>{TASK_STATUS_LABEL[task.status]}</Pill>
             <Pill tone="neutral">
               <PriorityGlyph priority={task.priority} className="-ml-0.5 mr-1 h-3 w-3" />
               {priority.label}
             </Pill>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* The row's tick, from inside the record — see the component note.
-              Not for a cancelled task: the row's checkbox is disabled for one
-              too, and reviving cancelled work is not a click's decision. */}
-          {task.status !== 'cancelled' ? (
+          </>
+        }
+        actions={
+          /* The row's tick, from inside the record — see the component note.
+             Not for a cancelled task: the row's checkbox is disabled for one
+             too, and reviving cancelled work is not a click's decision. */
+          task.status !== 'cancelled' ? (
             <button
               type="button"
               onClick={onToggleStatus}
@@ -544,19 +520,9 @@ function TaskPanel({
             >
               {task.status === 'done' ? 'Reopen' : 'Mark done'}
             </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close panel"
-            className="-mr-1 shrink-0 rounded-md p-1.5 text-neutral-400 outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-brand/30"
-          >
-            <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" />
-            </svg>
-          </button>
-        </div>
-      </header>
+          ) : null
+        }
+      />
 
       {/* The fields, above the tabs — the tab strip sits below the last of them,
           the description. Capped and scrollable rather than simply shrink-0: a
@@ -769,7 +735,7 @@ function TaskPanel({
           onClose={() => setEmailOpen(false)}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 
