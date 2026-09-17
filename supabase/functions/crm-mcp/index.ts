@@ -77,8 +77,31 @@ app.get('/health', (c) => c.json({ ok: true, service: 'q-wealth-crm-mcp' }))
 function groupLink(id: string) {
   return `${APP_BASE}/groups/${id}`
 }
-function clientLink(id: string) {
-  return `${APP_BASE}/clients/${id}`
+
+// THERE IS NO CLIENT PAGE. A person is read and edited in the member panel on
+// their group's page, and has no URL of their own - the routes are /groups,
+// /groups/[id], /workflows and /workflows/[id]. A `/clients/{id}` link was
+// handed out here until 17 Sep 2026 and went to a 404. The link a client gets
+// is their PRIMARY group's page, where the members list opens their record;
+// a client in no current group gets no link rather than a broken one.
+async function primaryGroupLinks(
+  db: SupabaseClient,
+  partyIds: string[],
+): Promise<Record<string, string>> {
+  if (partyIds.length === 0) return {}
+  const { data } = await db
+    .from('client_group_members')
+    .select('party_id, group_id, is_primary_group')
+    .in('party_id', partyIds)
+    .is('end_date', null)
+  const links: Record<string, string> = {}
+  // Primary first; any current group as the fallback, so a person whose
+  // primary flag was never set still resolves somewhere real.
+  for (const row of data ?? []) {
+    const r = row as { party_id: string; group_id: string; is_primary_group: boolean }
+    if (r.is_primary_group || !links[r.party_id]) links[r.party_id] = groupLink(r.group_id)
+  }
+  return links
 }
 
 /**
@@ -174,7 +197,9 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     {
       title: 'Search clients',
       description:
-        'Search active clients (people and organisations) by name. Only returns clients visible to the calling staff member.',
+        'Search active clients (people and organisations) by name. Only returns clients visible to the calling staff member. ' +
+        'group_link opens the page of the client\'s primary group, where their record is read and edited from the members list - ' +
+        'a client has no page of their own. It is absent for a client in no current group.',
       inputSchema: { query: z.string().min(2).describe('Name or part of a name') },
     },
     async ({ query }) => {
@@ -184,9 +209,8 @@ function buildServer(db: SupabaseClient, staff: Staff) {
         .ilike('display_name', `%${query}%`)
         .limit(20)
       if (error) return fail(error.message)
-      return ok(
-        (data ?? []).map((r) => ({ ...r, link: clientLink(r.party_id) }))
-      )
+      const links = await primaryGroupLinks(db, (data ?? []).map((r) => r.party_id))
+      return ok((data ?? []).map((r) => ({ ...r, group_link: links[r.party_id] ?? null })))
     }
   )
 
@@ -195,7 +219,9 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     {
       title: 'Get client profile',
       description:
-        'Full profile for a party (person or organisation): details, roles, relationships, contact points, group memberships, masked sensitive hints. Sensitive values are masked - full values only in the CRM app.',
+        'Full profile for a party (person or organisation): details, roles, relationships, contact points, group memberships, masked sensitive hints. ' +
+        'Sensitive values are masked - full values only in the CRM app. Each group membership carries a link to that group\'s page; ' +
+        'a client is opened from there, via the members list, and has no page of their own.',
       inputSchema: { party_id: z.string().uuid() },
     },
     async ({ party_id }) => {
@@ -277,7 +303,8 @@ function buildServer(db: SupabaseClient, staff: Staff) {
           }
         }),
         sensitive: { tfn_hint: tfnHint.data ?? null, note: 'Full values available in the CRM app only.' },
-        link: clientLink(party.id),
+        // No `link`: the groups above each carry theirs, and the primary one is
+        // where this person is opened. See primaryGroupLinks().
       })
     }
   )
