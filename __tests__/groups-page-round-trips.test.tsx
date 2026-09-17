@@ -150,6 +150,15 @@ describe('/groups/[id] round-trip depth', () => {
        cost behind a click and look perfectly correct on screen — so this line,
        not the screen, is what holds the design to it. */
     expect(calls).not.toContain('financial_account_allocations')
+    /* The account drawer's Activity tab and its thirty-day chart, added
+       17 September. The posts are a GROUP-KEYED view read on this same wave —
+       reading them by the account ids would have meant waiting for the
+       accounts first, which is a third wave — and the chart is another jsonb
+       column rather than a read at all. */
+    expect(calls).toContain('group_account_posts')
+    expect(calls).toContain('staff_directory')
+    expect(calls).not.toContain('workflow_posts_summary')
+    expect(calls).not.toContain('financial_account_valuations')
     /* Still 2 with the balance sheet added on 14 September: one more read on a
        wave that was already running costs no depth, and a fifth read chained
        after it would read 3 here. */
@@ -160,7 +169,7 @@ describe('/groups/[id] round-trip depth', () => {
        cannot see it — a loader chained to depth 2 sits under the member-detail
        floor of 2 and the total still reads 2. (Found by mutation: re-chaining
        the members read ahead of the other three passed the depth assertion.) */
-    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary']) {
+    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary', 'group_account_posts', 'staff_directory']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

@@ -6,6 +6,8 @@ import userEvent from '@testing-library/user-event'
 vi.mock('@/app/(shell)/groups/actions', () => ({
   postWorkflowActivity: vi.fn(async () => ({ ok: true as const })),
   togglePostReaction: vi.fn(async () => ({ ok: true as const })),
+  postAccountActivity: vi.fn(async () => ({ ok: true as const })),
+  toggleAccountPostReaction: vi.fn(async () => ({ ok: true as const })),
 }))
 
 /**
@@ -37,6 +39,7 @@ const { default: React } = await import('react')
 const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   id: 'p',
   workflow_id: 'w1',
+  account_id: null,
   task_id: 't1',
   author_staff_id: 's1',
   author_name: 'Sarah Chen',
@@ -61,7 +64,14 @@ const onWorkflow = post({ id: 'p4', task_id: null, body: { type: 'doc', content:
 const STAFF = [{ id: 's1', name: 'Sarah Chen' }, { id: 's2', name: 'Clinton Hatcher' }]
 const VIEWER = { id: 's2', name: 'Clinton Hatcher', canRemoveAnyImage: false }
 const show = (posts: WorkflowPost[], taskId: string | null = 't1') =>
-  render(<ActivityFeed workflowId="w1" taskId={taskId} posts={posts} staff={STAFF} viewer={VIEWER} />)
+  render(
+    <ActivityFeed
+      scope={{ kind: 'workflow', workflowId: 'w1', taskId }}
+      posts={posts}
+      staff={STAFF}
+      viewer={VIEWER}
+    />,
+  )
 
 const items = () => within(screen.getByRole('list', { name: 'Posts' })).getAllByRole('listitem')
 
@@ -157,10 +167,22 @@ describe('the activity feed', () => {
 
   test('posts the server sends after mount replace the list, without a reload', () => {
     const { rerender } = render(
-      <ActivityFeed workflowId="w1" taskId="t1" posts={[older]} staff={STAFF} viewer={VIEWER} />,
+      <ActivityFeed
+        scope={{ kind: 'workflow', workflowId: 'w1', taskId: 't1' }}
+        posts={[older]}
+        staff={STAFF}
+        viewer={VIEWER}
+      />,
     )
     expect(items().length).toBe(1)
-    rerender(<ActivityFeed workflowId="w1" taskId="t1" posts={[newer, older]} staff={STAFF} viewer={VIEWER} />)
+    rerender(
+      <ActivityFeed
+        scope={{ kind: 'workflow', workflowId: 'w1', taskId: 't1' }}
+        posts={[newer, older]}
+        staff={STAFF}
+        viewer={VIEWER}
+      />,
+    )
     expect(items().length).toBe(2)
     expect(items()[0].textContent).toContain('Newer')
   })
@@ -354,5 +376,96 @@ describe('replying to a post', () => {
     expect(thread.textContent).toContain('replying to Sarah Chen')
     // Exactly one such marker — the reply that answers the root carries none.
     expect(thread.textContent!.match(/replying to/g)).toHaveLength(1)
+  })
+})
+
+/**
+ * The same feed, scoped to an investment account instead of a workflow.
+ *
+ * One component serves both because a comment on an account is the same object
+ * as a comment on a task — same table, same threading, same reactions — and a
+ * second copy would be the one that stopped getting the fixes. What differs is
+ * WHICH post belongs here, WHICH action is called, and that an account post
+ * carries no files.
+ *
+ * ## Why the provisional entry is tested here and not only on screen
+ *
+ * The optimistic post is built locally and then has to survive the feed's own
+ * filter. Give it the wrong scope — `account_id: null`, which is what the
+ * workflow branch produces — and it is written correctly to the database and
+ * VANISHES from the screen the instant it is added, because the account filter
+ * rejects it. It reappears when revalidation returns, so the defect looks like
+ * a flicker rather than a bug, and every assertion about the saved row still
+ * passes. Mutating that one field is what found this: nothing failed.
+ */
+describe('the activity feed on an account', () => {
+  const onWrap = post({ id: 'a-1', workflow_id: null, task_id: null, account_id: 'acc-1',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On this account' }] }] } })
+  const onAnother = post({ id: 'a-2', workflow_id: null, task_id: null, account_id: 'acc-2',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On another account' }] }] } })
+  /* A workflow post carried in the same array. The page hands the drawer every
+     post on the group's accounts, but a feed that filtered on nothing would
+     show the workflow's too — so one is here to be excluded. */
+  const onATask = post({ id: 'a-3' })
+
+  /* The suite as a whole does not reset between tests, and the assertions
+     below check that the WORKFLOW action was not called — which earlier tests
+     in this file call many times. Clearing the counts keeps that assertion
+     about this test rather than about the file. */
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const showAccount = (posts: WorkflowPost[]) =>
+    render(
+      <ActivityFeed
+        scope={{ kind: 'account', accountId: 'acc-1' }}
+        posts={posts}
+        staff={STAFF}
+        viewer={VIEWER}
+      />,
+    )
+
+  test('shows this account’s posts, and neither another account’s nor a task’s', () => {
+    showAccount([onWrap, onAnother, onATask])
+    expect(items().length).toBe(1)
+    expect(items()[0].textContent).toContain('On this account')
+  })
+
+  test('posting calls the account action with the account id', async () => {
+    const user = userEvent.setup()
+    showAccount([onWrap])
+    await user.click(screen.getByRole('button', { name: 'Post' }))
+    expect(actions.postAccountActivity).toHaveBeenCalledWith('acc-1', FIXED_DOC, null)
+    expect(actions.postWorkflowActivity).not.toHaveBeenCalled()
+  })
+
+  test('and the new post STAYS on screen while it saves, rather than flickering away', async () => {
+    const user = userEvent.setup()
+    let release: (v: { ok: true }) => void = () => {}
+    vi.mocked(actions.postAccountActivity).mockImplementationOnce(
+      () => new Promise((r) => (release = r)),
+    )
+    showAccount([onWrap])
+    await user.click(screen.getByRole('button', { name: 'Post' }))
+
+    /* Two: the existing post and the provisional one. A provisional entry
+       scoped to no account is filtered out of its own feed and this reads 1. */
+    expect(items().length).toBe(2)
+    expect(items()[0].textContent).toContain('Posted from the test.')
+    expect(items()[0].textContent).toContain('Posting…')
+
+    release({ ok: true })
+    expect(await lastOnPost!(FIXED_DOC)).toBe(true)
+  })
+
+  test('a reaction goes to the account action, not the workflow one', async () => {
+    const user = userEvent.setup()
+    showAccount([
+      { ...onWrap, reactions: [{ reaction: 'eyes', by: [{ staff_id: 's1', full_name: 'Sarah Chen' }] }] } as WorkflowPost,
+    ])
+    await user.click(screen.getByRole('button', { name: 'Looking at this: 1' }))
+    expect(actions.toggleAccountPostReaction).toHaveBeenCalledWith('a-1', 'eyes')
+    expect(actions.togglePostReaction).not.toHaveBeenCalled()
   })
 })

@@ -234,6 +234,40 @@ export async function getWorkflowPosts(workflowId: string): Promise<WorkflowPost
 }
 
 /**
+ * Every post on the accounts of one client group.
+ *
+ * The same columns as `getWorkflowPosts`, from a view keyed by group rather
+ * than by workflow — which is why the two live side by side: they read the
+ * same summary and the column list has to stay in step between them.
+ *
+ * Read on the GROUP PAGE'S FIRST WAVE, not when a drawer opens. The page is
+ * held to two round trips by `groups-page-round-trips.test.tsx`, and a fetch
+ * behind a click would hide the same cost while looking perfectly correct.
+ *
+ * Throws rather than returning empty, for the reason the workflow reader gives:
+ * a failed read that looks like an empty feed is how somebody concludes nobody
+ * has written anything.
+ */
+export async function getGroupAccountPosts(groupId: string): Promise<WorkflowPost[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('group_account_posts')
+    .select(
+      'id, workflow_id, account_id, task_id, author_staff_id, author_name, body, body_text, ' +
+        'created_at, mentioned, reactions, media, entities, parent_post_id, root_post_id, ' +
+        'parent_author_name',
+    )
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+  if (error) throw new Error(error.message)
+  /* Through `unknown`: `group_account_posts` is newer than the generated
+     types, so PostgREST infers an error shape for it. The same hop the other
+     readers of not-yet-generated views take. */
+  return (data ?? []) as unknown as WorkflowPost[]
+}
+
+/**
  * A workflow's recorded task actions — what people did from a Tools and Actions tab.
  *
  * Every action on the WORKFLOW, so the task panel filters to its own task

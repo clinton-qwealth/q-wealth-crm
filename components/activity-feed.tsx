@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createPostMedia,
+  postAccountActivity,
   postWorkflowActivity,
   redactPostMedia,
+  toggleAccountPostReaction,
   togglePostReaction,
 } from '@/app/(shell)/groups/actions'
 import {
@@ -31,12 +33,28 @@ type Staff = { id: string; name: string }
 type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
 
 /**
+ * Where a feed lives. Exactly one of these, mirroring the database.
+ *
+ * `workflow_posts` carries a workflow OR an account and a check constraint
+ * says exactly one — so a union here rather than two optional ids is the type
+ * that cannot express a state the table would refuse. Added 17 Sep 2026 with
+ * the account drawer's Activity tab.
+ *
+ * The account arm carries no task, because a task belongs to a workflow, and
+ * no uploader, because media is keyed and path-derived by workflow: the
+ * composer treats its uploader as optional and simply cannot carry pictures
+ * without one. Both limits are the database's, not this component's.
+ */
+export type FeedScope =
+  | { kind: 'workflow'; workflowId: string; taskId: string | null }
+  | { kind: 'account'; accountId: string }
+
+/**
  * The activity feed: a composer, then what has been posted, newest first.
  *
- * It takes EVERY post on the workflow and shows the ones for `taskId` — or all
- * of them when `taskId` is null, which is what the workflow's own timeline
- * will pass. Same component, same data, two views of it; that is the shape
- * the table was designed for.
+ * It takes EVERY post it is given and shows the ones in scope — a task's, a
+ * whole workflow's when `taskId` is null, or an account's. Same component,
+ * same data, three views of it; that is the shape the table was designed for.
  *
  * Posting is optimistic. The new post appears at the top the moment Post is
  * pressed, marked as posting, with the viewer as its author; if the server
@@ -48,19 +66,19 @@ type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
  * back, with the reason, if the server refuses.
  */
 export function ActivityFeed({
-  workflowId,
-  taskId,
+  scope,
   posts: initial,
   staff,
   entities = [],
   viewer,
 }: {
-  workflowId: string
-  /** Null shows the whole workflow's timeline. */
-  taskId: string | null
+  scope: FeedScope
   posts: WorkflowPost[]
   staff: Staff[]
-  /** What `#` may name: this workflow's group, its members, its sibling workflows. */
+  /** What `#` may name: this workflow's group, its members, its sibling
+   *  workflows. Never offered on an account — the write path refuses a chip
+   *  there, because an account reaches a group through its owners and may
+   *  reach more than one. */
   entities?: EntityChoice[]
   viewer: Viewer
 }) {
@@ -69,7 +87,12 @@ export function ActivityFeed({
   /** The post whose reply box is open, or null. One at a time, by design. */
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
 
-  const shown = taskId === null ? posts : posts.filter((p) => p.task_id === taskId)
+  const shown =
+    scope.kind === 'account'
+      ? posts.filter((p) => p.account_id === scope.accountId)
+      : scope.taskId === null
+        ? posts.filter((p) => p.workflow_id === scope.workflowId)
+        : posts.filter((p) => p.task_id === scope.taskId)
   const threads = threadPosts(shown)
 
   /**
@@ -83,10 +106,16 @@ export function ActivityFeed({
    * staff member, because the browser client uses the publishable key and this
    * person's session.
    */
-  const uploader = useMemo<PostUploader>(
-    () => ({
+  const uploader = useMemo<PostUploader | undefined>(
+    () =>
+      scope.kind !== 'workflow'
+        ? // No uploader on an account, so the composer offers no picture button
+          // at all rather than one that fails at the end. The write path refuses
+          // a document naming a file for the same reason.
+          undefined
+        : {
       reserve: async (file, dimensions) => {
-        const reserved = await createPostMedia(workflowId, {
+        const reserved = await createPostMedia(scope.workflowId, {
           mime: file.type,
           size: file.size,
           name: file.name,
@@ -103,8 +132,8 @@ export function ActivityFeed({
           .upload(path, file, { contentType: file.type, upsert: false })
         return failure ? { error: failure.message } : null
       },
-    }),
-    [workflowId],
+    },
+    [scope],
   )
 
   /**
@@ -119,8 +148,9 @@ export function ActivityFeed({
     const parent = parentPostId ? posts.find((p) => p.id === parentPostId) : null
     const provisional: WorkflowPost & { pending: true } = {
       id: `pending-${Date.now()}`,
-      workflow_id: workflowId,
-      task_id: taskId,
+      workflow_id: scope.kind === 'workflow' ? scope.workflowId : null,
+      account_id: scope.kind === 'account' ? scope.accountId : null,
+      task_id: scope.kind === 'workflow' ? scope.taskId : null,
       author_staff_id: viewer.id,
       author_name: viewer.name,
       body: doc,
@@ -150,7 +180,10 @@ export function ActivityFeed({
        document it could not read. */
     let result: Awaited<ReturnType<typeof postWorkflowActivity>>
     try {
-      result = await postWorkflowActivity(workflowId, taskId, doc, parentPostId)
+      result =
+        scope.kind === 'account'
+          ? await postAccountActivity(scope.accountId, doc, parentPostId)
+          : await postWorkflowActivity(scope.workflowId, scope.taskId, doc, parentPostId)
     } catch {
       result = { error: 'The post could not be saved. Nothing was lost — try again.' }
     }
@@ -177,6 +210,10 @@ export function ActivityFeed({
   async function removeImage(postId: string, mediaId: string) {
     const before = posts.find((p) => p.id === postId)?.media
     if (!before) return
+    /* Unreachable on an account — it has no media to remove, because it had no
+       uploader to add any. Guarded rather than assumed: the alternative is
+       calling an action with an id the scope cannot supply. */
+    if (scope.kind !== 'workflow') return
     setError(null)
     setPosts((ps) =>
       ps.map((p) =>
@@ -194,7 +231,7 @@ export function ActivityFeed({
     )
     let result: Awaited<ReturnType<typeof redactPostMedia>>
     try {
-      result = await redactPostMedia(workflowId, mediaId)
+      result = await redactPostMedia(scope.workflowId, mediaId)
     } catch {
       result = { error: 'The image could not be removed. Try again.' }
     }
@@ -212,7 +249,10 @@ export function ActivityFeed({
     setPosts((ps) => ps.map((p) => (p.id === postId ? { ...p, reactions: toggleReaction(p.reactions, key, me) } : p)))
     let result: Awaited<ReturnType<typeof togglePostReaction>>
     try {
-      result = await togglePostReaction(workflowId, postId, key)
+      result =
+        scope.kind === 'account'
+          ? await toggleAccountPostReaction(postId, key)
+          : await togglePostReaction(scope.workflowId, postId, key)
     } catch {
       result = { error: 'The reaction could not be saved. Try again.' }
     }

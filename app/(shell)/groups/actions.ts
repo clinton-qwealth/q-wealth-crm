@@ -1260,6 +1260,71 @@ export async function togglePostReaction(
   return { ok: true }
 }
 
+/**
+ * Post to a financial account's activity.
+ *
+ * The same table, the same document rules and the same RPC family as a
+ * workflow post — `post_account_activity()` and `post_workflow_activity()`
+ * share `validate_post_body()` in the database, so a document refused on one is
+ * refused on the other with the same sentence.
+ *
+ * TWO ACTIONS RATHER THAN ONE WITH A SCOPE ARGUMENT, and the difference between
+ * them is one line: which route to revalidate. An account post lives on the
+ * group page, a workflow post on the workflow's. Threading a discriminated
+ * union through a working action to save four lines would have been the more
+ * clever and less readable choice.
+ */
+export async function postAccountActivity(
+  accountId: string,
+  body: unknown,
+  /** The post being answered. Only the id travels; the thread root is derived
+   *  by the database from the parent, never sent from here. */
+  parentPostId: string | null = null,
+): Promise<NoteState> {
+  if (!accountId) return { error: 'No account selected.' }
+  if (!isPostDoc(body)) return { error: 'A post must be a document.' }
+  if (!postDocText(body)) return { error: 'Write something before posting.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('post_account_activity', {
+    p_account_id: accountId,
+    p_body: body,
+    p_parent_post_id: parentPostId,
+  })
+  if (error) return { error: error.message }
+
+  /* The route pattern, not one path — the same call the rest of this file
+     makes, and for the same reason: a jointly owned account belongs to two
+     groups and this post is on both of their pages. */
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
+/**
+ * Add or take away the caller's reaction to a post on an account.
+ *
+ * The RPC is the same one workflow posts use and needs no account: a reaction
+ * is keyed by post alone, and the post's own row-level security decides. What
+ * differs is only the route to revalidate.
+ */
+export async function toggleAccountPostReaction(
+  postId: string,
+  reaction: unknown,
+): Promise<NoteState> {
+  if (!postId) return { error: 'No post selected.' }
+  if (!isReactionKey(reaction)) return { error: 'Not a reaction this feed offers.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('toggle_post_reaction', {
+    p_post_id: postId,
+    p_reaction: reaction,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export type PostMediaSlot = { id: string; storage_path: string }
 export type PostMediaState = { error: string } | PostMediaSlot
 

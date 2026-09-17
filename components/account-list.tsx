@@ -1,8 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { ActivityFeed } from './activity-feed'
 import { AllocationBars } from './allocation-bars'
+import { AllocationDonut } from './allocation-donut'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
+import { Tabs } from './tabs'
+import { ValueBars } from './value-bars'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
 import { DataRow } from './data-section'
 import {
@@ -10,9 +14,11 @@ import {
   ACCOUNT_STATUS_LABEL,
   AccountTypeTile,
   AccountValue,
+  PANEL_GUTTER,
   Pill,
   accountMoney,
 } from './ui'
+import type { WorkflowPost } from '@/lib/workflow-board'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { formatCalendarDate, formatNoteDate } from '@/lib/note-date'
 import { saveAccountDetails } from '@/app/(shell)/groups/actions'
@@ -75,18 +81,33 @@ export type AccountRow = {
   owner_parties: { party_id: string; name: string }[] | null
   allocation: { asset_class: string; weight: string | number }[] | null
   allocation_as_at: string | null
+  /** The thirty days up to this account's OWN latest valuation, ascending.
+   *  Appended to the group view on 18 Sep rather than fetched, for the reason
+   *  the allocation was: the page is held to two round trips. */
+  value_series: { as_at: string; value: string | number }[] | null
 }
+
+type Staff = { id: string; name: string }
+type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
 
 export function AccountList({
   accounts,
   members,
   groupName,
+  posts,
+  staff,
+  viewer,
 }: {
   accounts: AccountRow[]
   /** The group's current members, the only people an account can be given to
    *  from here. */
   members: { id: string; name: string }[]
   groupName: string
+  /** Every post on this group's accounts. The drawer shows one account's, the
+   *  same way the task panel is handed the whole workflow's. */
+  posts: WorkflowPost[]
+  staff: Staff[]
+  viewer: Viewer
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const account = accounts.find((a) => a.account_id === selectedId) ?? null
@@ -124,6 +145,9 @@ export function AccountList({
             account={account}
             members={members}
             groupName={groupName}
+            posts={posts}
+            staff={staff}
+            viewer={viewer}
             onClose={() => setSelectedId(null)}
           />
         ) : (
@@ -182,11 +206,17 @@ function AccountPanel({
   account: a,
   members,
   groupName,
+  posts,
+  staff,
+  viewer,
   onClose,
 }: {
   account: AccountRow
   members: { id: string; name: string }[]
   groupName: string
+  posts: WorkflowPost[]
+  staff: Staff[]
+  viewer: Viewer
   onClose: () => void
 }) {
   const live = a.status === ACCOUNT_LIVE
@@ -212,27 +242,53 @@ function AccountPanel({
         onClose={onClose}
       />
 
-      <DrawerBody>
-        {/* The figure, at the top, because it is what the row was clicked on.
-            Deliberately NOT a `size` prop on AccountValue: one caller, one
-            option, and `data-section.tsx` already records in writing what an
-            option with a single caller costs. */}
-        <div>
-          <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
-            <AccountValue
-              value={a.latest_value}
-              changeAmount={a.change_amount}
-              changePct={a.change_pct}
-              baselineValue={a.baseline_value}
-              baselinePoints={a.baseline_points}
-            />
-          </p>
-          <p className="mt-1 text-xs text-neutral-500">
-            {a.valued_on ? `As at ${formatCalendarDate(a.valued_on)}` : 'No valuation recorded'}
-            {a.valuation_source ? ` · ${a.valuation_source}` : ''}
-          </p>
-        </div>
+      {/*
+        THREE TABS, AND THE THRESHOLD ITS OWN DOCBLOCK NAMED HAS ARRIVED.
+        Until 17 September this was one scrolling column, with a note saying to
+        promote it "when a third panel arrives that is a stream — a valuation
+        history, or documents". Both turned up at once: the Overview draws the
+        valuation history, and Activity is a stream of posts.
 
+        The exact configuration the other two drawers use, and the reason each
+        flag is set is on the Tabs component: `fill` so the strip stays put and
+        the panel scrolls beneath it, `flushTop={false}` because a header sits
+        above, `bleed={false}` because the parent has no padding of its own, and
+        `gutter={8}` to line the first label up with everything below it.
+      */}
+      <Tabs
+        fill
+        gutter={8}
+        flushTop={false}
+        bleed={false}
+        alignFirst
+        label={`${a.label} account`}
+        items={[
+          { id: 'overview', label: 'Overview', panel: <OverviewPanel account={a} /> },
+          {
+            id: 'activity',
+            label: 'Activity',
+            panel: (
+              /* A READING COLUMN, capped and centred, exactly as the task
+                 panel's feed is — and for the reason written there: the
+                 composer and the posts are prose, and a line running the full
+                 width of a 42rem drawer is too long to read comfortably. */
+              <div className={`${PANEL_GUTTER} pb-8`}>
+                <div className="mx-auto w-full max-w-xl">
+                  <ActivityFeed
+                    scope={{ kind: 'account', accountId: a.account_id }}
+                    posts={posts}
+                    staff={staff}
+                    viewer={viewer}
+                  />
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'details',
+            label: 'Details',
+            panel: (
+              <div className={`${PANEL_GUTTER} space-y-5 pb-8`}>
         <FieldBox
           title="Details"
           action={saveAccountDetails}
@@ -352,51 +408,114 @@ function AccountPanel({
             </fieldset>
           }
         />
-
-        {/* NO `edit` PROP, EVER. `financial_account_allocations` has a select
-            policy and no insert, update or delete policy for staff at all, by
-            design — the next feed run would overwrite a hand edit anyway. A
-            pencil here would be a promise the database will not keep. */}
-        <FieldBox
-          title="Asset allocation"
-          view={
-            <AllocationBars
-              rows={a.allocation}
-              asAt={a.allocation_as_at ? formatNoteDate(a.allocation_as_at) : null}
-              hasProvider={Boolean(a.provider)}
-            />
-          }
-        />
-
-        <FieldBox
-          title="Cash"
-          view={
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
-              <Field
-                label="Available cash"
-                value={
-                  a.available_cash == null
-                    ? null
-                    : accountMoney.format(Number(a.available_cash))
-                }
-              />
-              <Field
-                label="Reported"
-                value={a.snapshot_as_at ? formatNoteDate(a.snapshot_as_at) : null}
-              />
-              {/* The one sentence that stops a reader adding two figures that
-                  are not addable. Cash is a PART of the value above, not a
-                  balance beside it. */}
-              {a.available_cash == null ? null : (
-                <p className="col-span-full text-xs leading-relaxed text-neutral-500">
-                  Cash available to trade. It is already counted inside the account value above,
-                  so the two are not added together.
-                </p>
-              )}
-            </dl>
-          }
-        />
-      </DrawerBody>
+              </div>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
+
+/**
+ * The Overview: what the account is worth, how it got there, and what it holds.
+ *
+ * The order is the reader's own, given on 17 September: the thirty-day chart,
+ * then the allocation, then the two figures. It reads from movement to
+ * composition to fact, which is also the order of decreasing ambiguity — the
+ * chart shows a shape, the ring shows a split, and the rows are exact.
+ *
+ * **The ring and the bars are one picture, not two.** A pie cannot draw a
+ * negative share and a live account carries one, so the ring takes the positive
+ * classes for shape and the bars beneath take every class with its sign. Asked
+ * for as "both" rather than either, which is the honest answer.
+ */
+function OverviewPanel({ account: a }: { account: AccountRow }) {
+  return (
+    <div className={`${PANEL_GUTTER} space-y-7 pb-8`}>
+      <section>
+        <h3 className={SECTION}>Value, last 30 days</h3>
+        <div className="mt-3">
+          <ValueBars rows={a.value_series} />
+        </div>
+      </section>
+
+      <section>
+        <h3 className={SECTION}>Asset allocation</h3>
+        <div className="mt-3 space-y-4">
+          <AllocationDonut rows={a.allocation} />
+          <AllocationBars
+            rows={a.allocation}
+            asAt={a.allocation_as_at ? formatNoteDate(a.allocation_as_at) : null}
+            hasProvider={Boolean(a.provider)}
+          />
+        </div>
+      </section>
+
+      <section>
+        <h3 className={SECTION}>Figures</h3>
+        {/* Two rows, each with its own date, because the two dates genuinely
+            disagree: a feed run refreshes cash every day and the valuation is
+            dated by the provider. One "as at" above both would be wrong for
+            one of them. */}
+        <ul className="mt-3 divide-y divide-neutral-200 overflow-hidden rounded-lg border border-neutral-200">
+          <li className="flex items-baseline justify-between gap-3 px-4 py-3">
+            <span className="min-w-0">
+              <span className="block text-sm text-neutral-900">Balance</span>
+              <span className="block text-xs text-neutral-500">
+                {a.valued_on ? `As at ${formatCalendarDate(a.valued_on)}` : 'No valuation recorded'}
+                {a.valuation_source ? ` · ${a.valuation_source}` : ''}
+              </span>
+            </span>
+            <span className="shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
+              <AccountValue
+                value={a.latest_value}
+                changeAmount={a.change_amount}
+                changePct={a.change_pct}
+                baselineValue={a.baseline_value}
+                baselinePoints={a.baseline_points}
+              />
+            </span>
+          </li>
+          <li className="flex items-baseline justify-between gap-3 px-4 py-3">
+            <span className="min-w-0">
+              <span className="block text-sm text-neutral-900">Available cash</span>
+              <span className="block text-xs text-neutral-500">
+                {/* `formatCalendarDate`, NOT `formatNoteDate`. `snapshot_as_at` is a
+                    DATE column — the provider's business day — where
+                    `allocation_as_at` above is a timestamptz, so the two take
+                    different formatters from the same module for the reason
+                    that module exists: `new Date('2026-09-16')` is UTC
+                    midnight, which renders as the 15th anywhere west of
+                    Greenwich. Sydney is east of it, so the wrong formatter
+                    looked perfectly right here and would have been a day out
+                    for a colleague reading from London. Caught by the branch,
+                    which reports the column's type. */}
+                {a.snapshot_as_at ? `As at ${formatCalendarDate(a.snapshot_as_at)}` : 'Not reported'}
+              </span>
+            </span>
+            <span className="shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
+              {a.available_cash == null ? (
+                <span className="text-xs font-normal text-neutral-400">Not reported</span>
+              ) : (
+                accountMoney.format(Number(a.available_cash))
+              )}
+            </span>
+          </li>
+        </ul>
+        {/* The one sentence that stops a reader adding two figures that are not
+            addable. Cash is a PART of the balance above, not a sum beside it. */}
+        {a.available_cash == null ? null : (
+          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+            Cash available to trade. It is already counted inside the balance above, so the two
+            are not added together.
+          </p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+/** A section heading inside a tab panel — the same weight a `FieldBox` title
+ *  takes, so the two kinds of block read as one system. */
+const SECTION = 'text-xs font-semibold uppercase tracking-wider text-neutral-500'

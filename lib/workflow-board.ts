@@ -657,8 +657,21 @@ export function postMediaUrl(id: string): string {
 
 export type WorkflowPost = {
   id: string
-  workflow_id: string
-  /** Null for a post on the workflow as a whole; the timeline shows both. */
+  /**
+   * The workflow this post is on, or null when it is on an account instead.
+   *
+   * EXACTLY ONE of this and `account_id` is set, by check constraint on the
+   * table. The type says `| null` on both rather than expressing the union,
+   * because the view returns a flat row and a discriminated shape here would
+   * have to be reconstructed from it on every read; the scope that matters to
+   * a reader is `FeedScope`, which the feed takes as a prop.
+   */
+  workflow_id: string | null
+  /** The financial account this post is on, or null when it is on a workflow.
+   *  Added 17 Sep 2026 with the account drawer's Activity tab. */
+  account_id: string | null
+  /** Null for a post on the workflow as a whole, and always null on an
+   *  account — a task belongs to a workflow. */
   task_id: string | null
   author_staff_id: string
   author_name: string | null

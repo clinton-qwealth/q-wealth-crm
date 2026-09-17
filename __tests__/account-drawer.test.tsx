@@ -27,6 +27,12 @@ import { AccountList, type AccountRow } from '@/components/account-list'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
   saveAccountDetails: vi.fn(async () => ({ ok: true as const })),
+  postAccountActivity: vi.fn(async () => ({ ok: true as const })),
+  toggleAccountPostReaction: vi.fn(async () => ({ ok: true as const })),
+  createPostMedia: vi.fn(),
+  postWorkflowActivity: vi.fn(),
+  redactPostMedia: vi.fn(),
+  togglePostReaction: vi.fn(),
 }))
 
 const WRAP: AccountRow = {
@@ -47,7 +53,23 @@ const WRAP: AccountRow = {
   baseline_value: 411150.55,
   baseline_points: 30,
   available_cash: 8421.2,
-  snapshot_as_at: '2026-09-15T22:10:00+10:00',
+  /* A DAY LATER THAN `valued_on`, deliberately. The two dates disagree in
+     production — a feed run refreshes cash nightly and dates the valuation
+     from the provider's own strike — and while these two were the same day in
+     the fixture, a panel that printed one date above both figures passed the
+     test beneath. That is the same fixture flaw the value chart's aria-label
+     test had, caught the same way: by mutating the component and watching
+     nothing fail.
+
+     A BARE DATE, as the column actually is. `snapshot_as_at` is a `date` in
+     the database where `allocation_as_at` beneath it is a timestamptz, and an
+     earlier draft of this fixture carried a full instant with a +10:00 offset,
+     which a date column never produces. That shape hid a real defect: the
+     panel was formatting this with `formatNoteDate`, which builds a Date and
+     so reads UTC midnight, rendering the day before anywhere west of
+     Greenwich. The fixture must be the shape the view returns, or it is
+     testing a value the screen will never receive. */
+  snapshot_as_at: '2026-09-16',
   snapshot_source_system: 'hub24',
   product_display_name: 'HUB24 SUPER - ACTIVE - PLATINUM',
   valuation_source: 'HUB24 daily feed',
@@ -59,6 +81,11 @@ const WRAP: AccountRow = {
     { asset_class: 'other', weight: -0.0228 },
   ],
   allocation_as_at: '2026-09-14T22:10:00+10:00',
+  value_series: [
+    { as_at: '2026-09-13', value: 410000 },
+    { as_at: '2026-09-14', value: 411000 },
+    { as_at: '2026-09-15', value: 412350.55 },
+  ],
 }
 
 const SUPER: AccountRow = {
@@ -80,6 +107,7 @@ const SUPER: AccountRow = {
   valuation_source: null,
   allocation: null,
   allocation_as_at: null,
+  value_series: null,
   owners: 'Janet Testsmith, Reece Testsmith',
   owner_parties: [
     { party_id: 'p1', name: 'Janet Testsmith' },
@@ -97,6 +125,49 @@ const SUPER: AccountRow = {
  * who does not own the account. A fixture where every name is unique lets that
  * bug pass, which is precisely what happened before this comment existed.
  */
+/** One post on WRAP, one on the other account, so the drawer must filter. */
+const POSTS = [
+  {
+    id: 'post-wrap',
+    workflow_id: null,
+    account_id: 'a1',
+    task_id: null,
+    author_staff_id: 's1',
+    author_name: 'Sarah Chen',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Rebalanced today' }] }] },
+    body_text: 'Rebalanced today',
+    created_at: '2026-09-17T04:00:00Z',
+    mentioned: [],
+    reactions: [],
+    media: [],
+    entities: [],
+    parent_post_id: null,
+    root_post_id: null,
+    parent_author_name: null,
+  },
+  {
+    id: 'post-super',
+    workflow_id: null,
+    account_id: 'a2',
+    task_id: null,
+    author_staff_id: 's1',
+    author_name: 'Sarah Chen',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A different account' }] }] },
+    body_text: 'A different account',
+    created_at: '2026-09-17T05:00:00Z',
+    mentioned: [],
+    reactions: [],
+    media: [],
+    entities: [],
+    parent_post_id: null,
+    root_post_id: null,
+    parent_author_name: null,
+  },
+] as never
+
+const STAFF = [{ id: 's1', name: 'Sarah Chen' }]
+const VIEWER = { id: 's1', name: 'Sarah Chen', canRemoveAnyImage: false }
+
 const MEMBERS = [
   { id: 'p1', name: 'Janet Testsmith' },
   { id: 'p2', name: 'Reece Testsmith' },
@@ -106,7 +177,14 @@ const MEMBERS = [
 function list(accounts: AccountRow[] = [WRAP, SUPER]) {
   return render(
     <ul>
-      <AccountList accounts={accounts} members={MEMBERS} groupName="Testsmith Household" />
+      <AccountList
+        accounts={accounts}
+        members={MEMBERS}
+        groupName="Testsmith Household"
+        posts={POSTS}
+        staff={STAFF}
+        viewer={VIEWER}
+      />
     </ul>,
   )
 }
@@ -117,6 +195,12 @@ const open = (name: string) =>
   })
 
 const drawer = (container: HTMLElement) => container.querySelector('dialog')!
+
+/** Open one of the drawer's three tabs. Overview is selected on open. */
+const tab = (name: 'Overview' | 'Activity' | 'Details') =>
+  act(() => {
+    fireEvent.click(screen.getByRole('tab', { name }))
+  })
 
 describe('the account list', () => {
   test('gives every row a trigger named after the account', () => {
@@ -176,6 +260,9 @@ describe('the account list', () => {
           accounts={[{ ...WRAP, label: 'Netwealth Wrap (Janet)' }, SUPER]}
           members={MEMBERS}
           groupName="Testsmith Household"
+          posts={POSTS}
+          staff={STAFF}
+          viewer={VIEWER}
         />
       </ul>,
     )
@@ -195,7 +282,14 @@ describe('the account list', () => {
     open('Netwealth Wrap')
     rerender(
       <ul>
-        <AccountList accounts={[SUPER]} members={MEMBERS} groupName="Testsmith Household" />
+        <AccountList
+          accounts={[SUPER]}
+          members={MEMBERS}
+          groupName="Testsmith Household"
+          posts={POSTS}
+          staff={STAFF}
+          viewer={VIEWER}
+        />
       </ul>,
     )
     const d = within(drawer(container))
@@ -234,6 +328,7 @@ describe('the account drawer', () => {
   test('prints the product string as a field and never as the name', () => {
     const { container } = list()
     open('Netwealth Wrap')
+    tab('Details')
     const d = drawer(container)
     expect(within(d).getByRole('heading', { level: 2 }).textContent).toBe('Netwealth Wrap')
     const product = within(d).getByText('HUB24 SUPER - ACTIVE - PLATINUM')
@@ -243,15 +338,29 @@ describe('the account drawer', () => {
   test('and omits the product row entirely when no feed has sent one', () => {
     const { container } = list()
     open('Joint Super')
+    tab('Details')
     expect(within(drawer(container)).queryByText('Product')).toBeNull()
   })
 
-  test('draws the allocation, negatives included', () => {
+  /**
+   * BOTH pictures, and they divide the labour. The ring cannot draw a negative
+   * share, so it takes the positive classes; the bars beneath take every class
+   * with its sign. Asked for as "both" on 17 September precisely so nothing is
+   * hidden — which is why this asserts the bars still carry the minus.
+   */
+  test('draws the allocation as a ring and bars, negatives included in the bars', () => {
     const { container } = list()
     open('Netwealth Wrap')
-    const bars = drawer(container).querySelector('[role="img"]')!
+    const d = drawer(container)
+    /* The bars are a <ul>, the ring a <div>; both say themselves in words. */
+    const bars = d.querySelector('ul[role="img"]')!
+    const ring = d.querySelector('[data-slot="allocation-ring"]')!
     expect(bars.getAttribute('aria-label')).toContain('Australian shares')
     expect(bars.getAttribute('aria-label')).toContain('−')
+    expect(ring.getAttribute('aria-label')).toContain('Australian shares')
+    /* And the ring says what it left out, so a reader who stops at the circle
+       is not left thinking it is the whole account. */
+    expect(d.querySelector('[data-slot="donut-omitted"]')!.textContent).toContain('not in the ring')
   })
 
   test('and says so plainly when there is none', () => {
@@ -284,16 +393,23 @@ describe('the account drawer', () => {
    * The read state is a form's view half, so no control in it can be submitted.
    * A stray input here would post an empty value over a real one.
    */
-  test('the read state contains no form control', () => {
+  /**
+   * Per tab, because the Activity tab legitimately holds a composer. What must
+   * not happen is a stray control in a READ state: a form that posts an empty
+   * value over a real one.
+   */
+  test('the Overview and Details read states contain no form control', () => {
     const { container } = list()
     open('Netwealth Wrap')
-    const d = drawer(container)
-    expect(d.querySelectorAll('input, select, textarea')).toHaveLength(0)
+    expect(drawer(container).querySelectorAll('input, select, textarea')).toHaveLength(0)
+    tab('Details')
+    expect(drawer(container).querySelectorAll('input, select, textarea')).toHaveLength(0)
   })
 
   test('editing Details offers the name and the type, and nothing else', () => {
     const { container } = list()
     open('Netwealth Wrap')
+    tab('Details')
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Edit details' }))
     })
@@ -312,6 +428,7 @@ describe('the account drawer', () => {
   test('editing Owners submits a presence sentinel beside the ticks', () => {
     list()
     open('Netwealth Wrap')
+    tab('Details')
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Edit owners' }))
     })
@@ -327,3 +444,129 @@ describe('the account drawer', () => {
     expect(boxes.filter((b) => b.defaultChecked).map((b) => b.value)).toEqual(['p1'])
   })
 })
+
+/**
+ * The three tabs, added 17 September.
+ *
+ * The drawer was one scrolling column until its own docblock's promotion
+ * threshold arrived — "when a third panel arrives that is a stream". Two did at
+ * once: a valuation history and a feed.
+ */
+describe('the account drawer’s tabs', () => {
+  test('are Overview, Activity and Details, in that order', () => {
+    list()
+    open('Netwealth Wrap')
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Overview',
+      'Activity',
+      'Details',
+    ])
+  })
+
+  test('and Overview is the one open on arrival', () => {
+    list()
+    open('Netwealth Wrap')
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
+  })
+})
+
+describe('the Overview tab', () => {
+  test('charts the thirty days the view supplied', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const chart = drawer(container).querySelector('[data-slot="value-chart"]')!
+    expect(chart.getAttribute('aria-label')).toContain('$410,000.00 on 13 Sep')
+    expect(chart.getAttribute('aria-label')).toContain('$412,350.55 on 15 Sep')
+  })
+
+  test('and says so rather than drawing nothing when there is no series', () => {
+    const { container } = list()
+    open('Joint Super')
+    expect(drawer(container).querySelector('[data-slot="value-ghost"]')).toBeTruthy()
+    expect(drawer(container).textContent).toContain('nothing to chart')
+  })
+
+  /**
+   * The two figures carry SEPARATE dates, because they genuinely disagree — a
+   * feed run refreshes cash every day and dates the valuation from the
+   * provider. One "as at" above both would be wrong for one of them.
+   */
+  test('states the balance and the cash, each with its own date', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const rows = Array.from(drawer(container).querySelectorAll('li')).filter((li) =>
+      /Balance|Available cash/.test(li.textContent ?? ''),
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('Balance')
+    expect(rows[0].textContent).toContain('$412,350.55')
+    expect(rows[0].textContent).toContain('As at 15 Sep 2026')
+    expect(rows[1].textContent).toContain('Available cash')
+    expect(rows[1].textContent).toContain('$8,421.20')
+    /* The SIXTEENTH. The cash was refreshed the night after the valuation was
+       struck, and each figure carries its own date rather than sharing one. */
+    expect(rows[1].textContent).toContain('As at 16 Sep 2026')
+    expect(rows[1].textContent).not.toContain('15 Sep')
+  })
+
+  test('and keeps the sentence that stops the two being added', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    expect(drawer(container).textContent).toContain('not added together')
+  })
+})
+
+describe('the Activity tab', () => {
+  /* The page hands down every post on the group's accounts, the same way the
+     task panel is handed the whole workflow's. The drawer shows one account's. */
+  test('shows this account’s posts and not another’s', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    tab('Activity')
+    expect(drawer(container).textContent).toContain('Rebalanced today')
+    expect(drawer(container).textContent).not.toContain('A different account')
+  })
+
+  test('and the second account sees its own', () => {
+    const { container } = list()
+    open('Joint Super')
+    tab('Activity')
+    expect(drawer(container).textContent).toContain('A different account')
+    expect(drawer(container).textContent).not.toContain('Rebalanced today')
+  })
+
+  /**
+   * No uploader on an account, so the composer's two attach buttons are
+   * DISABLED rather than absent — which is the composer's own existing
+   * contract (`disabled={!uploader}`), not something added here. The first
+   * version of this test expected them gone and was wrong about the component.
+   *
+   * Media is keyed and path-derived by workflow, and the account write path
+   * refuses a document naming a file, so a working button would be a promise
+   * the database breaks.
+   */
+  test('disables the attach buttons, because an account post carries no files', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    tab('Activity')
+    const d = drawer(container)
+    /* `aria-disabled`, which is how the shared `Tool` button marks itself —
+       not the `disabled` attribute, and not jest-dom's `toBeDisabled`, which
+       this suite does not load. Both earlier drafts of this line failed on the
+       assertion rather than on the component, which is the right way round. */
+    expect(within(d).getByRole('button', { name: 'Image' }).getAttribute('aria-disabled')).toBe(
+      'true',
+    )
+    expect(
+      within(d).getByRole('button', { name: 'Attach file' }).getAttribute('aria-disabled'),
+    ).toBe('true')
+  })
+
+  test('but does offer a composer', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    tab('Activity')
+    expect(within(drawer(container)).getByRole('button', { name: /post/i })).toBeTruthy()
+  })
+})
+

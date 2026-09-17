@@ -211,7 +211,7 @@ describe('what a post may carry', () => {
  */
 describe('threadPosts', () => {
   const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
-    id: 'x', workflow_id: 'w1', task_id: 't1', author_staff_id: 's1', author_name: 'A',
+    id: 'x', workflow_id: 'w1', account_id: null, task_id: 't1', author_staff_id: 's1', author_name: 'A',
     body: { type: 'doc' }, body_text: '', created_at: '2026-09-08T00:00:00Z',
     mentioned: [], reactions: [], media: [], entities: [],
     parent_post_id: null, root_post_id: null, parent_author_name: null, ...o,

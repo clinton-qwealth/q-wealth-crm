@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
+import { getGroupAccountPosts, getStaffChoices } from '@/lib/workflows'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { accountMoney, owedMoney, ACCOUNT_LIVE, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
@@ -238,8 +239,15 @@ async function getGroupContacts(groupId: string) {
 async function getAccountsData(groupId: string) {
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  const [{ data: memberRows }, { data: providerRows }, accountsRes, policiesRes, balanceRes] =
-    await Promise.all([
+  const [
+    { data: memberRows },
+    { data: providerRows },
+    accountsRes,
+    policiesRes,
+    balanceRes,
+    accountPosts,
+    staffChoices,
+  ] = await Promise.all([
     supabase
       .from('client_group_members')
       .select('party_id, parties(display_name)')
@@ -256,6 +264,13 @@ async function getAccountsData(groupId: string) {
        others, so it costs no depth — the page stays at two waves, which a test
        asserts rather than trusts. */
     supabase.from('group_assets_liabilities').select('*').eq('group_id', groupId).order('label'),
+    /* One more read on a wave that is already running, so it costs no depth —
+       the same argument the balance sheet made on 14 September, and the depth
+       test is exact rather than a ceiling, so a read chained after the wave
+       would read 3 and fail. The account drawer's Activity tab renders out of
+       this rather than fetching when it opens. */
+    getGroupAccountPosts(groupId),
+    getStaffChoices(),
   ])
 
   const members = (memberRows ?? []).map((m) => {
@@ -274,6 +289,8 @@ async function getAccountsData(groupId: string) {
     accounts: (accountsRes.data ?? []) as AccountRow[],
     policies: (policiesRes.data ?? []) as PolicyRow[],
     balance: (balanceRes.data ?? []) as BalanceItemRow[],
+    accountPosts,
+    staffChoices,
     members,
     providers,
   }
@@ -328,6 +345,8 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     accounts: allAccounts,
     policies: allPolicies,
     balance,
+    accountPosts,
+    staffChoices,
     members: ownerOptions,
     providers,
   } = accountsData
@@ -578,6 +597,17 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                             accounts={accounts}
                             members={ownerOptions}
                             groupName={group.name}
+                            posts={accountPosts}
+                            staff={staffChoices}
+                            /* `manage_staff` is what current_staff_has('admin')
+                               reads, the same question the database asks. An
+                               account post carries no images, so this only ever
+                               says no here — sent for one shape across feeds. */
+                            viewer={{
+                              id: staff.id,
+                              name: staff.full_name,
+                              canRemoveAnyImage: staff.access_profiles.manage_staff,
+                            }}
                           />
                         ) : undefined}
                       </DataSection>

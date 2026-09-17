@@ -689,8 +689,7 @@ function TaskPanel({
                       than one of them, and a relationship to the workflow's
                       timeline as well as to this task. */}
                   <ActivityFeed
-                    workflowId={workflowId}
-                    taskId={task.id}
+                    scope={{ kind: 'workflow', workflowId, taskId: task.id }}
                     posts={posts}
                     staff={staff}
                     entities={entities}
