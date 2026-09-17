@@ -467,16 +467,11 @@ begin
 
     -- HUB24's tripwire: a key in the raw allocation that no column knows. Named
     -- in the note at any weight — the quiet failure on 15 September was three
-    -- shortfalls under the tolerance.
+    -- shortfalls under the tolerance. Computed here, written below, so the note
+    -- reads in the order the original wrote it: label, unmapped, skipped.
     select string_agg(k, ',' order by k) into v_strange
       from jsonb_object_keys(coalesce(r.asset_allocations_raw, '{}'::jsonb)) k
      where k <> all(v_known);
-    if v_strange is not null then
-      update ingest.hub24_accounts
-         set promotion_note = concat_ws(' ', promotion_note, 'allocation_unmapped:' || v_strange)
-       where id = r.id;
-      v_alloc_unmapped := v_alloc_unmapped + 1;
-    end if;
 
     -- HUB24's ten classes folded onto the CRM's eight.
     v_w := array[
@@ -502,6 +497,13 @@ begin
                'label_seeded:was=' || coalesce(v_done->>'was', ''))
        where id = r.id;
       v_labelled := v_labelled + 1;
+    end if;
+
+    if v_strange is not null then
+      update ingest.hub24_accounts
+         set promotion_note = concat_ws(' ', promotion_note, 'allocation_unmapped:' || v_strange)
+       where id = r.id;
+      v_alloc_unmapped := v_alloc_unmapped + 1;
     end if;
 
     if v_done->>'allocation' = 'skipped' then
@@ -676,11 +678,9 @@ begin
           v_w[i] := coalesce(v_w[i], 0) + coalesce((e->>'totalAssetClassPercentageValue')::numeric, 0);
         end if;
       end loop;
+      -- An unknown word voids the whole picture; the note is written below, in
+      -- the same order HUB24's reads: label, unmapped, skipped.
       if v_strange is not null then
-        update ingest.netwealth_accounts
-           set promotion_note = concat_ws(' ', promotion_note, 'allocation_unmapped:' || v_strange)
-         where id = r.id;
-        v_alloc_unmapped := v_alloc_unmapped + 1;
         v_w := null;
       end if;
     end if;
@@ -698,6 +698,13 @@ begin
                'label_seeded:was=' || coalesce(v_done->>'was', ''))
        where id = r.id;
       v_labelled := v_labelled + 1;
+    end if;
+
+    if v_strange is not null then
+      update ingest.netwealth_accounts
+         set promotion_note = concat_ws(' ', promotion_note, 'allocation_unmapped:' || v_strange)
+       where id = r.id;
+      v_alloc_unmapped := v_alloc_unmapped + 1;
     end if;
 
     if v_done->>'allocation' = 'skipped' then
@@ -805,6 +812,22 @@ grant execute on function ingest.promote(text) to ingest_netwealth;
 -- branch: `select from ingest.hub24_accounts` as this role and
 -- `select from ingest.netwealth_accounts` as ingest_hub24, both expecting
 -- permission denied.
+
+-- RLS is on every landing table; this role is the one principal that needs
+-- through it, and the promotion function is the owner and bypasses it. Without
+-- these three the grants above are hollow — found by reading HUB24's migration
+-- rather than by a refused insert, which is the cheaper way round.
+create policy netwealth_accounts_feed on ingest.netwealth_accounts
+  for all to ingest_netwealth using (true) with check (true);
+create policy sources_feed_read_netwealth on ingest.sources
+  for select to ingest_netwealth using (true);
+create policy netwealth_asset_class_map_feed_read on ingest.netwealth_asset_class_map
+  for select to ingest_netwealth using (true);
+
+-- Nothing in ingest.* for the API roles, restated for the new objects.
+revoke all on all tables    in schema ingest from public, anon, authenticated;
+revoke all on all sequences in schema ingest from public, anon, authenticated;
+revoke all on all functions in schema ingest from public, anon, authenticated;
 
 -- The sequence grant above is "all sequences", which now includes Netwealth's
 -- identity sequence for HUB24's role too — a read of a sequence value is
