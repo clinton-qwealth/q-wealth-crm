@@ -66,6 +66,15 @@ export type AccountMix = {
   total: number
   /** Accounts with no recorded value, or recorded at zero. Never hidden. */
   missing: number
+  /**
+   * Accounts whose latest value is BELOW zero. A real figure — an overdrawn
+   * wrap account — that a share-of-total picture cannot hold: a negative share
+   * has no arc. Counted apart from `missing` because the two mean opposite
+   * things (nothing recorded, versus something recorded that subtracts) and
+   * the ring says this one out loud where it says nothing about the other.
+   * Reachable since 17 Sep 2026, when the feeds began accepting negatives.
+   */
+  belowZero: number
   /** How many accounts the ring represents, tail included. */
   counted: number
 }
@@ -83,13 +92,20 @@ export type AccountMix = {
 export const MAX_SLICES = 4
 
 export function accountMix(accounts: MixAccount[]): AccountMix {
-  const valued = accounts
-    .map((a) => ({ key: a.account_id, label: a.label, value: Number(a.latest_value) }))
-    /* `latest_value` arrives as a string over PostgREST, so this is a Number()
-       away from being a concatenation bug. A null becomes NaN and is dropped
-       here rather than poisoning the total. An account recorded at exactly zero
-       is a VALUED account that cannot be drawn — it counts as missing, because
-       a zero-width arc is not something a reader can see or hover. */
+  const numbered = accounts.map((a) => ({
+    key: a.account_id,
+    label: a.label,
+    value: Number(a.latest_value),
+  }))
+  /* `latest_value` arrives as a string over PostgREST, so this is a Number()
+     away from being a concatenation bug. A null becomes NaN and is dropped
+     here rather than poisoning the total. An account recorded at exactly zero
+     is a VALUED account that cannot be drawn — it counts as missing, because
+     a zero-width arc is not something a reader can see or hover. A NEGATIVE
+     value is neither: it is recorded and it is real, and it is counted on its
+     own so the ring can say it left one out. */
+  const belowZero = numbered.filter((a) => Number.isFinite(a.value) && a.value < 0).length
+  const valued = numbered
     .filter((a) => Number.isFinite(a.value) && a.value > 0)
     .sort((a, b) => b.value - a.value)
 
@@ -120,7 +136,8 @@ export function accountMix(accounts: MixAccount[]): AccountMix {
   return {
     slices: drawn.map((a) => ({ ...a, share: a.value / total })),
     total,
-    missing: accounts.length - valued.length,
+    missing: accounts.length - valued.length - belowZero,
+    belowZero,
     counted: valued.length,
   }
 }

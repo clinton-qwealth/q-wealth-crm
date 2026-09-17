@@ -737,3 +737,51 @@ describe('the investment mix donut', () => {
   })
 
 })
+
+/**
+ * The ring SAYS when it leaves a negative account out — the one omission it
+ * states. See the note in `account-mix.test.ts` for why a negative is neither
+ * drawn nor "missing".
+ */
+describe('an account below zero', () => {
+  test('is named beneath the legend, in the singular', () => {
+    const { container } = render(
+      <AccountDonut
+        accounts={[account({ label: 'Wrap', latest_value: 500 }), account({ label: 'Overdrawn', latest_value: -69.23 })]}
+      />,
+    )
+    const note = container.querySelector('[data-slot="below-zero"]')!
+    expect(note.textContent).toBe('1 account is below zero and is not drawn.')
+    /* And the centre count agrees: one account is represented. */
+    expect(container.textContent).toContain('1account')
+  })
+
+  test('and in the plural', () => {
+    const { container } = render(
+      <AccountDonut
+        accounts={[
+          account({ latest_value: 500 }),
+          account({ latest_value: -1 }),
+          account({ latest_value: -2 }),
+        ]}
+      />,
+    )
+    expect(container.querySelector('[data-slot="below-zero"]')!.textContent).toBe(
+      '2 accounts are below zero and are not drawn.',
+    )
+  })
+
+  test('says nothing when no account is below zero', () => {
+    const { container } = render(<AccountDonut accounts={three} />)
+    expect(container.querySelector('[data-slot="below-zero"]')).toBeNull()
+  })
+
+  /* "No value has been recorded" would be false here: a value was recorded,
+     and it is what stops the ring being drawn. */
+  test('the empty state says so when every valued account is below zero', () => {
+    render(<AccountDonut accounts={[account({ latest_value: -5 }), account({ latest_value: null })]} />)
+    expect(
+      screen.getByText('The only valued account is below zero, so there is no mix to draw.'),
+    ).toBeTruthy()
+  })
+})

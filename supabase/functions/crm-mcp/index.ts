@@ -201,7 +201,13 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     async ({ party_id }) => {
       const { data: party, error } = await db
         .from('parties')
-        .select('*, persons(*), organisations(*)')
+        // The organisation embed NAMES ITS KEY. `organisations` carries two
+        // foreign keys to `parties` - party_id (the party it is) and
+        // trustee_party_id (who acts for it) - and PostgREST refuses to guess
+        // between them: "more than one relationship was found". Surfaced on
+        // 17 Sep 2026 against a real client. `persons` has one key and needs
+        // no hint.
+        .select('*, persons(*), organisations!organisations_party_id_fkey(*)')
         .eq('id', party_id)
         .maybeSingle()
       if (error) return fail(error.message)

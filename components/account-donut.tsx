@@ -209,7 +209,7 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
    * the two things that used to remount every arc. See `Ring` below.
    */
   const mix = useMemo(() => accountMix(accounts), [accounts])
-  const { slices } = mix
+  const { slices, belowZero } = mix
 
   /**
    * Which segment the pointer is on, shared by the ring and the legend so
@@ -229,9 +229,14 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
           <p className="text-xs leading-relaxed text-neutral-500">
             {accounts.length === 0
               ? 'Once this group holds investment accounts, their mix by value shows here.'
-              : `No value has been recorded against ${
-                  accounts.length === 1 ? 'this account' : 'any of these accounts'
-                } yet, so there is no mix to show.`}
+              : belowZero
+                ? /* Every account that HAS a value is below zero. Saying "no value
+                     recorded" here would be false — a value was recorded, and it
+                     subtracts. */
+                  `${belowZero === 1 ? 'The only valued account is' : 'Every valued account is'} below zero, so there is no mix to draw.`
+                : `No value has been recorded against ${
+                    accounts.length === 1 ? 'this account' : 'any of these accounts'
+                  } yet, so there is no mix to show.`}
           </p>
         </div>
       </Frame>
@@ -275,6 +280,22 @@ export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
           ))}
         </ul>
 
+        {belowZero ? (
+          /*
+           * The one omission the ring states. A share-of-total picture cannot
+           * hold a negative share, so an overdrawn account leaves it — and
+           * unlike an account with nothing recorded (which the list beside the
+           * ring already marks "No value recorded"), a negative one looks
+           * perfectly ordinary in that list. Nothing else on the page would say
+           * why the centre count is one short. Reachable since 17 Sep 2026,
+           * when the feeds began accepting values below zero.
+           */
+          <p data-slot="below-zero" className="w-full text-xs leading-relaxed text-neutral-500">
+            {belowZero === 1
+              ? '1 account is below zero and is not drawn.'
+              : `${belowZero} accounts are below zero and are not drawn.`}
+          </p>
+        ) : null}
       </div>
     </Frame>
   )

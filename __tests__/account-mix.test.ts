@@ -110,7 +110,7 @@ describe('accountMix', () => {
     })
 
     test('no accounts at all yields nothing and counts nothing missing', () => {
-      expect(accountMix([])).toEqual({ slices: [], total: 0, missing: 0, counted: 0 })
+      expect(accountMix([])).toEqual({ slices: [], total: 0, missing: 0, belowZero: 0, counted: 0 })
     })
   })
 
@@ -183,5 +183,43 @@ describe('sharePct', () => {
   test('and rounds rather than truncates', () => {
     expect(sharePct(0.006)).toBe('1%')
     expect(sharePct(0.665)).toBe('67%')
+  })
+})
+
+/**
+ * A value BELOW zero — reachable since 17 September 2026, when the feeds began
+ * accepting an overdrawn wrap account instead of refusing it as garbage.
+ *
+ * It is neither drawn nor "missing". A negative share has no arc, so it cannot
+ * be drawn; and it is not missing, because a value was recorded — one that
+ * subtracts. Folding it into `missing` was the first version of this and it
+ * made the ring's own words false: an account the list showed at −$69.23 would
+ * have been counted as one with "no recorded value".
+ */
+describe('an account below zero', () => {
+  test('is counted on its own, not drawn, and not called missing', () => {
+    const mix = accountMix([
+      account({ label: 'Wrap', latest_value: 500 }),
+      account({ label: 'Overdrawn', latest_value: -69.23 }),
+      account({ label: 'Unvalued', latest_value: null }),
+    ])
+    expect(mix.slices.map((s) => s.label)).toEqual(['Wrap'])
+    expect(mix.belowZero).toBe(1)
+    expect(mix.missing).toBe(1)
+    expect(mix.counted).toBe(1)
+    /* And it does not pull the drawn total down: the shares of what IS drawn
+       still total one. */
+    expect(mix.total).toBe(500)
+  })
+
+  test('is told apart from zero, which stays missing', () => {
+    const mix = accountMix([account({ latest_value: 0 }), account({ latest_value: '-1.56' })])
+    expect(mix.missing).toBe(1)
+    expect(mix.belowZero).toBe(1)
+    expect(mix.slices).toEqual([])
+  })
+
+  test('is nothing when every value is at or above zero', () => {
+    expect(accountMix([account({ latest_value: 1 }), account({ latest_value: 0 })]).belowZero).toBe(0)
   })
 })
