@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Bar, BarChart, Cell, ReferenceLine, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, Cell, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 import { accountMoney } from './ui'
 import { dayLabel, seriesNote, valueSeries, type ValuePoint } from '@/lib/value-series'
 
@@ -36,6 +36,24 @@ import { dayLabel, seriesNote, valueSeries, type ValuePoint } from '@/lib/value-
  * carried alongside the side of the zero rule rather than by colour alone. If
  * the latest day is itself below zero, the sign wins — its position already
  * says it is the latest.
+ *
+ * ## The hover, since 18 September
+ *
+ * Asked for. Pointing at a day does three things, all of which the ring beside
+ * this chart already taught the reader: the other bars recede and the pointed-at
+ * one comes forward, a soft column marks the day's full height so a bar two
+ * pixels tall is as easy to land on as the tallest, and a small sheet prints the
+ * date and the figure. On a day with no valuation the sheet says so — which is
+ * the one place the chart can state that a gap is a real gap and not a
+ * rendering fault.
+ *
+ * Recharts' `Tooltip` drives the active index and marks the hovered bar with
+ * its own class; the recede and the come-forward are two rules in
+ * `globals.css` keyed on that class, for the reason the ring's are there. The
+ * bars NOT under the pointer keep their nodes, so the recede glides; the one
+ * under it is re-rendered as the library's active layer, a new node, so it
+ * arrives at full opacity at once — which is the right way round. A test
+ * pins both halves of that.
  *
  * ## Why not ResponsiveContainer
  *
@@ -80,6 +98,31 @@ const BELOW = '#737373'
 
 /** Axis labels: neutral-500, the same tone every caption on the page takes. */
 const TICK = '#737373'
+
+/** The hovered day's column: neutral-100, the same fill the class bars' track
+ *  and the legend's hover row take, so "this one" is one tone across the tab. */
+const COLUMN = '#f5f5f5'
+
+/**
+ * What the hover prints. Recharts hands the payload of the pointed-at category;
+ * a day with no valuation has a null value, and this says so rather than
+ * printing nothing — the gap is a fact about the feed, not a fault.
+ */
+function DayTip({ active, payload, label }: { active?: boolean; payload?: { value?: number | null }[]; label?: string }) {
+  if (!active || !label) return null
+  const value = payload?.[0]?.value
+  return (
+    <div
+      data-slot="value-tip"
+      className="rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-xs shadow-[0_1px_2px_rgb(0_0_0/0.05),0_6px_16px_-10px_rgb(0_0_0/0.15)]"
+    >
+      <div className="text-neutral-500">{dayLabel(label)}</div>
+      <div className="font-semibold tabular-nums text-neutral-900">
+        {value == null ? <span className="font-normal text-neutral-400">No valuation recorded</span> : accountMoney.format(value)}
+      </div>
+    </div>
+  )
+}
 
 export function ValueBars({ rows }: { rows: ValuePoint[] | null | undefined }) {
   /* Memoised for the reason `account-donut` records: Recharts regenerates its
@@ -168,7 +211,29 @@ export function ValueBars({ rows }: { rows: ValuePoint[] | null | undefined }) {
                same call `allocation-bars` makes about its zero rule. */
             <ReferenceLine y={0} stroke={TICK} strokeWidth={1} />
           ) : null}
-          <Bar dataKey="value" radius={[2, 2, 0, 0]} isAnimationActive={false}>
+          {/* The column and the sheet. `shared` is stated: with one series it
+              changes nothing, and a second series added later would otherwise
+              flip the tooltip to per-bar hit-testing, which on 7px bars is a
+              tooltip you cannot reach. No animation on the sheet — it follows
+              the pointer, and a glide there reads as lag. */}
+          <Tooltip
+            cursor={{ fill: COLUMN }}
+            content={<DayTip />}
+            isAnimationActive={false}
+            shared
+            /* Recharts' default wrapper is `pointer-events: none` already;
+               the offset keeps the sheet clear of the pointer. */
+            offset={12}
+          />
+          <Bar
+            dataKey="value"
+            radius={[2, 2, 0, 0]}
+            isAnimationActive={false}
+            /* `true` renders the hovered bar again on top with Recharts' own
+               `recharts-active-bar` class and the SAME fill — the recede on the
+               others and the come-forward on this one are the stylesheet's. */
+            activeBar
+          >
             {series.points.map((p) => {
               const negative = p.value !== null && p.value < 0
               const latest = last !== undefined && p.day === last.day

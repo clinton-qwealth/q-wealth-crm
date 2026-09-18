@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest'
-import { render } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { act, fireEvent, render } from '@testing-library/react'
 import { ValueBars } from '@/components/value-bars'
 
 /**
@@ -194,5 +194,110 @@ describe('the value chart', () => {
     expect(container.querySelector('[data-slot="series-note"]')!.textContent).toBe(
       '2 valuations over 4 days; 2 days have none.',
     )
+  })
+})
+
+/**
+ * The hover, asked for on 18 September.
+ *
+ * ## How jsdom is made to drive it
+ *
+ * Recharts places the pointer by measuring the chart's box, and jsdom measures
+ * every box as zero, so a mouse move lands nowhere. Stubbing the measurement to
+ * the chart's own logical size makes `clientX` the chart x, and from there the
+ * library's arithmetic is the real thing. The handler is throttled on a timer,
+ * so each move is followed by a tick before reading the tree — without it the
+ * first version of this probe read "nothing happened" three times.
+ *
+ * The stub is put back after every test: it is `Element.prototype`, and a
+ * measurement that lies to the next file is how a suite goes flaky.
+ */
+describe('the value chart’s hover', () => {
+  const real = Element.prototype.getBoundingClientRect
+  beforeEach(() => {
+    const rect = { x: 0, y: 0, left: 0, top: 0, right: 320, bottom: 160, width: 320, height: 160, toJSON() {} }
+    Element.prototype.getBoundingClientRect = () => rect as DOMRect
+  })
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = real
+  })
+
+  const gapped = [at('2026-09-14', 100), at('2026-09-15', 120), at('2026-09-17', 140)]
+  const tick = () => new Promise((r) => setTimeout(r, 60))
+  const point = async (c: HTMLElement, x: number) => {
+    await act(async () => {
+      fireEvent.mouseMove(c.querySelector('.recharts-wrapper')!, { clientX: x, clientY: 80 })
+      await tick()
+    })
+  }
+  const tip = (c: HTMLElement) => c.querySelector('[data-slot="value-tip"]')
+
+  test('pointing at a day marks its bar as the active one, for the stylesheet', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    await point(container, 40)
+    const active = container.querySelectorAll('.recharts-active-bar path')
+    expect(active).toHaveLength(1)
+    expect(active[0].getAttribute('data-day')).toBe('2026-09-14')
+    await point(container, 300)
+    expect(container.querySelector('.recharts-active-bar path')!.getAttribute('data-day')).toBe('2026-09-17')
+  })
+
+  test('and prints the date and the figure on a sheet', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    await point(container, 300)
+    expect(tip(container)!.textContent).toBe('17 Sep$140.00')
+  })
+
+  /**
+   * A gap day is a real category — the calendar is filled so weekends keep
+   * their width — and pointing at it must say the gap is a gap. This is the one
+   * place the chart can state that, and "nothing appears" would read as the
+   * hover being broken rather than the feed having skipped a day.
+   */
+  test('and on a day with no valuation says so, with no bar to mark', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    await point(container, 200)
+    expect(tip(container)!.textContent).toBe('16 SepNo valuation recorded')
+    expect(container.querySelectorAll('.recharts-active-bar')).toHaveLength(0)
+  })
+
+  /* The column behind the day, so a two-pixel bar is as easy to land on as
+     the tallest. Drawn for a gap day too — that is what makes it reachable. */
+  test('draws a column behind the pointed-at day, valuation or not', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    await point(container, 200)
+    expect(container.querySelectorAll('.recharts-tooltip-cursor')).toHaveLength(1)
+  })
+
+  test('and clears everything as the pointer leaves', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    await point(container, 40)
+    expect(tip(container)).toBeTruthy()
+    await act(async () => {
+      fireEvent.mouseLeave(container.querySelector('.recharts-wrapper')!)
+      await tick()
+    })
+    expect(tip(container)).toBeNull()
+    expect(container.querySelectorAll('.recharts-active-bar')).toHaveLength(0)
+  })
+
+  /**
+   * The OTHER bars keep their nodes across a hover, so the recede transition in
+   * the stylesheet has something to run on. The hovered bar does not: Recharts
+   * re-renders it as its active layer, which is a new node — and that is the
+   * right way round, because the active bar should arrive at full opacity at
+   * once rather than fade up. The first version of this test claimed all three
+   * survived, and the library corrected it.
+   */
+  test('the bars not under the pointer survive the hover as the same nodes', async () => {
+    const { container } = render(<ValueBars rows={gapped} />)
+    const before = new Map(
+      Array.from(container.querySelectorAll('.recharts-bar-rectangle path')).map((n) => [n.getAttribute('data-day'), n]),
+    )
+    await point(container, 300) // the 17th
+    const after = Array.from(container.querySelectorAll('.recharts-bar-rectangle path'))
+    expect(after.map((n) => n.getAttribute('data-day'))).toEqual(['2026-09-14', '2026-09-15'])
+    for (const n of after) expect(n).toBe(before.get(n.getAttribute('data-day')))
+    expect(container.querySelector('.recharts-active-bar path')!.getAttribute('data-day')).toBe('2026-09-17')
   })
 })

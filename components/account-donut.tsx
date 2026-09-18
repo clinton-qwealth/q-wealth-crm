@@ -63,14 +63,15 @@ import { accountMoney, QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } f
 export type DonutAccount = MixAccount
 
 /**
- * The ramp, first step first — so the largest share takes the heaviest arc and
- * the ring reads in order before the legend is consulted. "Heaviest" was the
- * darkest indigo until 18 September and is the saturated brand orange since;
- * the rule survives the palette because in a warm ramp chroma is the weight.
+ * The palette, first step first — so the largest share takes the brand orange
+ * and the ring reads in a fixed order before the legend is consulted. This was
+ * a sequential ramp (darkest indigo first) until 18 September and is a
+ * categorical set of four hues since, so the order now says "first, second,
+ * third" and nothing about amount; the legend carries the amounts.
  *
- * Four of the five steps, because `MAX_SLICES` is four: the fourth carries the
- * grouped tail. Values and reasoning are in `globals.css`, and
- * `mix-palette.test.ts` measures every step against the sheet.
+ * Four of the five, because `MAX_SLICES` is four: the fourth carries the
+ * grouped tail. Values, and what this palette knowingly gives up, are in
+ * `globals.css`; `mix-palette.test.ts` measures every step against the sheet.
  */
 const RAMP = ['var(--mix-1)', 'var(--mix-2)', 'var(--mix-3)', 'var(--mix-4)'] as const
 
@@ -154,14 +155,15 @@ const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
 
 /**
- * The gap between arcs, in degrees — 11°, which is the 3%-of-circumference gap
- * the comparison ring used.
+ * The gap between arcs, in degrees.
  *
- * Charged once per arc on a closed ring, so four arcs spend 44° of the 360 on
- * gaps. That is visible and deliberate; it is what the chosen treatment looked
- * like.
+ * 4° since 18 September. It was 11° — the 3%-of-circumference gap of the
+ * comparison ring the treatment was matched to — until the allocation ring in
+ * the account drawer took the same geometry and, drawing up to eight arcs in a
+ * 10rem box, spent a quarter of its circle on gaps. Asked to reduce it; both
+ * rings moved together so they stay one object.
  */
-const GAP_DEGREES = 11
+const GAP_DEGREES = 4
 
 /**
  * The band's width in viewBox units — inner edge of the ring to outer edge.
@@ -176,9 +178,10 @@ const BAND = ((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 2
  * semicircle a `stroke-linecap="round"` dash gives, and what this was when the
  * treatment was first matched to the comparison ring. Zero is a square end.
  *
- * 0.35 — asked for on 11 September as "reduce the roundness a little". Still
- * plainly soft, but the ends now read as a rounded rectangle's rather than as
- * half-circles, which at this ring's size was most of the shape.
+ * 0.35 from 11 September ("reduce the roundness a little"), then **0.15 from
+ * 18 September** ("reduce the roundness"), when the same shape at the
+ * allocation ring's smaller size read as caps first and arcs second. The ends
+ * are still visibly softened — square would be 0 — but the band is the shape.
  *
  * A fraction of the band rather than a pixel figure, so it survives a change
  * to either radius and so the number says how round the end is rather than how
@@ -186,7 +189,7 @@ const BAND = ((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 2
  * the only property that separates one roundness from another — arc COUNT
  * cannot, because any rounding at all gives six.
  */
-const CAP_ROUNDNESS = 0.35
+const CAP_ROUNDNESS = 0.15
 
 export function AccountDonut({ accounts }: { accounts: DonutAccount[] }) {
   /*

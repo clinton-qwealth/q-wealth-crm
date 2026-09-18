@@ -83,84 +83,55 @@ const GROUND = '#ffffff'
    family, the value chart with 5 and 1. */
 const RAMP = [1, 2, 3, 4, 5].map((n) => token(`mix-${n}`))
 
-describe('the chart ramp', () => {
-  /**
-   * One hue, stepped. These arcs and bars are the same kind of thing in
-   * different amounts, which is what a sequential ramp says; a categorical
-   * palette would imply different kinds. The five given sit within a couple of
-   * degrees of one another — measured, not asserted from the swatches.
-   */
-  test('all five are one warm hue', () => {
-    const hues = RAMP.map(hue)
-    for (const [i, h] of hues.entries()) {
-      expect(h, `--mix-${i + 1} (${RAMP[i]}) should be the brand's orange-brown`).toBeGreaterThan(8)
-      expect(h, `--mix-${i + 1} (${RAMP[i]}) should be the brand's orange-brown`).toBeLessThan(22)
-    }
-    expect(Math.max(...hues) - Math.min(...hues), 'the steps should agree on hue').toBeLessThan(4)
-  })
+/**
+ * A categorical palette since the afternoon of 18 September — four hues and a
+ * darker return to the first — so most of what a RAMP is judged on no longer
+ * applies, and the tests below judge it as a set of kinds instead. Two of its
+ * steps fall under the accessibility floor this file was written to hold, and
+ * three sit on hues that mean a state elsewhere. Both were chosen knowingly;
+ * the tests that used to refuse them now NAME them, so that the exceptions
+ * stay exactly the ones that were chosen and a third does not join them
+ * unnoticed.
+ */
+const FLOOR = 3
 
+/* The two steps chosen under the floor, by name. Remove a token from this list
+   the day it is darkened past 3:1, and the test below will insist you do. */
+const UNDER_THE_FLOOR = new Set(['mix-3', 'mix-4'])
+
+/* The three steps that share a hue with a state colour, by name and by state. */
+const SHARES_A_STATE_HUE: Record<string, string> = {
+  'mix-2': 'red (wrong direction)',
+  'mix-3': 'sky (insurance tile)',
+  'mix-4': 'emerald (live / super tile)',
+}
+
+describe('the chart palette', () => {
   /**
-   * The ramp starts at the brand colour EXACTLY. That is the decision of
+   * The palette starts at the brand colour EXACTLY. That is the decision of
    * 18 September in one line: the charts speak in the brand's own colour, and a
    * change to `--brand-500` that left `--mix-1` behind would split them.
    */
-  test('and the first step is brand orange, to the hex', () => {
+  test('the first step is brand orange, to the hex', () => {
     expect(RAMP[0]).toBe(token('brand-500'))
   })
 
   /**
-   * 3:1 is WCAG's floor for non-text graphics, which is what an arc is — the
-   * legend carries the text. Worth pinning because the obvious greys fail it:
-   * neutral-300 measures 1.5:1 against white and neutral-400 2.3:1, so the tail
-   * uses neutral-500 at 4.6:1.
+   * Categorical: each colour must be tellable from its neighbours, and with
+   * different hues in play that is hue OR lightness OR chroma. The last step is
+   * the first hue again, darker — told apart by lightness, as a ramp step
+   * would be.
    */
-  test('every tone clears the 3:1 non-text floor against the white sheet', () => {
-    for (const [i, colour] of RAMP.entries()) {
-      expect(contrast(colour, GROUND), `--mix-${i + 1} (${colour})`).toBeGreaterThan(3)
-    }
-  })
-
-  /**
-   * A ramp is judged on whether NEIGHBOURING steps can be told apart — and
-   * within one hue, only lightness does that work. Tailwind's adjacent steps
-   * are far too close: indigo-900 beside indigo-800 differ by 0.014 in relative
-   * luminance. Every other step is skipped so each indigo pair clears a real
-   * margin.
-   *
-   * **The last boundary is separated by chroma instead**, and the first version
-   * of this test failed on it for the right reason. Indigo-500 and neutral-500
-   * sit 0.014 apart in luminance — but one is a saturated indigo and the other
-   * a pure grey, which the eye separates easily. Lightness is the criterion
-   * inside the hue; saturation is the criterion at the step out of it.
-   */
-  test('consecutive steps are told apart by lightness, or by chroma where they leave the hue', () => {
+  test('consecutive steps are told apart, by hue or by lightness or by chroma', () => {
     for (let i = 0; i < RAMP.length - 1; i += 1) {
       const [a, b] = [RAMP[i], RAMP[i + 1]]
+      const dHue = Math.min(Math.abs(hue(a) - hue(b)), 360 - Math.abs(hue(a) - hue(b)))
       const dLum = Math.abs(luminance(a) - luminance(b))
       const dSat = Math.abs(saturation(a) - saturation(b))
       expect(
-        dLum > 0.03 || dSat > 0.25,
-        `--mix-${i + 1} (${a}) and --mix-${i + 2} (${b}) are too close: Δluminance ${dLum.toFixed(
-          3,
-        )}, Δsaturation ${dSat.toFixed(2)}`,
+        dHue > 20 || dLum > 0.03 || dSat > 0.25,
+        `--mix-${i + 1} (${a}) and --mix-${i + 2} (${b}) are too close: Δhue ${dHue.toFixed(0)}°, Δluminance ${dLum.toFixed(3)}, Δsaturation ${dSat.toFixed(2)}`,
       ).toBe(true)
-    }
-  })
-
-  /**
-   * Brightest first, darkest last — the reverse of the indigo ramp, and a
-   * different rule for the same end. The largest share still takes the first
-   * step; in a warm ramp the saturated orange is the visual weight and the
-   * charcoal recedes, so first-is-heaviest holds by chroma where it used to
-   * hold by darkness. The value chart depends on the ORDER too: it draws its
-   * history in the last step and its latest day in the first, and those must
-   * be the two ends.
-   */
-  test('the steps run brightest to darkest', () => {
-    for (let i = 0; i < RAMP.length - 1; i += 1) {
-      expect(luminance(RAMP[i]), `--mix-${i + 1} should be lighter than --mix-${i + 2}`).toBeGreaterThan(
-        luminance(RAMP[i + 1]),
-      )
     }
   })
 
@@ -169,21 +140,52 @@ describe('the chart ramp', () => {
   })
 
   /**
-   * The ramp shares its hue with brand orange BY DESIGN now, so the old
-   * keep-away test is gone. What must still hold is that it stays clear of the
-   * hues that carry a STATE — a chart step that drifted towards the live green
-   * or the wrong-direction red would borrow a meaning. Amber is excluded from
-   * this list on purpose: at 15° the ramp is 29° from it, and an orange that
-   * was 30° from amber would not be the brand's orange.
+   * 3:1 is WCAG's floor for non-text graphics, which is what an arc is — the
+   * legend carries the text. Two steps were chosen under it, and this asserts
+   * that it is exactly those two: every other step clears the floor, and every
+   * step named as an exception really is under it (so a fix removes it from
+   * the list rather than leaving a stale exception standing).
    */
-  test('the ramp stays clear of every hue that means a state', () => {
-    const states = { 'emerald (live / super tile)': 160, 'sky (insurance tile)': 200, 'red (wrong direction)': 0 }
-    for (const step of RAMP) {
-      for (const [what, h] of Object.entries(states)) {
-        const gap = Math.min(Math.abs(hue(step) - h), 360 - Math.abs(hue(step) - h))
-        expect(gap, `${step} sits ${gap.toFixed(0)}° from ${what}`).toBeGreaterThan(12)
+  test('every step not named as an exception clears the 3:1 floor on the white sheet, and the exceptions are exactly the ones chosen', () => {
+    for (const [i, colour] of RAMP.entries()) {
+      const name = `mix-${i + 1}`
+      const ratio = contrast(colour, GROUND)
+      if (UNDER_THE_FLOOR.has(name)) {
+        expect(ratio, `${name} (${colour}) is listed as under the floor but measures ${ratio.toFixed(2)}:1 — take it off the list`).toBeLessThan(FLOOR)
+      } else {
+        expect(ratio, `${name} (${colour}) measures ${ratio.toFixed(2)}:1`).toBeGreaterThan(FLOOR)
       }
     }
+  })
+
+  /**
+   * Three steps sit on hues that already mean something on these pages. Chosen
+   * knowingly; every arc and bar is named, so colour never carries meaning
+   * alone. This asserts the collisions are exactly the three that were chosen
+   * — a fourth would be an accident, and a fix should remove its entry.
+   */
+  test('the steps that share a hue with a state colour are exactly the ones chosen', () => {
+    const states = { 'emerald (live / super tile)': 160, 'sky (insurance tile)': 200, 'red (wrong direction)': 0 }
+    for (const [i, step] of RAMP.entries()) {
+      const name = `mix-${i + 1}`
+      const collisions = Object.entries(states)
+        .filter(([, h]) => Math.min(Math.abs(hue(step) - h), 360 - Math.abs(hue(step) - h)) <= 12)
+        .map(([what]) => what)
+      const expected = SHARES_A_STATE_HUE[name]
+      if (expected) expect(collisions, `${name} (${step})`).toEqual([expected])
+      else expect(collisions, `${name} (${step}) has drifted onto a state hue`).toEqual([])
+    }
+  })
+
+  /**
+   * The value chart draws its history in the LAST step and its latest day in
+   * the FIRST, so those two must be far apart and the last must be the quieter
+   * of the two — a history louder than its endpoint inverts the emphasis.
+   */
+  test('the last step is quieter than the first, for the value chart’s history', () => {
+    const [first, last] = [RAMP[0], RAMP[RAMP.length - 1]]
+    expect(saturation(last)).toBeLessThan(saturation(first))
+    expect(luminance(last)).toBeLessThan(luminance(first))
   })
 })
 
@@ -237,12 +239,14 @@ const valueBarsHex = (name: string) => {
 const VALUE_BELOW = valueBarsHex('BELOW')
 
 describe('the allocation bars, on their own track', () => {
-  test('every family ink clears the 3:1 non-text floor against the track', () => {
-    for (const [i, colour] of RAMP.entries()) {
-      expect(
-        contrast(colour, TRACK),
-        `--mix-${i + 1} (${colour}) on the bar track (${TRACK})`,
-      ).toBeGreaterThan(3)
+  /* The same two exceptions, on the lighter ground — where they measure lower
+     still. Named, not waived. */
+  test('every family ink not named as an exception clears the 3:1 floor against the track', () => {
+    for (const [i, colour] of RAMP.slice(0, 4).entries()) {
+      const name = `mix-${i + 1}`
+      const ratio = contrast(colour, TRACK)
+      if (UNDER_THE_FLOOR.has(name)) expect(ratio, `${name} on the track`).toBeLessThan(FLOOR)
+      else expect(ratio, `${name} (${colour}) on the bar track (${TRACK}) measures ${ratio.toFixed(2)}:1`).toBeGreaterThan(FLOOR)
     }
   })
 

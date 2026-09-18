@@ -79,9 +79,9 @@ const RING_BOX = 'aspect-square w-full max-w-[10rem]'
 /* The investment ring's geometry, number for number. */
 const INNER_RADIUS = 0.6
 const OUTER_RADIUS = 0.94
-const GAP_DEGREES = 11
+const GAP_DEGREES = 4
 const BAND = ((OUTER_RADIUS - INNER_RADIUS) * SIZE) / 2
-const CAP_ROUNDNESS = 0.35
+const CAP_ROUNDNESS = 0.15
 
 /** In the order the ramp runs, which is growth first. */
 const FAMILIES: AssetFamily[] = ['shares', 'fixed_interest', 'property', 'cash']

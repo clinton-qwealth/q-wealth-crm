@@ -31,42 +31,45 @@
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
 
-  /* THE CHART PALETTE: one warm hue, five steps, anchored on the brand.
-     Chosen by Clinton on 18 Sep 2026 for the account drawer's charts and, so
-     the two never disagree, for the investment-mix ring on the group page —
-     both paint `var(--mix-n)` and nothing else. It replaces the indigo ramp of
-     10 September, which was picked precisely because indigo had no other job
-     here; that reasoning is superseded by a decision to let the charts speak
-     in the brand's own colour.
+  /* THE CHART PALETTE: five colours, chosen by Clinton on 18 Sep 2026, for
+     the account drawer's charts and — so the two never disagree — for the
+     investment-mix ring on the group page. Both paint `var(--mix-n)` and
+     nothing else. This is the second palette of the day: a warm five-step ramp
+     of the brand's own hue lasted the morning, and this categorical set
+     replaced it on instruction.
 
-     One hue rather than several, for the same reason as before: arcs and bars
-     are the same kind of thing in different amounts, and a categorical palette
-     would imply different kinds. The five sit within a degree of one another in
-     hue (about 15°, measured), so they read as one material lit differently.
+     CATEGORICAL, NOT A RAMP. Four hues plus a darker return to the first, so
+     the order carries no "more and less" any longer; it is a fixed sequence in
+     which the first is the brand. The investment ring still gives the largest
+     share the first step, so the biggest arc is orange; the allocation gives
+     1–4 to its four families, shares to cash; the value chart draws its
+     history in 5 and its latest day in 1.
 
      THE FIRST STEP IS BRAND ORANGE EXACTLY — `--mix-1` equals `--brand-500` —
-     and mix-palette.test.ts pins that, so a brand change cannot leave the
-     charts on the old colour. The consequence is written down: on the pages
-     these charts sit on, orange now means the chart's emphasis as well as an
-     action. Buttons and links keep it; nothing else took it.
+     and mix-palette.test.ts pins that.
 
-     Every step clears WCAG's 3:1 floor for non-text graphics against the white
-     sheet AND against the bars' filled track (measured: 3.65, 4.52, 6.16, 9.75
-     and 13.5 to one on white). Consecutive steps are told apart by lightness;
-     the last pair is the closest, at 0.030 of relative luminance, which the
-     test names as the margin it is.
+     TWO THINGS THIS PALETTE DOES NOT DO, RECORDED HERE BECAUSE THE TEST THAT
+     USED TO REFUSE THEM NOW NAMES THEM INSTEAD.
 
-     Who takes which step is decided where the charts are drawn, not here:
-     the investment ring takes 1–4 largest share first; the allocation takes
-     1–4 by asset family, shares to cash; the value chart draws its history in
-     5 and its latest day in 1. A day or a class BELOW ZERO takes no step at
-     all — a plain neutral, so the sign survives greyscale and so a negative
-     `other` can never wear the same tone as the `cash` above it. */
+     1. Two steps fall under WCAG's 3:1 floor for non-text graphics on the
+        white sheet: the sky blue measures 2.60:1 and the mint 1.57:1 (and
+        2.39:1 and 1.44:1 on the bars' filled track). An arc or bar in either
+        is there, and faint, for a reader with low contrast sensitivity. The
+        other three clear it: 3.65, 5.03, 5.50. Nearest compliant neighbours,
+        should they ever be wanted: #1b8fc7 for the blue (3.4:1) and #14b58f
+        for the mint (3.0:1); both keep the hue.
+
+     2. Three steps share a hue with a colour that already means a STATE on
+        these pages: the red-pink sits 8° from the wrong-direction red, the sky
+        1° from the insurance tile's sky, the mint 6° from the live/super
+        green. Nothing here lets colour alone carry meaning — every arc and bar
+        is named — so this is a matter of feel rather than of correctness, and
+        it was chosen with that known. */
   --mix-1: #e85524; /* brand orange   3.65:1 */
-  --mix-2: #b55e41; /*                4.52:1 */
-  --mix-3: #825749; /*                6.16:1 */
-  --mix-4: #4f413c; /*                9.75:1 */
-  --mix-5: #332d2b; /*               13.50:1 */
+  --mix-2: #e82541; /* red-pink       5.03:1 */
+  --mix-3: #25abe8; /* sky            2.60:1 — under the floor, by choice */
+  --mix-4: #25e8bb; /* mint           1.57:1 — under the floor, by choice */
+  --mix-5: #935b49; /* brown          5.50:1 */
 }
 
 @theme inline {
@@ -469,6 +472,38 @@ dialog.qw-drawer[open]::backdrop {
 
 @media (prefers-reduced-motion: reduce) {
   [data-slot='alloc-chart'] [data-slot='alloc-segment'] {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The value chart's hover — the same recede-and-come-forward, on bars
+
+   Keyed on Recharts' OWN class this time. With `activeBar` set, the library
+   draws the pointed-at bar again as a layer on top, marked
+   `recharts-active-bar`, and drives which one from its Tooltip. So no frame
+   attribute is needed: the chart has an active bar or it does not, and `:has`
+   reads that off the tree. The bars NOT under the pointer keep their nodes, so
+   unlike the ring's arcs they carry the recede transition themselves; the one
+   under it is the library's new node and simply appears at full opacity.
+
+   The tempo is the rings'. No pop: a 7px-wide bar scaled 5% moves a third of
+   a pixel, and the column cursor behind it already says "this one".
+--------------------------------------------------------------------------- */
+[data-slot='value-chart'] .recharts-bar-rectangle path {
+  transition: fill-opacity 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+[data-slot='value-chart']:has(.recharts-active-bar) .recharts-bar-rectangle path {
+  fill-opacity: 0.55;
+}
+
+[data-slot='value-chart'] .recharts-active-bar path {
+  fill-opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='value-chart'] .recharts-bar-rectangle path {
     transition: none;
   }
 }

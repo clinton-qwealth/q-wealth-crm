@@ -231,9 +231,15 @@ describe('the investment mix donut', () => {
      * | --- | --- |
      * | 0.5 — fully round, the original | 22.7 |
      * | 0.4 | 17.7 |
-     * | **0.35 — current** | **15.3** |
+     * | 0.35 — 11 September to 18 September | 15.3 |
      * | 0.3 | 13.0 |
+     * | **0.15 — current** | **6.3** |
      * | 0 — square | 0 |
+     *
+     * 0.15 since 18 September, asked for as "reduce the roundness" when the
+     * allocation ring — the same shape, drawn with more arcs in a smaller box —
+     * made the caps read as most of the shape. Both rings changed together;
+     * `allocation-ring-matches-investment-ring.test.ts` holds them to it.
      *
      * toBeCloseTo at precision 0 is a tolerance of half a unit, so this fails
      * on a step of 0.05 of the band in either direction,
@@ -253,7 +259,7 @@ describe('the investment mix donut', () => {
         const [, x, y] = seg.getAttribute('d')!.match(/^M\s*([-\d.]+),\s*([-\d.]+)/)!
         const inset = outer - Math.hypot(Number(x) - half, Number(y) - half)
 
-        expect(inset, `segment ${i} caps inset ${inset.toFixed(1)}`).toBeCloseTo(15.3, 0)
+        expect(inset, `segment ${i} caps inset ${inset.toFixed(1)}`).toBeCloseTo(6.3, 0)
         // Stated separately so the failure says which way it went.
         expect(inset, 'the caps are back to spanning the whole band').toBeLessThan(
           fullyRound - 3,
@@ -298,11 +304,16 @@ describe('the investment mix donut', () => {
        * `share1 × (360 − n·g) + g`, so g falls out of where it actually starts.
        * Mutation found this: narrowing 11° back to 3° passed every assertion
        * above, because they only ask that a gap exists.
+       *
+       * 4° since 18 September, from 11°. Eleven was 3% of the circumference,
+       * matched to the comparison ring the palette was first chosen from; with
+       * the allocation ring drawing up to eight arcs it spent a quarter of the
+       * circle on gaps, and both rings were tightened together.
        */
       const n = 3
       const share1 = 0.7
       const gap = (share1 * 360 - travelled[1]) / (share1 * n - 1)
-      expect(gap, `measured gap ${gap.toFixed(1)}°`).toBeCloseTo(11, 0)
+      expect(gap, `measured gap ${gap.toFixed(1)}°`).toBeCloseTo(4, 0)
     })
 
     /**

@@ -134,3 +134,33 @@ describe('the allocation ring’s hover rules', () => {
     expect(pairs).toHaveLength(MAX_SLICES)
   })
 })
+
+/**
+ * The value chart's hover rules — keyed on Recharts' own `recharts-active-bar`
+ * rather than a frame attribute, because with `activeBar` set the library
+ * marks the hovered bar itself. `value-bars.test.tsx` proves the class
+ * appears; only this can prove the rules exist.
+ */
+describe('the value chart’s hover rules', () => {
+  const bars = css.slice(css.indexOf("[data-slot='value-chart'] .recharts-bar-rectangle path"))
+
+  test('exist: the rest recede and the active bar comes forward', () => {
+    expect(bars.length).toBeGreaterThan(0)
+    expect(bars).toMatch(
+      /\[data-slot='value-chart'\]:has\(\.recharts-active-bar\) \.recharts-bar-rectangle path \{\s*fill-opacity: 0\.55;/,
+    )
+    expect(bars).toMatch(/\[data-slot='value-chart'\] \.recharts-active-bar path \{\s*fill-opacity: 1;/)
+  })
+
+  test('on the rings’ clock', () => {
+    const durations = [...bars.matchAll(/(\d+)ms/g)].map((m) => m[1])
+    expect(durations.length).toBeGreaterThan(0)
+    expect(new Set(durations)).toEqual(new Set(['300']))
+  })
+
+  test('and stand still for a reader who asked for no motion', () => {
+    expect(bars).toMatch(
+      /prefers-reduced-motion: reduce\)[\s\S]*\[data-slot='value-chart'\] \.recharts-bar-rectangle path \{\s*transition: none;/,
+    )
+  })
+})
