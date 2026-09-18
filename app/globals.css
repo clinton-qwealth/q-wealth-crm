@@ -31,31 +31,42 @@
   --gold-100: #f3e6b8;
   --gold-700: #8a6508;
 
-  /* The investment-mix ring: ONE HUE, STEPPED, plus a neutral for the tail.
-     Chosen on sight 10 Sep 2026 from six treatments drawn at real size beside
-     the real account rows, after four palettes picked in code had all failed.
+  /* THE CHART PALETTE: one warm hue, five steps, anchored on the brand.
+     Chosen by Clinton on 18 Sep 2026 for the account drawer's charts and, so
+     the two never disagree, for the investment-mix ring on the group page —
+     both paint `var(--mix-n)` and nothing else. It replaces the indigo ramp of
+     10 September, which was picked precisely because indigo had no other job
+     here; that reasoning is superseded by a decision to let the charts speak
+     in the brand's own colour.
 
-     One hue rather than several, because these arcs are the same kind of thing
-     in different amounts — six hues implied six kinds. Indigo because it is the
-     only family on this page with no job: green is a live state, amber needs
-     attention, red is the wrong direction, gold is the investment tile, sky is
-     the insurance tile and brand orange is an action.
+     One hue rather than several, for the same reason as before: arcs and bars
+     are the same kind of thing in different amounts, and a categorical palette
+     would imply different kinds. The five sit within a degree of one another in
+     hue (about 15°, measured), so they read as one material lit differently.
 
-     THE STEPS ARE WIDE APART ON PURPOSE. A single hue runs out of room quickly
-     on white: indigo-400 and paler fall under the 3:1 non-text floor, and
-     900 beside 800 is a difference nobody can see (0.014 apart in relative
-     luminance). Every other step is skipped so consecutive arcs are genuinely
-     tellable apart — 900, 700, 500, at 0.042 / 0.083 / 0.185 luminance.
+     THE FIRST STEP IS BRAND ORANGE EXACTLY — `--mix-1` equals `--brand-500` —
+     and mix-palette.test.ts pins that, so a brand change cannot leave the
+     charts on the old colour. The consequence is written down: on the pages
+     these charts sit on, orange now means the chart's emphasis as well as an
+     action. Buttons and links keep it; nothing else took it.
 
-     The fourth is NEUTRAL, not a fourth indigo, for the same reason: there is
-     no fourth indigo that both clears the floor and reads as distinct. It
-     carries the grouped tail, where grey is the honest colour for "and the
-     rest". neutral-500 is the lightest grey that still clears 3:1 — the 300 and
-     400 steps measure 1.5:1 and 2.3:1 and would be invisible as a segment. */
-  --mix-1: #312e81; /* indigo-900  11.42:1 */
-  --mix-2: #4338ca; /* indigo-700   7.90:1 */
-  --mix-3: #6366f1; /* indigo-500   4.47:1 */
-  --mix-4: #737373; /* neutral-500  4.60:1 — the grouped tail */
+     Every step clears WCAG's 3:1 floor for non-text graphics against the white
+     sheet AND against the bars' filled track (measured: 3.65, 4.52, 6.16, 9.75
+     and 13.5 to one on white). Consecutive steps are told apart by lightness;
+     the last pair is the closest, at 0.030 of relative luminance, which the
+     test names as the margin it is.
+
+     Who takes which step is decided where the charts are drawn, not here:
+     the investment ring takes 1–4 largest share first; the allocation takes
+     1–4 by asset family, shares to cash; the value chart draws its history in
+     5 and its latest day in 1. A day or a class BELOW ZERO takes no step at
+     all — a plain neutral, so the sign survives greyscale and so a negative
+     `other` can never wear the same tone as the `cash` above it. */
+  --mix-1: #e85524; /* brand orange   3.65:1 */
+  --mix-2: #b55e41; /*                4.52:1 */
+  --mix-3: #825749; /*                6.16:1 */
+  --mix-4: #4f413c; /*                9.75:1 */
+  --mix-5: #332d2b; /*               13.50:1 */
 }
 
 @theme inline {
@@ -78,6 +89,7 @@
   --color-mix-2: var(--mix-2);
   --color-mix-3: var(--mix-3);
   --color-mix-4: var(--mix-4);
+  --color-mix-5: var(--mix-5);
 
 
   --font-sans: var(--font-geist-sans);
@@ -410,6 +422,53 @@ dialog.qw-drawer[open]::backdrop {
    not glide. */
 @media (prefers-reduced-motion: reduce) {
   [data-slot='mix-chart'] [data-slot='segment'] {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The allocation ring's hover — the same effect, keyed by CLASS
+
+   The account drawer's asset-allocation ring is the investment ring's sibling:
+   same geometry, same tempo, same reason the rules live here (see above — an
+   arc cannot carry a prop that moves with the hover). Two things differ.
+
+   It is keyed by asset class rather than by position. The ring draws only the
+   POSITIVE classes and the bars beneath it draw every class including a
+   negative one, so their indices do not line up — but the class name is the
+   same on both, and `lib/allocation.ts` holds the closed list of eight. One
+   rule per class, and a test derives the count from that list.
+
+   And it is one frame around TWO components. The ring sits in one sheet and
+   the bars in another, so `data-active` is carried on the Overview panel that
+   holds both, not on either chart.
+--------------------------------------------------------------------------- */
+[data-slot='alloc-chart'] [data-slot='alloc-segment'] {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  transition:
+    fill-opacity 300ms cubic-bezier(0, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+[data-slot='alloc-chart'][data-active] [data-slot='alloc-segment'] {
+  fill-opacity: 0.6;
+}
+
+[data-slot='alloc-chart'][data-active='australian_shares'] [data-slot='alloc-segment'][data-class='australian_shares'],
+[data-slot='alloc-chart'][data-active='international_shares'] [data-slot='alloc-segment'][data-class='international_shares'],
+[data-slot='alloc-chart'][data-active='australian_fixed_interest'] [data-slot='alloc-segment'][data-class='australian_fixed_interest'],
+[data-slot='alloc-chart'][data-active='international_fixed_interest'] [data-slot='alloc-segment'][data-class='international_fixed_interest'],
+[data-slot='alloc-chart'][data-active='listed_property'] [data-slot='alloc-segment'][data-class='listed_property'],
+[data-slot='alloc-chart'][data-active='direct_property'] [data-slot='alloc-segment'][data-class='direct_property'],
+[data-slot='alloc-chart'][data-active='cash'] [data-slot='alloc-segment'][data-class='cash'],
+[data-slot='alloc-chart'][data-active='other'] [data-slot='alloc-segment'][data-class='other'] {
+  fill-opacity: 1;
+  transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot='alloc-chart'] [data-slot='alloc-segment'] {
     transition: none;
   }
 }

@@ -24,46 +24,64 @@ import { dayLabel, seriesNote, valueSeries, type ValuePoint } from '@/lib/value-
  * rather than the level is ever the point, the honest answer is a line chart
  * on a free axis, not a bar chart on a cropped one.
  *
+ * ## The colours, since 18 September
+ *
+ * The history is drawn in the palette's darkest step and **the latest day in
+ * brand orange** — one emphasised endpoint, which is the figure the trend arrow
+ * above it describes and the last thing the reader's eye should land on. Thirty
+ * orange bars would have shouted and said nothing; one says "here, now".
+ *
+ * A day below zero takes a plain neutral and no step of the ramp, for the
+ * reason the allocation bars give: a difference that survives greyscale,
+ * carried alongside the side of the zero rule rather than by colour alone. If
+ * the latest day is itself below zero, the sign wins — its position already
+ * says it is the latest.
+ *
  * ## Why not ResponsiveContainer
  *
  * It measures its parent and renders **nothing** in jsdom, which would blind
  * every test here. The same technique as `account-donut`: a fixed logical size
  * that Recharts turns into a viewBox, and a class that forces its wrapper to
  * fill the container. Verified there, reused rather than rediscovered.
+ *
+ * The box is `aspect-[2/1]` rather than a fixed height, and the viewBox is the
+ * same 2:1. Recharts' SVG scales with `preserveAspectRatio` at its default
+ * "meet", so a wide viewBox in a fixed-height box letterboxes the moment the
+ * column is narrower than the chart is wide — which is exactly the half-width
+ * column this now sits in. Matching the two ratios means the chart fills
+ * whatever width it is given and takes exactly the height it needs.
  */
 
-/** The chart's logical size — a viewBox, not rendered pixels. See `FLUID`. */
-const WIDTH = 480
-const HEIGHT = 140
+/** The chart's logical size — a viewBox, not rendered pixels. 2:1, matching `BOX`. */
+const WIDTH = 320
+const HEIGHT = 160
 
 /** Forces Recharts' wrapper to fill its container. Copied from `account-donut`. */
 const FLUID = '[&_.recharts-wrapper]:!h-full [&_.recharts-wrapper]:!w-full'
 
-/**
- * Indigo, the same `--mix-1` the investment ring's darkest arc takes.
- *
- * Deliberately the chart family rather than a new one: this bar chart and the
- * allocation donut sit in one tab, and two charts in two unrelated hues read as
- * two systems. Brand orange stays an action, green stays a live state.
- */
-const INK = 'var(--mix-1)'
+/** The same ratio as the viewBox, so nothing letterboxes. */
+const BOX = 'aspect-[2/1] w-full'
 
 /**
- * A day below zero takes the neutral, for the reason `allocation-bars` gives:
- * a difference that survives greyscale, carried alongside the side of the zero
- * rule rather than by colour alone. neutral-600, the same step, measured
- * against the same white ground in `mix-palette.test.ts`.
+ * The history: the ramp's darkest step. Not `--mix-4`, which the allocation
+ * beside this chart gives to cash — a reader would tie the two together.
  */
-const BELOW = '#525252'
+const INK = 'var(--mix-5)'
 
-export function ValueBars({
-  rows,
-  height = 'h-32',
-}: {
-  rows: ValuePoint[] | null | undefined
-  /** The drawn height. A closed set, because Tailwind scans source text. */
-  height?: 'h-24' | 'h-32' | 'h-40'
-}) {
+/** The latest day: brand orange, the ramp's first step. One bar, on purpose. */
+const LATEST = 'var(--mix-1)'
+
+/**
+ * A day below zero. neutral-500 — a plain grey with no place on the warm ramp,
+ * so it cannot be mistaken for any step of it, and 4.6:1 on the white sheet.
+ * `mix-palette.test.ts` reads this value out of this file and measures it.
+ */
+const BELOW = '#737373'
+
+/** Axis labels: neutral-500, the same tone every caption on the page takes. */
+const TICK = '#737373'
+
+export function ValueBars({ rows }: { rows: ValuePoint[] | null | undefined }) {
   /* Memoised for the reason `account-donut` records: Recharts regenerates its
      animation id whenever `data` changes by reference, and hands it to React as
      a key — so a fresh array on every render remounts every bar. */
@@ -78,7 +96,7 @@ export function ValueBars({
      */
     return (
       <div data-slot="value-ghost">
-        <div aria-hidden="true" className={`flex ${height} items-end gap-1`}>
+        <div aria-hidden="true" className={`flex ${BOX} items-end gap-1`}>
           {[40, 55, 35, 60, 45, 70, 50].map((h, i) => (
             <div key={i} className="flex-1 rounded-t bg-neutral-100" style={{ height: `${h}%` }} />
           ))}
@@ -97,6 +115,9 @@ export function ValueBars({
   const domain: [number, number] = [Math.min(0, series.low), Math.max(0, series.high)]
 
   const first = series.points.find((p) => p.value !== null)
+  /* Always the final point: `valueSeries` bounds the calendar to end on the
+     last recorded day. Found by value rather than by position so the rule is
+     stated here, not merely relied upon. */
   const last = [...series.points].reverse().find((p) => p.value !== null)
 
   /* One text equivalent for the whole picture — the treatment the balance bar,
@@ -118,7 +139,7 @@ export function ValueBars({
 
   return (
     <div>
-      <div data-slot="value-chart" role="img" aria-label={label} className={`w-full ${height} ${FLUID}`}>
+      <div data-slot="value-chart" role="img" aria-label={label} className={`${BOX} ${FLUID}`}>
         <BarChart
           width={WIDTH}
           height={HEIGHT}
@@ -128,9 +149,10 @@ export function ValueBars({
         >
           <YAxis hide domain={domain} />
           {/* Dates, not indices, and only the three `valueSeries` chose — a
-              month of labels under a 400px chart is a grey smear, and
+              month of labels under a 250px chart is a grey smear, and
               Recharts' own skipping picks whichever happen to fit rather than
-              the ones a reader checks. */}
+              the ones a reader checks. 12 in a 320-wide viewBox renders at
+              about 10px in the drawer's half column, which is the floor. */}
           <XAxis
             dataKey="day"
             ticks={series.ticks}
@@ -138,23 +160,28 @@ export function ValueBars({
             axisLine={false}
             tickLine={false}
             interval={0}
-            tick={{ fontSize: 11, fill: '#737373' }}
+            tick={{ fontSize: 12, fill: TICK }}
           />
           {hasNegative ? (
             /* Drawn only when something is actually below it. A rule at the
                foot of an all-positive chart is a line with no meaning — the
                same call `allocation-bars` makes about its zero rule. */
-            <ReferenceLine y={0} stroke="#737373" strokeWidth={1} />
+            <ReferenceLine y={0} stroke={TICK} strokeWidth={1} />
           ) : null}
           <Bar dataKey="value" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-            {series.points.map((p) => (
-              <Cell
-                key={p.day}
-                data-day={p.day}
-                data-side={p.value !== null && p.value < 0 ? 'negative' : 'positive'}
-                fill={p.value !== null && p.value < 0 ? BELOW : INK}
-              />
-            ))}
+            {series.points.map((p) => {
+              const negative = p.value !== null && p.value < 0
+              const latest = last !== undefined && p.day === last.day
+              return (
+                <Cell
+                  key={p.day}
+                  data-day={p.day}
+                  data-side={negative ? 'negative' : 'positive'}
+                  data-latest={latest ? 'true' : undefined}
+                  fill={negative ? BELOW : latest ? LATEST : INK}
+                />
+              )
+            })}
           </Bar>
         </BarChart>
       </div>

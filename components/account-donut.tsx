@@ -11,9 +11,10 @@ import { accountMoney, QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } f
  * **A trial, asked for on 10 September**, in the right half of the Accounts
  * tab — the space the two-column split reserved.
  *
- * One arc per account in a single indigo ramp, chosen on sight from six
- * treatments drawn at real size — see `lib/account-mix.ts` for what was
- * weighed, including the by-type version that was built and set aside. The rows
+ * One arc per account in a single stepped ramp — indigo from 10 September,
+ * the brand's warm ramp since 18 September; the tokens and the reasoning are
+ * in `globals.css` — see `lib/account-mix.ts` for what was weighed when the
+ * shape was chosen, including the by-type version built and set aside. The rows
  * on the left answer "what is each account worth"; this answers "which account
  * is most of the money", which a column of figures makes you compute in your
  * head.
@@ -62,13 +63,14 @@ import { accountMoney, QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } f
 export type DonutAccount = MixAccount
 
 /**
- * The ramp, darkest first — so the largest share is the heaviest arc and the
- * ring reads in order before the legend is consulted.
+ * The ramp, first step first — so the largest share takes the heaviest arc and
+ * the ring reads in order before the legend is consulted. "Heaviest" was the
+ * darkest indigo until 18 September and is the saturated brand orange since;
+ * the rule survives the palette because in a warm ramp chroma is the weight.
  *
- * Four tones, because a single hue on white runs out at four: the fourth is a
- * neutral carrying the grouped tail, since no fourth indigo both clears the
- * 3:1 floor and reads as distinct from the third. Values and full reasoning are
- * in `globals.css`.
+ * Four of the five steps, because `MAX_SLICES` is four: the fourth carries the
+ * grouped tail. Values and reasoning are in `globals.css`, and
+ * `mix-palette.test.ts` measures every step against the sheet.
  */
 const RAMP = ['var(--mix-1)', 'var(--mix-2)', 'var(--mix-3)', 'var(--mix-4)'] as const
 

@@ -80,6 +80,20 @@ export const ASSET_FAMILY: Record<AssetClass, AssetFamily> = {
   other: 'cash',
 }
 
+/**
+ * The four family inks, shares to cash down the chart ramp — ONE map, read by
+ * the ring and by the bars, because the two are one picture split in two and a
+ * class drawn one colour above and another below would read as two things.
+ * The tokens are literal hex in `globals.css`; `mix-palette.test.ts` measures
+ * them against both grounds the charts paint on.
+ */
+export const FAMILY_INK: Record<AssetFamily, string> = {
+  shares: 'var(--mix-1)',
+  fixed_interest: 'var(--mix-2)',
+  property: 'var(--mix-3)',
+  cash: 'var(--mix-4)',
+}
+
 /** U+2212. The same character `owedMoney` uses, and not a hyphen. */
 const MINUS = '−'
 
@@ -119,7 +133,9 @@ export type AllocationInput = {
   weight: string | number
 }
 
-function pctText(weight: number): string {
+/** `24.6%` · `−2.3%` · `<0.1%` — a weight as the charts print it. Exported so
+ *  the ring's family legend prints its sums the way the class rows do. */
+export function weightText(weight: number): string {
   const pct = weight * 100
   const abs = Math.abs(pct)
   const sign = weight < 0 ? MINUS : ''
@@ -176,7 +192,7 @@ export function allocation(input: AllocationInput[] | null | undefined): Allocat
       label: ASSET_CLASS_LABEL[r.key],
       family: ASSET_FAMILY[r.key],
       weight: r.weight,
-      text: pctText(r.weight),
+      text: weightText(r.weight),
       negative,
       startPct,
       lengthPct,

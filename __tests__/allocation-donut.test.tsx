@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 import { AllocationDonut } from '@/components/allocation-donut'
 
 /**
@@ -112,18 +112,110 @@ describe('the allocation ring', () => {
   })
 
   /**
-   * Renders nothing rather than an empty circle. No allocation at all is the
-   * bars' ghost to draw, and this component must not put a second empty state
-   * above it.
+   * The ghost ring, since 18 September — the group page's empty state, and the
+   * ONE empty state for the allocation: the panel omits the class bars when
+   * there is nothing to list, so this is where the absence is explained.
+   * Solid grey, not dashed and not pulsing, per the three-way rule on
+   * `account-donut`.
    */
-  test('draws nothing at all when there is no allocation', () => {
-    const { container } = render(<AllocationDonut rows={[]} />)
-    expect(container.innerHTML).toBe('')
-    expect(render(<AllocationDonut rows={null} />).container.innerHTML).toBe('')
+  test('draws the ghost ring when there is no allocation, and says which kind of nothing', () => {
+    const { container } = render(<AllocationDonut rows={[]} hasProvider />)
+    expect(container.querySelector('[data-slot="alloc-ghost-ring"]')).toBeTruthy()
+    expect(arcs(container)).toHaveLength(0)
+    expect(container.querySelector('[data-slot="alloc-ring-empty"]')!.textContent).toContain(
+      'No allocation has been reported',
+    )
+    for (const suspect of ['border-dashed', 'animate-pulse']) {
+      expect(container.innerHTML).not.toContain(suspect)
+    }
   })
 
-  test('and nothing when every class is below zero', () => {
+  test('and says so differently when no provider is on file at all', () => {
+    const { container } = render(<AllocationDonut rows={null} hasProvider={false} />)
+    expect(container.querySelector('[data-slot="alloc-ring-empty"]')!.textContent).toContain(
+      'recorded by hand',
+    )
+  })
+
+  /* Something WAS reported, and all of it subtracts. "Not reported" would be
+     false, and a ring cannot draw it. */
+  test('and when every class is below zero, says that rather than "not reported"', () => {
     const { container } = render(<AllocationDonut rows={[w('other', -0.1)]} />)
-    expect(container.innerHTML).toBe('')
+    expect(container.querySelector('[data-slot="alloc-ghost-ring"]')).toBeTruthy()
+    expect(container.querySelector('[data-slot="alloc-ring-empty"]')!.textContent).toContain(
+      'below zero',
+    )
+  })
+
+  /**
+   * The ghost is drawn from the ring's own two radii, so the two cannot drift:
+   * its stroke's centre line is the band's centre, its width the band's width.
+   */
+  test('the ghost is the ring’s own silhouette', () => {
+    const { container } = render(<AllocationDonut rows={[]} />)
+    const circle = container.querySelector('[data-slot="alloc-ghost-ring"]')!
+    /* 0.6 and 0.94 of half of 240: centre at 92.4, width 40.8. */
+    expect(Number(circle.getAttribute('r'))).toBeCloseTo(92.4, 3)
+    expect(Number(circle.getAttribute('stroke-width'))).toBeCloseTo(40.8, 3)
+  })
+})
+
+/**
+ * The legend is by FAMILY, and that is the whole reason it exists: the class
+ * rows beneath the ring already name every class and print its weight, so a
+ * class legend here would say it all twice. What nothing else says is what the
+ * colours mean — that three orange arcs are all shares.
+ */
+describe('the family legend', () => {
+  test('sums each family’s positive weight, in ramp order', () => {
+    const { container } = render(<AllocationDonut rows={mixed} />)
+    const rows = Array.from(container.querySelectorAll('[data-slot="alloc-legend"] li'))
+    expect(rows.map((r) => r.getAttribute('data-family'))).toEqual(['shares', 'fixed_interest', 'cash'])
+    /* 0.4 + 0.3 = 70.0% — the sum the class rows make you do in your head. */
+    expect(rows[0].textContent).toBe('Shares70.0%')
+    expect(rows[1].textContent).toBe('Fixed interest20.0%')
+    /* The negative `other` is NOT in the cash family's sum: the legend describes
+       the ring, and the ring did not draw it. */
+    expect(rows[2].textContent).toBe('Cash12.3%')
+  })
+
+  test('names "other" when it is positive and in the cash family’s sum', () => {
+    const { container } = render(<AllocationDonut rows={[w('cash', 0.5), w('other', 0.5)]} />)
+    const rows = Array.from(container.querySelectorAll('[data-slot="alloc-legend"] li'))
+    expect(rows.map((r) => r.textContent)).toEqual(['Cash and other100.0%'])
+  })
+
+  test('each swatch takes its family’s ink', () => {
+    const { container } = render(<AllocationDonut rows={mixed} />)
+    const swatches = Array.from(container.querySelectorAll('[data-slot="alloc-legend"] li > span[aria-hidden]'))
+    expect(swatches.map((s) => (s as HTMLElement).style.background)).toEqual([
+      'var(--mix-1)',
+      'var(--mix-2)',
+      'var(--mix-4)',
+    ])
+  })
+})
+
+/**
+ * The hover's half that this component owns: reporting which class the
+ * pointer is on. The other half — the panel's `data-active` and the arc that
+ * pops — is `account-drawer.test.tsx`'s and the stylesheet's.
+ */
+describe('the ring’s hover', () => {
+  test('reports the class under the pointer by KEY, and null as it leaves', () => {
+    const seen: (string | null)[] = []
+    const { container } = render(<AllocationDonut rows={mixed} onActivate={(k) => seen.push(k)} />)
+    const sectors = arcs(container)
+    /* Recharts attaches the Pie's handlers to each sector. */
+    fireEvent.mouseEnter(sectors[3])
+    fireEvent.mouseLeave(sectors[3])
+    expect(seen).toEqual(['cash', null])
+  })
+
+  test('marks every arc with its class for the stylesheet', () => {
+    const { container } = render(<AllocationDonut rows={mixed} />)
+    const marked = Array.from(container.querySelectorAll('[data-slot="alloc-segment"]'))
+    expect(marked).toHaveLength(4)
+    expect(marked.every((m) => m.hasAttribute('data-class'))).toBe(true)
   })
 })

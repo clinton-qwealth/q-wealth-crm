@@ -1,4 +1,6 @@
-import { allocation, allocationNote, type AllocationInput, type AssetFamily } from '@/lib/allocation'
+'use client'
+
+import { allocation, allocationNote, FAMILY_INK, type AllocationInput, type AssetClass } from '@/lib/allocation'
 
 /**
  * How an account is invested, as a weighted bar list.
@@ -32,26 +34,12 @@ import { allocation, allocationNote, type AllocationInput, type AssetFamily } fr
  * to draw honestly, not this table's to hide."
  */
 
-/**
- * Four inks over eight classes, by family.
- *
- * The page's `--mix-1..--mix-4` ramp is SEQUENTIAL — it means more and less —
- * so stretching it across eight kinds would both run out and imply an order
- * that is not there. Grouping by family reuses it honestly: the colour says
- * growth or defensive, which is the question actually asked of an allocation,
- * and the label always names the class so nothing depends on the colour alone.
- */
-const FAMILY_INK: Record<AssetFamily, string> = {
-  shares: 'var(--mix-1)',
-  fixed_interest: 'var(--mix-2)',
-  property: 'var(--mix-3)',
-  cash: 'var(--mix-4)',
-}
-
 export function AllocationBars({
   rows,
   asAt,
   hasProvider,
+  active = null,
+  onActivate,
 }: {
   rows: AllocationInput[] | null | undefined
   /** `allocation_as_at`, NOT `snapshot_as_at` — see the note below. */
@@ -59,6 +47,14 @@ export function AllocationBars({
   /** Whether a provider is recorded at all, which decides what the empty state
    *  can honestly say. */
   hasProvider: boolean
+  /**
+   * The class under the pointer — here or on the ring above — and how to say
+   * so. Since 18 September the bars are the ring's legend, and the group
+   * page's rule applies: pointing at either half moves both. The row shades
+   * itself; the arc is moved by the stylesheet off the panel's `data-active`.
+   */
+  active?: AssetClass | null
+  onActivate?: (key: AssetClass | null) => void
 }) {
   const a = allocation(rows)
   const note = allocationNote(a)
@@ -102,11 +98,20 @@ export function AllocationBars({
             key={r.key}
             data-slot="alloc-row"
             data-class={r.key}
+            data-active={active === r.key ? 'true' : 'false'}
+            onMouseEnter={() => onActivate?.(r.key)}
+            onMouseLeave={() => onActivate?.(null)}
             /* Two lines below `sm`, three columns above it. The drawer is
                full-screen on a phone, which leaves about 72px for a track once
                the label and the figure have taken their share — and 72px is not
-               a bar. Stacking gives the track the full width instead. */
-            className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[9rem_minmax(0,1fr)_3.25rem]"
+               a bar. Stacking gives the track the full width instead.
+
+               The shade on hover is the investment ring's legend row's, on its
+               clock: colour only, so no `motion-reduce` guard — a reader who
+               asked for no motion still wants to see which row they are on. */
+            className={`grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1.5 rounded px-1 py-0.5 transition-colors duration-300 ease-out sm:grid-cols-[9rem_minmax(0,1fr)_3.25rem] ${
+              active === r.key ? 'bg-neutral-100' : ''
+            }`}
           >
             <span className="truncate text-xs text-neutral-700 sm:order-1">{r.label}</span>
             <span className="text-right text-xs font-semibold tabular-nums text-neutral-900 sm:order-3">
@@ -120,10 +125,12 @@ export function AllocationBars({
                 <span
                   aria-hidden="true"
                   data-slot="alloc-zero"
-                  /* neutral-500, not neutral-400. A hairline at 2.3:1 on this
-                     track is a rule you have to look for, and it is the thing
-                     that says which side of zero a bar is on. */
-                  className="absolute -inset-y-[2px] w-px bg-neutral-500"
+                  /* neutral-700. It was neutral-500 until the negative bar
+                     took that step on 18 September; a rule the same grey as
+                     the bar it is meant to divide from zero would vanish at
+                     the bar's end. Well clear of the 3:1 floor on the track
+                     and on the sheet it overhangs — measured, not assumed. */
+                  className="absolute -inset-y-[2px] w-px bg-neutral-700"
                   style={{ left: `${a.zeroPct}%` }}
                 />
               ) : null}
@@ -135,23 +142,26 @@ export function AllocationBars({
                    at this width, against a holding that otherwise does not
                    appear at all — the same trade the balance bar makes. */
                 className={`absolute inset-y-0 min-w-[3px] rounded-[2px] ${
-                  r.negative ? 'bg-neutral-600' : ''
+                  r.negative ? 'bg-neutral-500' : ''
                 }`}
                 style={{
                   left: `${r.startPct}%`,
                   width: `${r.lengthPct}%`,
-                  /* Negatives take the neutral tone, which is a difference
-                     that survives greyscale — one of three carriers, beside
-                     the side of the zero rule and the printed minus sign.
+                  /* Negatives take a neutral, which is a difference that
+                     survives greyscale — one of three carriers, beside the
+                     side of the zero rule and the printed minus sign.
 
-                     neutral-600, and the step matters twice. neutral-400
-                     measures 2.3:1 against this track, under WCAG's 3:1 floor
-                     for a graphic carrying meaning — the bar would be there
-                     and hard to see. And the obvious deeper step, neutral-500,
-                     is `--mix-4` exactly, so a negative `other` bar would be
-                     the same grey as a positive `cash` one directly above it.
-                     `mix-palette.test.ts` measures both, reading the step out
-                     of this file. */
+                     neutral-500, since the palette turned warm on
+                     18 September. It was neutral-600 while `--mix-4` WAS
+                     neutral-500, because then a negative `other` bar would
+                     have worn the same grey as the positive `cash` directly
+                     above it. The ramp no longer contains a grey, and
+                     neutral-600 is now the near-twin — 0.03 of luminance from
+                     the new `--mix-4` and hardly more saturated. neutral-500
+                     clears the 3:1 floor on the track (4.4:1) and is told from
+                     every step of the ramp by lightness or by chroma.
+                     `mix-palette.test.ts` measures all of that, reading the
+                     step out of this file. */
                   background: r.negative ? undefined : FAMILY_INK[r.family],
                 }}
               />

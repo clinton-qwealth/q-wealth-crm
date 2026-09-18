@@ -494,9 +494,7 @@ describe('the Overview tab', () => {
   test('states the balance and the cash, each with its own date', () => {
     const { container } = list()
     open('Netwealth Wrap')
-    const rows = Array.from(drawer(container).querySelectorAll('li')).filter((li) =>
-      /Balance|Available cash/.test(li.textContent ?? ''),
-    )
+    const rows = Array.from(drawer(container).querySelectorAll('[data-slot="figure"]'))
     expect(rows).toHaveLength(2)
     expect(rows[0].textContent).toContain('Balance')
     expect(rows[0].textContent).toContain('$412,350.55')
@@ -513,6 +511,93 @@ describe('the Overview tab', () => {
     const { container } = list()
     open('Netwealth Wrap')
     expect(drawer(container).textContent).toContain('not added together')
+  })
+
+  /**
+   * THE LAYOUT OF 18 SEPTEMBER, asked for as: figures near the top, the bar
+   * chart and the ring on one row, the class bars beneath. Order in the DOM is
+   * order on the screen here — the panel is one column with a two-column row
+   * inside it — so the DOM is what this asserts.
+   */
+  test('puts the figures first, the two charts level, and the classes beneath', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const d = drawer(container)
+    const figures = d.querySelector('[data-slot="figure"]')!
+    const value = d.querySelector('[data-slot="value-chart"]')!
+    const ring = d.querySelector('[data-slot="allocation-ring"]')!
+    const bars = d.querySelector('ul[role="img"]')!
+    const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(before(figures, value), 'figures before the value chart').toBe(true)
+    expect(before(value, ring), 'value chart before the ring').toBe(true)
+    expect(before(ring, bars), 'ring before the class bars').toBe(true)
+    /* Level: the two charts share one grid row, which is one parent. */
+    const row = value.closest('.grid')!
+    expect(row.contains(ring)).toBe(true)
+    expect(row.className).toContain('sm:grid-cols-2')
+    expect(row.contains(bars), 'the class bars are below the row, not in it').toBe(false)
+  })
+
+  /**
+   * The group page's frame — heading, then sheet — on all three pictures, so
+   * the drawer's charts and the page's read as one system. Three headings by
+   * NAME, because a heading that said "Asset allocation" twice was the first
+   * draft and the second one is the ring's detail, not its twin.
+   */
+  test('frames each picture the way the group page does', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const d = drawer(container)
+    const headings = Array.from(d.querySelectorAll('h3')).map((h) => h.textContent)
+    expect(headings).toEqual(['Value, last 30 days', 'Asset allocation', 'Allocation by class'])
+    for (const slot of ['value-chart', 'allocation-ring']) {
+      const sheet = d.querySelector(`[data-slot="${slot}"]`)!.closest('section > div')!
+      expect(sheet.className, `${slot} sits on the sheet`).toContain('rounded-lg border border-neutral-200 bg-white')
+    }
+  })
+
+  /* One absence, one empty state: the ring's ghost explains it and the class
+     bars are omitted rather than ghosted beneath. */
+  test('omits the class bars when there is no allocation, leaving the ring’s ghost to explain', () => {
+    const { container } = list()
+    open('Joint Super')
+    const d = drawer(container)
+    expect(d.querySelector('[data-slot="alloc-ghost-ring"]')).toBeTruthy()
+    expect(d.querySelector('ul[role="img"]')).toBeNull()
+    expect(Array.from(d.querySelectorAll('h3')).map((h) => h.textContent)).not.toContain('Allocation by class')
+    expect(d.querySelector('[data-slot="alloc-ghost"]'), 'the bars’ own ghost is not drawn as well').toBeNull()
+  })
+
+  /**
+   * The hover that couples the ring and the class bars, carried by the panel
+   * because it is the one element that holds both sheets. Pointing at a class
+   * row shades the row and tells the stylesheet which arc to pop; pointing at
+   * an arc does the same in reverse. Keyed by CLASS, not index, because the
+   * ring omits negatives and the two lists do not line up.
+   */
+  test('pointing at a class row marks the panel, so the stylesheet can pop its arc', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const d = drawer(container)
+    const panel = d.querySelector('[data-slot="alloc-chart"]')!
+    const cashRow = d.querySelector('[data-slot="alloc-row"][data-class="cash"]')!
+    expect(panel.hasAttribute('data-active'), 'at rest').toBe(false)
+    fireEvent.mouseEnter(cashRow)
+    expect(panel.getAttribute('data-active')).toBe('cash')
+    expect(cashRow.getAttribute('data-active')).toBe('true')
+    fireEvent.mouseLeave(cashRow)
+    expect(panel.hasAttribute('data-active')).toBe(false)
+  })
+
+  test('and pointing at an arc marks the same panel with the same class', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const d = drawer(container)
+    const panel = d.querySelector('[data-slot="alloc-chart"]')!
+    const arc = d.querySelector('.recharts-pie-sector path[data-class="cash"]')!
+    fireEvent.mouseEnter(arc)
+    expect(panel.getAttribute('data-active')).toBe('cash')
+    expect(d.querySelector('[data-slot="alloc-row"][data-class="cash"]')!.getAttribute('data-active')).toBe('true')
   })
 })
 

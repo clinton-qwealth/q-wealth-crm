@@ -97,8 +97,8 @@ describe('an account read from New York', () => {
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Open Netwealth Wrap' }))
     })
-    const rows = Array.from(container.querySelector('dialog')!.querySelectorAll('li')).filter((li) =>
-      /Available cash/.test(li.textContent ?? ''),
+    const rows = Array.from(
+      container.querySelector('dialog')!.querySelectorAll('[data-slot="figure"][data-figure="cash"]'),
     )
     expect(rows).toHaveLength(1)
     expect(rows[0].textContent).toContain('As at 16 Sep 2026')

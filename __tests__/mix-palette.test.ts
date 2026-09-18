@@ -78,26 +78,34 @@ const hue = (hex: string) => {
 }
 
 const GROUND = '#ffffff'
-const RAMP = [1, 2, 3, 4].map((n) => token(`mix-${n}`))
+/* Five since 18 September, when the indigo ramp gave way to a warm one chosen
+   by Clinton. The investment ring draws with 1–4, the allocation with 1–4 by
+   family, the value chart with 5 and 1. */
+const RAMP = [1, 2, 3, 4, 5].map((n) => token(`mix-${n}`))
 
-describe('the investment-mix ramp', () => {
+describe('the chart ramp', () => {
   /**
-   * One hue, stepped — chosen on sight from six treatments drawn at real size.
-   * These arcs are the same kind of thing in different amounts, which is what a
-   * sequential ramp says; the categorical palettes that preceded it implied
-   * different kinds.
+   * One hue, stepped. These arcs and bars are the same kind of thing in
+   * different amounts, which is what a sequential ramp says; a categorical
+   * palette would imply different kinds. The five given sit within a couple of
+   * degrees of one another — measured, not asserted from the swatches.
    */
-  test('the first three are one hue, and the fourth is neutral', () => {
-    const [a, b, c, tail] = RAMP
-    for (const [i, indigo] of [a, b, c].entries()) {
-      const h = hue(indigo)
-      expect(h, `--mix-${i + 1} (${indigo}) should be indigo`).toBeGreaterThan(225)
-      expect(h, `--mix-${i + 1} (${indigo}) should be indigo`).toBeLessThan(255)
+  test('all five are one warm hue', () => {
+    const hues = RAMP.map(hue)
+    for (const [i, h] of hues.entries()) {
+      expect(h, `--mix-${i + 1} (${RAMP[i]}) should be the brand's orange-brown`).toBeGreaterThan(8)
+      expect(h, `--mix-${i + 1} (${RAMP[i]}) should be the brand's orange-brown`).toBeLessThan(22)
     }
-    /* Grey for "and the rest" — a fourth indigo would be either under the floor
-       or a near-twin of the third. */
-    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(tail.slice(i, i + 2), 16))
-    expect(Math.max(r, g, bl) - Math.min(r, g, bl), `--mix-4 (${tail}) should be neutral`).toBeLessThan(8)
+    expect(Math.max(...hues) - Math.min(...hues), 'the steps should agree on hue').toBeLessThan(4)
+  })
+
+  /**
+   * The ramp starts at the brand colour EXACTLY. That is the decision of
+   * 18 September in one line: the charts speak in the brand's own colour, and a
+   * change to `--brand-500` that left `--mix-1` behind would split them.
+   */
+  test('and the first step is brand orange, to the hex', () => {
+    expect(RAMP[0]).toBe(token('brand-500'))
   })
 
   /**
@@ -139,35 +147,48 @@ describe('the investment-mix ramp', () => {
     }
   })
 
-  /* Darkest first, so the largest share is the heaviest arc. */
-  test('the indigo steps run darkest to lightest', () => {
-    const [a, b, c] = RAMP
-    expect(luminance(a)).toBeLessThan(luminance(b))
-    expect(luminance(b)).toBeLessThan(luminance(c))
+  /**
+   * Brightest first, darkest last — the reverse of the indigo ramp, and a
+   * different rule for the same end. The largest share still takes the first
+   * step; in a warm ramp the saturated orange is the visual weight and the
+   * charcoal recedes, so first-is-heaviest holds by chroma where it used to
+   * hold by darkness. The value chart depends on the ORDER too: it draws its
+   * history in the last step and its latest day in the first, and those must
+   * be the two ends.
+   */
+  test('the steps run brightest to darkest', () => {
+    for (let i = 0; i < RAMP.length - 1; i += 1) {
+      expect(luminance(RAMP[i]), `--mix-${i + 1} should be lighter than --mix-${i + 2}`).toBeGreaterThan(
+        luminance(RAMP[i + 1]),
+      )
+    }
   })
 
-  test('all four are distinct, so a legend swatch identifies one arc', () => {
+  test('all five are distinct, so a legend swatch identifies one arc', () => {
     expect(new Set(RAMP).size).toBe(RAMP.length)
   })
 
   /**
-   * Indigo is the only family on this page with no job. Asserting the ramp
-   * stays clear of the hues that already mean something is what stops a later
-   * "nicer" colour from colliding with a state.
+   * The ramp shares its hue with brand orange BY DESIGN now, so the old
+   * keep-away test is gone. What must still hold is that it stays clear of the
+   * hues that carry a STATE — a chart step that drifted towards the live green
+   * or the wrong-direction red would borrow a meaning. Amber is excluded from
+   * this list on purpose: at 15° the ramp is 29° from it, and an orange that
+   * was 30° from amber would not be the brand's orange.
    */
-  test('the ramp avoids every hue that already means something here', () => {
-    const taken = { 'brand orange (action)': 16, 'emerald (live / super tile)': 160, 'gold (investment tile)': 44, 'sky (insurance tile)': 200, 'red (wrong direction)': 0 }
-    for (const indigo of RAMP.slice(0, 3)) {
-      for (const [what, h] of Object.entries(taken)) {
-        const gap = Math.min(Math.abs(hue(indigo) - h), 360 - Math.abs(hue(indigo) - h))
-        expect(gap, `${indigo} sits ${gap.toFixed(0)}° from ${what}`).toBeGreaterThan(30)
+  test('the ramp stays clear of every hue that means a state', () => {
+    const states = { 'emerald (live / super tile)': 160, 'sky (insurance tile)': 200, 'red (wrong direction)': 0 }
+    for (const step of RAMP) {
+      for (const [what, h] of Object.entries(states)) {
+        const gap = Math.min(Math.abs(hue(step) - h), 360 - Math.abs(hue(step) - h))
+        expect(gap, `${step} sits ${gap.toFixed(0)}° from ${what}`).toBeGreaterThan(12)
       }
     }
   })
 })
 
 /**
- * The same four inks, now on a second ground — the allocation bars' track.
+ * The same inks, now on a second ground — the allocation bars' track.
  *
  * The ramp was measured against the white sheet because that is what a donut
  * arc sits on. An allocation bar sits on a filled track instead, which is a
@@ -205,6 +226,16 @@ const TRACK = stepFrom(/h-2\.5 rounded bg-neutral-(\d+)/, 'the bar track')
 const NEGATIVE = stepFrom(/r\.negative \? 'bg-neutral-(\d+)'/, 'the negative bar')
 const ZERO_RULE = stepFrom(/w-px bg-neutral-(\d+)/, 'the zero rule')
 
+/* The value chart paints its below-zero day as a literal hex, read out of the
+   component for the same reason the bars' steps are. */
+const VALUE_BARS = readFileSync(resolve(process.cwd(), 'components/value-bars.tsx'), 'utf8')
+const valueBarsHex = (name: string) => {
+  const m = VALUE_BARS.match(new RegExp(`const ${name} = '(#[0-9a-fA-F]{6})'`))
+  if (!m) throw new Error(`${name} is not a literal hex in value-bars.tsx`)
+  return m[1].toLowerCase()
+}
+const VALUE_BELOW = valueBarsHex('BELOW')
+
 describe('the allocation bars, on their own track', () => {
   test('every family ink clears the 3:1 non-text floor against the track', () => {
     for (const [i, colour] of RAMP.entries()) {
@@ -234,10 +265,12 @@ describe('the allocation bars, on their own track', () => {
   })
 
   /**
-   * The trap the obvious fix walks into. `--mix-4` IS neutral-500, and `other`
-   * is in the cash family — so deepening the negative bar one step would have
-   * made a negative `other` bar the same grey as the positive `cash` bar
-   * directly above it, at which point the tone stops carrying the sign at all.
+   * The trap the obvious choice walks into, twice over. Under the indigo ramp
+   * `--mix-4` WAS neutral-500, so the negative bar had to be neutral-600. Under
+   * the warm ramp neutral-600 is the near-twin of the new `--mix-4` — 0.03 of
+   * luminance apart and hardly more saturated — so it moved to neutral-500. A
+   * negative `other` sits in the cash family, directly beneath a positive
+   * `cash`; if the two greys ever converge the tone stops carrying the sign.
    */
   test('the negative grey is not one of the family inks', () => {
     for (const [i, colour] of RAMP.entries()) {
@@ -254,5 +287,34 @@ describe('the allocation bars, on their own track', () => {
           `\u0394luminance ${dLum.toFixed(3)}, \u0394saturation ${dSat.toFixed(2)}`,
       ).toBe(true)
     }
+  })
+})
+
+
+/**
+ * The value chart's below-zero day, held to the same two rules as the bars'
+ * negative: clear of the 3:1 floor on the white sheet, and told from every
+ * step of the ramp — above all from `--mix-5`, which is the tone of the bars
+ * either side of it.
+ */
+describe('the value chart, below zero', () => {
+  test('the below-zero tone clears the floor on the sheet', () => {
+    expect(contrast(VALUE_BELOW, GROUND), `the below-zero day (${VALUE_BELOW})`).toBeGreaterThan(3)
+  })
+
+  test('and is not one of the steps it sits between', () => {
+    for (const [i, colour] of RAMP.entries()) {
+      const dLum = Math.abs(luminance(VALUE_BELOW) - luminance(colour))
+      const dSat = Math.abs(saturation(VALUE_BELOW) - saturation(colour))
+      expect(
+        colour !== VALUE_BELOW && (dLum > 0.03 || dSat > 0.25),
+        `the below-zero day (${VALUE_BELOW}) is indistinguishable from --mix-${i + 1} (${colour})`,
+      ).toBe(true)
+    }
+  })
+
+  /* One neutral for "below zero" across the tab, so the reader learns it once. */
+  test('and is the same grey the allocation bars use for a negative class', () => {
+    expect(VALUE_BELOW).toBe(NEGATIVE)
   })
 })

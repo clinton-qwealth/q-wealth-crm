@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { MAX_SLICES } from '@/lib/account-mix'
+import { ASSET_CLASSES } from '@/lib/allocation'
 
 /**
  * The investment ring's hover, which lives in `globals.css` rather than on the
@@ -94,5 +95,42 @@ describe('the ring’s hover rules', () => {
     const reduced = block.slice(block.indexOf('@media (prefers-reduced-motion: reduce)'))
     expect(reduced).toContain("[data-slot='mix-chart'] [data-slot='segment']")
     expect(reduced).toContain('transition: none')
+  })
+})
+
+
+/**
+ * The allocation ring's rules — the same effect, keyed by CLASS. The ring
+ * draws only positive classes and the bars beneath draw all of them, so index
+ * would not line up; the class key does. One rule per class in the closed
+ * list, derived from that list so a ninth class fails here rather than
+ * shipping an arc that cannot be popped.
+ */
+describe('the allocation ring’s hover rules', () => {
+  const alloc = css.slice(css.indexOf("[data-slot='alloc-chart'] [data-slot='alloc-segment']"))
+
+  test('exist, after the investment ring’s, on the same clock', () => {
+    expect(alloc.length).toBeGreaterThan(0)
+    expect(alloc).toMatch(/\[data-slot='alloc-chart'\]\[data-active\] \[data-slot='alloc-segment'\] \{\s*fill-opacity: 0\.6;/)
+    const durations = [...alloc.matchAll(/(\d+)ms/g)].map((m) => m[1])
+    expect(new Set(durations)).toEqual(new Set(['300']))
+  })
+
+  test('cover every asset class, paired with itself, and none beyond', () => {
+    const pairs = [...alloc.matchAll(/\[data-active='([a-z_]+)'\] \[data-slot='alloc-segment'\]\[data-class='([a-z_]+)'\]/g)]
+    expect(pairs.map((m) => m[1]).sort()).toEqual([...ASSET_CLASSES].sort())
+    expect(pairs.map((m) => m[2])).toEqual(pairs.map((m) => m[1]))
+  })
+
+  test('and stand still for a reader who asked for no motion', () => {
+    expect(alloc).toMatch(/prefers-reduced-motion: reduce\)[\s\S]*\[data-slot='alloc-chart'\] \[data-slot='alloc-segment'\] \{\s*transition: none;/)
+  })
+
+  /* The investment ring's census must not have been widened by the new rules:
+     they use a different segment slot precisely so the two counts stay apart. */
+  test('and do not leak into the investment ring’s census', () => {
+    const mixBlock = css.slice(css.indexOf("[data-slot='mix-chart'] [data-slot='segment']"))
+    const pairs = [...mixBlock.matchAll(/\[data-active='(\d+)'\] \[data-slot='segment'\]\[data-index='(\d+)'\]/g)]
+    expect(pairs).toHaveLength(MAX_SLICES)
   })
 })

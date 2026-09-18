@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ActivityFeed } from './activity-feed'
 import { AllocationBars } from './allocation-bars'
 import { AllocationDonut } from './allocation-donut'
@@ -12,14 +12,17 @@ import { DataRow } from './data-section'
 import {
   ACCOUNT_LIVE,
   ACCOUNT_STATUS_LABEL,
+  accountMoney,
   AccountTypeTile,
   AccountValue,
   PANEL_GUTTER,
   Pill,
-  accountMoney,
+  SECTION_HEADING,
+  SHEET,
 } from './ui'
 import type { WorkflowPost } from '@/lib/workflow-board'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
+import { allocation, type AssetClass } from '@/lib/allocation'
 import { formatCalendarDate, formatNoteDate } from '@/lib/note-date'
 import { saveAccountDetails } from '@/app/(shell)/groups/actions'
 
@@ -430,92 +433,142 @@ function AccountPanel({
  * classes for shape and the bars beneath take every class with its sign. Asked
  * for as "both" rather than either, which is the honest answer.
  */
+/**
+ * The Overview tab, laid out on 18 September to Clinton's brief: the two
+ * figures first, the two charts side by side, the class bars beneath.
+ *
+ * ## The order is the reading order
+ *
+ * The figures are what an adviser opened the drawer for, so they are the first
+ * thing and the largest — the page header's treatment, a label over a figure
+ * over its date, not a boxed list at the foot of the tab where they sat until
+ * today. Then the two pictures of the same account, level with each other in
+ * the group page's frame: heading, sheet, chart. Then the detail the ring
+ * cannot carry — every class to scale, negatives included.
+ *
+ * ## Two dates, each on its own figure
+ *
+ * `valued_on` dates the balance and `snapshot_as_at` dates the cash, and they
+ * genuinely disagree: a feed run refreshes cash every night and dates the
+ * valuation from the provider's own strike. One "as at" over both would be
+ * wrong for one of them, so each figure carries its own. The allocation's
+ * third date sits beneath the bars, on `allocation-bars` for the reason
+ * written there.
+ *
+ * ## One frame around two charts
+ *
+ * The ring draws only positive classes and the bars beneath draw all of them,
+ * so the hover that couples them is keyed by class and carried HERE — the
+ * panel is the one element that contains both sheets. Pointing at a bar row
+ * pops its arc; pointing at an arc shades its row. The mechanism is the group
+ * page's, and the reason it lives in the stylesheet is on `globals.css`.
+ *
+ * The class bars are omitted, not ghosted, when there is no allocation: the
+ * ring already draws the ghost and says which kind of nothing this is, and two
+ * empty states for one absence is one too many.
+ */
 function OverviewPanel({ account: a }: { account: AccountRow }) {
+  const [active, setActive] = useState<AssetClass | null>(null)
+  /* Stable, so the ring's memo holds across a hover and its arcs survive. */
+  const onActivate = useCallback((k: AssetClass | null) => setActive(k), [])
+  const hasAllocation = allocation(a.allocation).rows.length > 0
+
   return (
-    <div className={`${PANEL_GUTTER} space-y-7 pb-8`}>
-      <section>
-        <h3 className={SECTION}>Value, last 30 days</h3>
-        <div className="mt-3">
-          <ValueBars rows={a.value_series} />
+    <div
+      data-slot="alloc-chart"
+      data-active={active ?? undefined}
+      className={`${PANEL_GUTTER} pb-8`}
+    >
+      {/* ── 1. The figures ─────────────────────────────────────────────── */}
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 pt-1 sm:grid-cols-2">
+        <div data-slot="figure" data-figure="balance">
+          <dt className={SECTION_HEADING}>Balance</dt>
+          <dd className="text-2xl font-semibold tracking-tight text-neutral-900">
+            <AccountValue
+              value={a.latest_value}
+              changeAmount={a.change_amount}
+              changePct={a.change_pct}
+              baselineValue={a.baseline_value}
+              baselinePoints={a.baseline_points}
+            />
+          </dd>
+          <dd className="mt-1 text-xs text-neutral-500">
+            {a.valued_on ? `As at ${formatCalendarDate(a.valued_on)}` : 'No valuation recorded'}
+            {a.valuation_source ? ` · ${a.valuation_source}` : ''}
+          </dd>
         </div>
-      </section>
 
-      <section>
-        <h3 className={SECTION}>Asset allocation</h3>
-        <div className="mt-3 space-y-4">
-          <AllocationDonut rows={a.allocation} />
-          <AllocationBars
-            rows={a.allocation}
-            asAt={a.allocation_as_at ? formatNoteDate(a.allocation_as_at) : null}
-            hasProvider={Boolean(a.provider)}
-          />
+        <div data-slot="figure" data-figure="cash">
+          <dt className={SECTION_HEADING}>Available cash</dt>
+          <dd className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+            {a.available_cash == null ? (
+              <span className="text-sm font-normal text-neutral-400">Not reported</span>
+            ) : (
+              accountMoney.format(Number(a.available_cash))
+            )}
+          </dd>
+          <dd className="mt-1 text-xs text-neutral-500">
+            {/* `formatCalendarDate`, NOT `formatNoteDate`. `snapshot_as_at` is a
+                DATE column — the provider's business day — where
+                `allocation_as_at` is a timestamptz, so the two take different
+                formatters from the same module for the reason that module
+                exists: `new Date('2026-09-16')` is UTC midnight, which renders
+                as the 15th anywhere west of Greenwich. Sydney is east of it, so
+                the wrong formatter looked right here and would have been a day
+                out for a colleague reading from London. Caught on the branch,
+                which reports the column's type; guarded by
+                `account-dates-west-of-greenwich.test.tsx`. */}
+            {a.snapshot_as_at ? `As at ${formatCalendarDate(a.snapshot_as_at)}` : 'Not reported'}
+          </dd>
         </div>
-      </section>
+      </dl>
 
-      <section>
-        <h3 className={SECTION}>Figures</h3>
-        {/* Two rows, each with its own date, because the two dates genuinely
-            disagree: a feed run refreshes cash every day and the valuation is
-            dated by the provider. One "as at" above both would be wrong for
-            one of them. */}
-        <ul className="mt-3 divide-y divide-neutral-200 overflow-hidden rounded-lg border border-neutral-200">
-          <li className="flex items-baseline justify-between gap-3 px-4 py-3">
-            <span className="min-w-0">
-              <span className="block text-sm text-neutral-900">Balance</span>
-              <span className="block text-xs text-neutral-500">
-                {a.valued_on ? `As at ${formatCalendarDate(a.valued_on)}` : 'No valuation recorded'}
-                {a.valuation_source ? ` · ${a.valuation_source}` : ''}
-              </span>
-            </span>
-            <span className="shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
-              <AccountValue
-                value={a.latest_value}
-                changeAmount={a.change_amount}
-                changePct={a.change_pct}
-                baselineValue={a.baseline_value}
-                baselinePoints={a.baseline_points}
-              />
-            </span>
-          </li>
-          <li className="flex items-baseline justify-between gap-3 px-4 py-3">
-            <span className="min-w-0">
-              <span className="block text-sm text-neutral-900">Available cash</span>
-              <span className="block text-xs text-neutral-500">
-                {/* `formatCalendarDate`, NOT `formatNoteDate`. `snapshot_as_at` is a
-                    DATE column — the provider's business day — where
-                    `allocation_as_at` above is a timestamptz, so the two take
-                    different formatters from the same module for the reason
-                    that module exists: `new Date('2026-09-16')` is UTC
-                    midnight, which renders as the 15th anywhere west of
-                    Greenwich. Sydney is east of it, so the wrong formatter
-                    looked perfectly right here and would have been a day out
-                    for a colleague reading from London. Caught by the branch,
-                    which reports the column's type. */}
-                {a.snapshot_as_at ? `As at ${formatCalendarDate(a.snapshot_as_at)}` : 'Not reported'}
-              </span>
-            </span>
-            <span className="shrink-0 text-[15px] font-semibold tabular-nums text-neutral-900">
-              {a.available_cash == null ? (
-                <span className="text-xs font-normal text-neutral-400">Not reported</span>
-              ) : (
-                accountMoney.format(Number(a.available_cash))
-              )}
-            </span>
-          </li>
-        </ul>
-        {/* The one sentence that stops a reader adding two figures that are not
-            addable. Cash is a PART of the balance above, not a sum beside it. */}
-        {a.available_cash == null ? null : (
-          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
-            Cash available to trade. It is already counted inside the balance above, so the two
-            are not added together.
-          </p>
-        )}
-      </section>
+      {/* The one sentence that stops a reader adding two figures that are not
+          addable. Cash is a PART of the balance, not a sum beside it. */}
+      {a.available_cash == null ? null : (
+        <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+          Cash available to trade. It is already counted inside the balance, so the two are not
+          added together.
+        </p>
+      )}
+
+      {/* ── 2. Two pictures, level ─────────────────────────────────────── */}
+      {/* Each section is a column and its sheet grows to fill it, so the two
+          sheets are the same height whatever each holds — a ring with a
+          three-line legend is taller than a 2:1 chart with a note, and two
+          cards of different heights on one row read as a mistake. Content sits
+          at the top of each; the sheet's ground carries the alignment. */}
+      <div className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <section className="flex flex-col">
+          <h3 className={SECTION_HEADING}>Value, last 30 days</h3>
+          <div className={`${SHEET} flex-1 px-3.5 py-4`}>
+            <ValueBars rows={a.value_series} />
+          </div>
+        </section>
+
+        <section className="flex flex-col">
+          <h3 className={SECTION_HEADING}>Asset allocation</h3>
+          <div className={`${SHEET} flex-1 px-3.5 py-4`}>
+            <AllocationDonut rows={a.allocation} hasProvider={Boolean(a.provider)} onActivate={onActivate} />
+          </div>
+        </section>
+      </div>
+
+      {/* ── 3. Every class, to scale ───────────────────────────────────── */}
+      {hasAllocation ? (
+        <section className="mt-5">
+          <h3 className={SECTION_HEADING}>Allocation by class</h3>
+          <div className={`${SHEET} px-3.5 py-4`}>
+            <AllocationBars
+              rows={a.allocation}
+              asAt={a.allocation_as_at ? formatNoteDate(a.allocation_as_at) : null}
+              hasProvider={Boolean(a.provider)}
+              active={active}
+              onActivate={onActivate}
+            />
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }
-
-/** A section heading inside a tab panel — the same weight a `FieldBox` title
- *  takes, so the two kinds of block read as one system. */
-const SECTION = 'text-xs font-semibold uppercase tracking-wider text-neutral-500'
