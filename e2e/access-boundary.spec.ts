@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test'
  * silently, because a signed-in developer never sees it.
  */
 
-const PROTECTED = ['/', '/groups', '/profile', '/preferences', '/workflows', '/reports']
+const PROTECTED = ['/', '/groups', '/profile', '/preferences', '/workflows', '/reports', '/admin']
 
 test.describe('unauthenticated access', () => {
   for (const path of PROTECTED) {

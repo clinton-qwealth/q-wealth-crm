@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { NAV_ITEMS } from '@/lib/nav'
+import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM, NAV_ITEMS } from '@/lib/nav'
 
 /**
  * Every internal link must point at a route that exists.
@@ -74,6 +74,15 @@ describe('internal links', () => {
     expect(NAV_ITEMS.length).toBeGreaterThan(0)
     for (const { href } of NAV_ITEMS) {
       expect(routes.has(href), `${href} is in the top nav but is not a route`).toBe(true)
+    }
+  })
+
+  /* The account menu renders its links the same way, from a list — and since
+     19 September that list has a destination only administrators see, so a
+     dead one would be found by exactly the people least likely to report it. */
+  test('every account-menu destination points at a route that exists', () => {
+    for (const { href } of [...ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM]) {
+      expect(routes.has(href), `${href} is in the account menu but is not a route`).toBe(true)
     }
   })
 })

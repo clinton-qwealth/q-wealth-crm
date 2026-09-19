@@ -8,6 +8,8 @@ export type AccessProfile = {
   manage_groups: boolean
   manage_staff: boolean
   file_unmatched_notes: boolean
+  /** Added to the profile on 3 Sep; reached the app's type on 19 Sep with the Administration page. */
+  verify_identity: boolean
 }
 
 export type Staff = {
@@ -69,7 +71,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
+      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
     )
     .eq('auth_user_id', sub)
     .maybeSingle()

@@ -45,3 +45,20 @@ export const NAV_ITEMS = [
 export function isCurrentNavItem(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
+
+/**
+ * The account menu's destinations, here for the same reason `NAV_ITEMS` is:
+ * `no-dead-links` matches `href="/…"` as source text, and a list rendered as
+ * `href={item.href}` is invisible to it unless the list itself is imported.
+ */
+export const ACCOUNT_MENU_ITEMS = [
+  { href: '/profile', label: 'Profile' },
+  { href: '/preferences', label: 'Preferences' },
+] as const
+
+/**
+ * Shown to administrators only, after Preferences. The first destination in
+ * the product that depends on a permission; the page behind it answers
+ * not-found to anyone else, so the menu hiding it is courtesy, not security.
+ */
+export const ADMIN_MENU_ITEM = { href: '/admin', label: 'Administration' } as const

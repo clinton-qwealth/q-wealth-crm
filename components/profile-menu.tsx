@@ -3,12 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { signOut } from '@/app/actions'
+import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM } from '@/lib/nav'
 import { UserIcon } from './icons'
-
-const LINKS = [
-  { href: '/profile', label: 'Profile' },
-  { href: '/preferences', label: 'Preferences' },
-]
 
 const ITEM_CLASS =
   'block w-full px-3 py-1.5 text-left text-sm outline-none transition-colors focus-visible:bg-brand-50 focus-visible:text-brand-700'
@@ -27,7 +23,17 @@ function initialsOf(name?: string) {
  * between items — including Sign out, which is a submit button rather than a
  * link, so the focus list is typed as HTMLElement rather than anchors.
  */
-export function ProfileMenu({ name, email }: { name?: string; email?: string }) {
+export function ProfileMenu({
+  name,
+  email,
+  isAdmin = false,
+}: {
+  name?: string
+  email?: string
+  /** One fact crosses the client boundary, not the permission matrix. */
+  isAdmin?: boolean
+}) {
+  const links = isAdmin ? [...ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM] : [...ACCOUNT_MENU_ITEMS]
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -118,7 +124,7 @@ export function ProfileMenu({ name, email }: { name?: string; email?: string }) 
           ) : null}
 
           <div className="py-1">
-            {LINKS.map((item, i) => (
+            {links.map((item, i) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -141,7 +147,7 @@ export function ProfileMenu({ name, email }: { name?: string; email?: string }) 
                 type="submit"
                 role="menuitem"
                 ref={(el) => {
-                  itemRefs.current[LINKS.length] = el
+                  itemRefs.current[links.length] = el
                 }}
                 className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
               >

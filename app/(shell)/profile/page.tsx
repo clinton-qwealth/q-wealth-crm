@@ -20,6 +20,7 @@ export default async function ProfilePage() {
     ['Manage groups', p.manage_groups],
     ['Manage staff', p.manage_staff],
     ['File unmatched notes', p.file_unmatched_notes],
+    ['Verify identity', p.verify_identity],
   ]
 
   return (

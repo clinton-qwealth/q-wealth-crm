@@ -58,6 +58,7 @@ const PROFILE = {
   view_sensitive: false,
   manage_groups: false,
   manage_staff: false,
+  verify_identity: false,
   file_unmatched_notes: false,
 }
 const signedIn: Claims = { data: { claims: { sub: 'user-1', aal: 'aal2' } }, error: null }

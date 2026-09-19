@@ -15,7 +15,15 @@ import { TopNavLinks } from './top-nav-links'
  * pathname needs a client boundary. Only that list crossed it; the mark, the
  * Help icon and the bar itself did not.
  */
-export function TopNav({ staffName, staffEmail }: { staffName?: string; staffEmail?: string }) {
+export function TopNav({
+  staffName,
+  staffEmail,
+  isAdmin = false,
+}: {
+  staffName?: string
+  staffEmail?: string
+  isAdmin?: boolean
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="flex h-12 items-center gap-3 px-3 sm:gap-6 sm:px-5">
@@ -45,7 +53,7 @@ export function TopNav({ staffName, staffEmail }: { staffName?: string; staffEma
             <HelpIcon className="h-[18px] w-[18px]" />
           </Link>
 
-          <ProfileMenu name={staffName} email={staffEmail} />
+          <ProfileMenu name={staffName} email={staffEmail} isAdmin={isAdmin} />
         </div>
       </div>
     </header>

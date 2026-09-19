@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
+import { isAdmin } from '@/lib/admin'
 import { getMfaState } from '@/lib/mfa'
 import { TopNav } from '@/components/top-nav'
 
@@ -42,7 +43,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
        because their container has no background of its own. The layer below
        carries its own fallback colour, so nothing is lost. */
     <div className="flex min-h-dvh flex-col">
-      <TopNav staffName={staff.full_name} staffEmail={staff.email} />
+      <TopNav staffName={staff.full_name} staffEmail={staff.email} isAdmin={isAdmin(staff)} />
 
       {/*
         A fixed, cover-positioned layer rather than `bg-fixed` on the container.
