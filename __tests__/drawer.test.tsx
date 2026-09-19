@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { useState } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { Drawer, DrawerHeader } from '@/components/drawer'
+import { Drawer, DrawerBody, DrawerFooter, DrawerHeader } from '@/components/drawer'
 
 /**
  * The shared record drawer.
@@ -152,6 +152,36 @@ describe('DrawerHeader', () => {
  * only one", which is the stronger statement and the one that catches a fourth
  * drawer on the day somebody writes it.
  */
+/**
+ * The footer, added 19 September for the account drawer's Delete button. The
+ * contract is small and load-bearing: it is the column's LAST child and it does
+ * not shrink, so it sits beneath whichever scrolling part precedes it — a body
+ * or a `fill` Tabs strip — and takes exactly its own height.
+ */
+describe('DrawerFooter', () => {
+  test('pins beneath the body as the column’s last, unshrinking child', () => {
+    const { container } = render(
+      <Drawer open onClose={() => {}} labelledBy="f">
+        <DrawerHeader id="f" title="Netwealth Wrap" onClose={() => {}} />
+        <DrawerBody>
+          <p>the body</p>
+        </DrawerBody>
+        <DrawerFooter>
+          <button type="button">Delete account</button>
+        </DrawerFooter>
+      </Drawer>,
+    )
+    const column = container.querySelector('dialog')!.firstElementChild!
+    const footer = column.lastElementChild!
+    expect(footer.getAttribute('data-slot')).toBe('drawer-footer')
+    expect(footer.className).toContain('shrink-0')
+    expect(footer.className).toContain('border-t')
+    expect(footer.textContent).toBe('Delete account')
+    /* And the body before it is the part that grows. */
+    expect(footer.previousElementSibling!.className).toContain('flex-1')
+  })
+})
+
 describe('the drawer shape', () => {
   const dir = resolve(__dirname, '../components')
   const holders = readdirSync(dir)

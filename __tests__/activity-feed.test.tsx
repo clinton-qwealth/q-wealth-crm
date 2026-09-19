@@ -8,6 +8,8 @@ vi.mock('@/app/(shell)/groups/actions', () => ({
   togglePostReaction: vi.fn(async () => ({ ok: true as const })),
   postAccountActivity: vi.fn(async () => ({ ok: true as const })),
   toggleAccountPostReaction: vi.fn(async () => ({ ok: true as const })),
+  postPolicyActivity: vi.fn(async () => ({ ok: true as const })),
+  togglePolicyPostReaction: vi.fn(async () => ({ ok: true as const })),
 }))
 
 /**
@@ -40,6 +42,7 @@ const post = (o: Partial<WorkflowPost>): WorkflowPost => ({
   id: 'p',
   workflow_id: 'w1',
   account_id: null,
+  policy_id: null,
   task_id: 't1',
   author_staff_id: 's1',
   author_name: 'Sarah Chen',
@@ -466,6 +469,78 @@ describe('the activity feed on an account', () => {
     ])
     await user.click(screen.getByRole('button', { name: 'Looking at this: 1' }))
     expect(actions.toggleAccountPostReaction).toHaveBeenCalledWith('a-1', 'eyes')
+    expect(actions.togglePostReaction).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The same feed, scoped to an insurance policy — the third scope, 19 September,
+ * and the account block above with the nouns changed. Kept as its own block
+ * rather than parameterised, because the assertion that matters in each is
+ * which OTHER actions were not called, and those differ per scope.
+ */
+describe('the activity feed on a policy', () => {
+  const onPolicy = post({ id: 'pp-1', workflow_id: null, task_id: null, policy_id: 'pol-1',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On this policy' }] }] } })
+  const onAnotherPolicy = post({ id: 'pp-2', workflow_id: null, task_id: null, policy_id: 'pol-2',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On another policy' }] }] } })
+  const onAnAccount = post({ id: 'pp-3', workflow_id: null, task_id: null, account_id: 'acc-1',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'On an account' }] }] } })
+  const onATask = post({ id: 'pp-4' })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const showPolicy = (posts: WorkflowPost[]) =>
+    render(
+      <ActivityFeed
+        scope={{ kind: 'policy', policyId: 'pol-1' }}
+        posts={posts}
+        staff={STAFF}
+        viewer={VIEWER}
+      />,
+    )
+
+  test('shows this policy’s posts, and not another policy’s, an account’s or a task’s', () => {
+    showPolicy([onPolicy, onAnotherPolicy, onAnAccount, onATask])
+    expect(items().length).toBe(1)
+    expect(items()[0].textContent).toContain('On this policy')
+  })
+
+  test('posting calls the policy action with the policy id, and neither of the others', async () => {
+    const user = userEvent.setup()
+    showPolicy([onPolicy])
+    await user.click(screen.getByRole('button', { name: 'Post' }))
+    expect(actions.postPolicyActivity).toHaveBeenCalledWith('pol-1', FIXED_DOC, null)
+    expect(actions.postAccountActivity).not.toHaveBeenCalled()
+    expect(actions.postWorkflowActivity).not.toHaveBeenCalled()
+  })
+
+  test('and the new post STAYS on screen while it saves', async () => {
+    const user = userEvent.setup()
+    let release: (v: { ok: true }) => void = () => {}
+    vi.mocked(actions.postPolicyActivity).mockImplementationOnce(
+      () => new Promise((r) => (release = r)),
+    )
+    showPolicy([onPolicy])
+    await user.click(screen.getByRole('button', { name: 'Post' }))
+    /* Two, or the provisional post carried no policy_id and was filtered out
+       of its own feed — the flicker the account scope's test found. */
+    expect(items().length).toBe(2)
+    expect(items()[0].textContent).toContain('Posting…')
+    release({ ok: true })
+    expect(await lastOnPost!(FIXED_DOC)).toBe(true)
+  })
+
+  test('a reaction goes to the policy action, and to neither of the others', async () => {
+    const user = userEvent.setup()
+    showPolicy([
+      { ...onPolicy, reactions: [{ reaction: 'eyes', by: [{ staff_id: 's1', full_name: 'Sarah Chen' }] }] } as WorkflowPost,
+    ])
+    await user.click(screen.getByRole('button', { name: 'Looking at this: 1' }))
+    expect(actions.togglePolicyPostReaction).toHaveBeenCalledWith('pp-1', 'eyes')
+    expect(actions.toggleAccountPostReaction).not.toHaveBeenCalled()
     expect(actions.togglePostReaction).not.toHaveBeenCalled()
   })
 })

@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
+import { ActivityFeed } from './activity-feed'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox } from './field-box'
 import { DataRow } from './data-section'
+import { Tabs } from './tabs'
 import {
+  PANEL_GUTTER,
   POLICY_LIVE,
   POLICY_STATUS_LABEL,
   Pill,
@@ -13,6 +16,7 @@ import {
   coverMoney,
   coverSummary,
 } from './ui'
+import type { WorkflowPost } from '@/lib/workflow-board'
 import { formatCalendarDate } from '@/lib/note-date'
 import { savePolicyDetails } from '@/app/(shell)/groups/actions'
 
@@ -35,6 +39,16 @@ import { savePolicyDetails } from '@/app/(shell)/groups/actions'
  * components behind a boolean, with every field carrying a null branch for the
  * other kind — and the first change to either would have to be read against
  * both. Refused deliberately; this paragraph is the record of it.
+ *
+ * ## Three tabs since 19 September
+ *
+ * The threshold the account drawer's own docblock named — "a panel that is a
+ * stream" — arrived here too: an Activity feed of posts on the policy, the
+ * same posts table with a third scope. So the one scrolling column became the
+ * account drawer's three tabs, and the split is the read-only / editable line
+ * the body already had: Overview is the two totals and the covers, Details is
+ * the two forms, Activity is the stream. The body is still not shared with the
+ * account drawer, for the paragraph above; only the SHAPE is.
  */
 
 /** The cover types, and how they read. Moved here from the group page on
@@ -109,14 +123,24 @@ export function coverAmount(amount: string | number, basis: string) {
   return money
 }
 
+type Staff = { id: string; name: string }
+type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
+
 export function PolicyList({
   policies,
   members,
   groupName,
+  posts,
+  staff,
+  viewer,
 }: {
   policies: PolicyRow[]
   members: { id: string; name: string }[]
   groupName: string
+  /** Every post on this group's policies; the drawer shows one policy's. */
+  posts: WorkflowPost[]
+  staff: Staff[]
+  viewer: Viewer
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const policy = policies.find((p) => p.policy_id === selectedId) ?? null
@@ -152,6 +176,9 @@ export function PolicyList({
             policy={policy}
             members={members}
             groupName={groupName}
+            posts={posts}
+            staff={staff}
+            viewer={viewer}
             onClose={() => setSelectedId(null)}
           />
         ) : (
@@ -183,11 +210,17 @@ function PolicyPanel({
   policy: p,
   members,
   groupName,
+  posts,
+  staff,
+  viewer,
   onClose,
 }: {
   policy: PolicyRow
   members: { id: string; name: string }[]
   groupName: string
+  posts: WorkflowPost[]
+  staff: Staff[]
+  viewer: Viewer
   onClose: () => void
 }) {
   const live = p.status === POLICY_LIVE
@@ -209,186 +242,231 @@ function PolicyPanel({
         onClose={onClose}
       />
 
-      <DrawerBody>
-        {/* THE TWO TOTALS, SIDE BY SIDE AND NEVER ADDED. $750,000 of life cover
-            plus $6,500 a month is not $756,500, which is why the database keeps
-            them in two columns rather than leaving each reader to remember. The
-            layout says it and the line beneath says it in words. */}
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
-          {lumpSum ? (
-            <div>
-              <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
-                {coverMoney.format(lumpSum)}
-              </p>
-              <p className="mt-0.5 text-xs text-neutral-500">Total lump sum cover</p>
-            </div>
-          ) : null}
-          {monthly ? (
-            <div>
-              <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
-                {coverMoney.format(monthly)}
-              </p>
-              <p className="mt-0.5 text-xs text-neutral-500">Total monthly benefit</p>
-            </div>
-          ) : null}
-          {!lumpSum && !monthly ? (
-            <p className="text-sm text-neutral-400">No cover amounts recorded</p>
-          ) : null}
-        </div>
-        {lumpSum && monthly ? (
-          <p className="-mt-2 text-xs leading-relaxed text-neutral-500">
-            A lump sum and a monthly benefit are different quantities. They are shown separately
-            and are never added together.
-          </p>
-        ) : null}
+      {/* The account drawer's configuration, flag for flag — see there for
+          why each is set. `fill` so the strip stays put and the panel scrolls
+          beneath it. */}
+      <Tabs
+        fill
+        gutter={8}
+        flushTop={false}
+        bleed={false}
+        alignFirst
+        label={`${p.label} policy`}
+        items={[
+          {
+            id: 'overview',
+            label: 'Overview',
+            panel: (
+              <div className={`${PANEL_GUTTER} space-y-5 pb-8`}>
+                {/* THE TWO TOTALS, SIDE BY SIDE AND NEVER ADDED. $750,000 of life cover
+                    plus $6,500 a month is not $756,500, which is why the database keeps
+                    them in two columns rather than leaving each reader to remember. The
+                    layout says it and the line beneath says it in words. */}
+                <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+                  {lumpSum ? (
+                    <div>
+                      <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+                        {coverMoney.format(lumpSum)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-neutral-500">Total lump sum cover</p>
+                    </div>
+                  ) : null}
+                  {monthly ? (
+                    <div>
+                      <p className="text-2xl font-semibold tabular-nums tracking-tight text-neutral-900">
+                        {coverMoney.format(monthly)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-neutral-500">Total monthly benefit</p>
+                    </div>
+                  ) : null}
+                  {!lumpSum && !monthly ? (
+                    <p className="text-sm text-neutral-400">No cover amounts recorded</p>
+                  ) : null}
+                </div>
+                {lumpSum && monthly ? (
+                  <p className="-mt-2 text-xs leading-relaxed text-neutral-500">
+                    A lump sum and a monthly benefit are different quantities. They are shown separately
+                    and are never added together.
+                  </p>
+                ) : null}
 
-        <FieldBox
-          title="Cover"
-          view={
-            covers.length ? (
-              <ul className="flex flex-col gap-2.5">
-                {covers.map((c) => {
-                  /* The terms that decide what the amount is actually worth:
-                     how long it pays for, how long before it starts, and
-                     whether it keeps pace. Only stated when recorded. */
-                  const terms = [
-                    c.benefit_period ? `Benefit period ${c.benefit_period}` : null,
-                    c.waiting_period ? `Waiting period ${c.waiting_period}` : null,
-                    c.indexed ? 'Indexed' : null,
-                  ].filter(Boolean)
-                  return (
-                    <li
-                      key={c.cover_type}
-                      data-slot="cover"
-                      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
-                    >
-                      <span className="text-sm text-neutral-900">
-                        {COVER_TYPE_LABEL[c.cover_type] ?? c.cover_type}
-                      </span>
-                      <span className="text-sm font-semibold tabular-nums text-neutral-900">
-                        {coverAmount(c.benefit_amount, c.benefit_basis)}
-                      </span>
-                      {terms.length ? (
-                        <span className="w-full text-xs text-neutral-500">
-                          {terms.join(' \u00b7 ')}
-                        </span>
+                <FieldBox
+                  title="Cover"
+                  view={
+                    covers.length ? (
+                      <ul className="flex flex-col gap-2.5">
+                        {covers.map((c) => {
+                          /* The terms that decide what the amount is actually worth:
+                             how long it pays for, how long before it starts, and
+                             whether it keeps pace. Only stated when recorded. */
+                          const terms = [
+                            c.benefit_period ? `Benefit period ${c.benefit_period}` : null,
+                            c.waiting_period ? `Waiting period ${c.waiting_period}` : null,
+                            c.indexed ? 'Indexed' : null,
+                          ].filter(Boolean)
+                          return (
+                            <li
+                              key={c.cover_type}
+                              data-slot="cover"
+                              className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
+                            >
+                              <span className="text-sm text-neutral-900">
+                                {COVER_TYPE_LABEL[c.cover_type] ?? c.cover_type}
+                              </span>
+                              <span className="text-sm font-semibold tabular-nums text-neutral-900">
+                                {coverAmount(c.benefit_amount, c.benefit_basis)}
+                              </span>
+                              {terms.length ? (
+                                <span className="w-full text-xs text-neutral-500">
+                                  {terms.join(' \u00b7 ')}
+                                </span>
+                              ) : null}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-neutral-400">No covers recorded</p>
+                    )
+                  }
+                />
+
+              </div>
+            ),
+          },
+          {
+            id: 'activity',
+            label: 'Activity',
+            panel: (
+              /* The reading column the account drawer's feed takes, capped and
+                 centred, for the reason written there. */
+              <div className={`${PANEL_GUTTER} pb-8`}>
+                <div className="mx-auto w-full max-w-xl">
+                  <ActivityFeed
+                    scope={{ kind: 'policy', policyId: p.policy_id }}
+                    posts={posts}
+                    staff={staff}
+                    viewer={viewer}
+                  />
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'details',
+            label: 'Details',
+            panel: (
+              <div className={`${PANEL_GUTTER} space-y-5 pb-8`}>
+                <FieldBox
+                  title="Details"
+                  action={savePolicyDetails}
+                  identity={identity}
+                  view={
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+                      <Field label="Policy number" value={p.policy_number} />
+                      <Field label="Insurer" value={p.insurer} />
+                      <Field
+                        label="Premium"
+                        value={
+                          p.premium == null
+                            ? null
+                            : [
+                                accountMoney.format(Number(p.premium)),
+                                p.premium_frequency
+                                  ? (
+                                      PREMIUM_FREQUENCY_LABEL[p.premium_frequency] ?? p.premium_frequency
+                                    ).toLowerCase()
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')
+                        }
+                      />
+                      <Field
+                        label="Structure"
+                        value={
+                          p.premium_structure
+                            ? (PREMIUM_STRUCTURE_LABEL[p.premium_structure] ?? p.premium_structure)
+                            : null
+                        }
+                      />
+                      {/* Which account pays it. Plain text rather than a link: the
+                          account drawer belongs to the section above and has no URL of
+                          its own, which is the deep-linking question this change
+                          deliberately left open. */}
+                      <Field label="Held in" value={p.held_in_account} />
+                      <Field label="Status" value={POLICY_STATUS_LABEL[p.status] ?? p.status} />
+                      <Field
+                        label="Commenced"
+                        value={p.commenced_on ? formatCalendarDate(p.commenced_on) : null}
+                      />
+                      {p.cancelled_on ? (
+                        <Field label="Cancelled" value={formatCalendarDate(p.cancelled_on)} />
                       ) : null}
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-              <p className="text-sm text-neutral-400">No covers recorded</p>
-            )
-          }
-        />
+                    </dl>
+                  }
+                  edit={
+                    <div className="flex flex-col gap-3">
+                      <EditField label="Name">
+                        <input name="label" defaultValue={p.label} required className={FIELD_INPUT} />
+                      </EditField>
+                    </div>
+                  }
+                />
 
-        <FieldBox
-          title="Details"
-          action={savePolicyDetails}
-          identity={identity}
-          view={
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
-              <Field label="Policy number" value={p.policy_number} />
-              <Field label="Insurer" value={p.insurer} />
-              <Field
-                label="Premium"
-                value={
-                  p.premium == null
-                    ? null
-                    : [
-                        accountMoney.format(Number(p.premium)),
-                        p.premium_frequency
-                          ? (
-                              PREMIUM_FREQUENCY_LABEL[p.premium_frequency] ?? p.premium_frequency
-                            ).toLowerCase()
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(', ')
-                }
-              />
-              <Field
-                label="Structure"
-                value={
-                  p.premium_structure
-                    ? (PREMIUM_STRUCTURE_LABEL[p.premium_structure] ?? p.premium_structure)
-                    : null
-                }
-              />
-              {/* Which account pays it. Plain text rather than a link: the
-                  account drawer belongs to the section above and has no URL of
-                  its own, which is the deep-linking question this change
-                  deliberately left open. */}
-              <Field label="Held in" value={p.held_in_account} />
-              <Field label="Status" value={POLICY_STATUS_LABEL[p.status] ?? p.status} />
-              <Field
-                label="Commenced"
-                value={p.commenced_on ? formatCalendarDate(p.commenced_on) : null}
-              />
-              {p.cancelled_on ? (
-                <Field label="Cancelled" value={formatCalendarDate(p.cancelled_on)} />
-              ) : null}
-            </dl>
-          }
-          edit={
-            <div className="flex flex-col gap-3">
-              <EditField label="Name">
-                <input name="label" defaultValue={p.label} required className={FIELD_INPUT} />
-              </EditField>
-            </div>
-          }
-        />
-
-        {/* ROLE-AWARE, not a flat checkbox list. The same person is commonly
-            both the owner and the life insured — two rows for one party, which
-            the table's own comment calls the common case — so a single list
-            could not say which role a tick meant. One form and one RPC, because
-            the database checks the FINAL state of both roles together: moving a
-            person from life insured to owner in one save is a single legitimate
-            change, and two separate saves would refuse it halfway. */}
-        <FieldBox
-          title="People"
-          action={savePolicyDetails}
-          identity={identity}
-          view={
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
-              <Field
-                label="Owners"
-                value={owners.length ? owners.map((o) => o.name).join(', ') : null}
-              />
-              <Field
-                label="Lives insured"
-                value={lives.length ? lives.map((l) => l.name).join(', ') : null}
-              />
-            </dl>
-          }
-          edit={
-            <div className="flex flex-col gap-4">
-              <PartyPicker
-                legend="Owners"
-                field="owner_party_ids"
-                sentinel="owners_present"
-                members={members}
-                chosen={owners}
-              />
-              <PartyPicker
-                legend="Lives insured"
-                field="life_insured_party_ids"
-                sentinel="lives_present"
-                members={members}
-                chosen={lives}
-              />
-              {parties.some((x) => !members.some((m) => m.id === x.party_id)) ? (
-                <p className="text-xs text-neutral-500">
-                  Someone outside {groupName} also has a role on this policy. Saving here replaces
-                  both lists with the people ticked above.
-                </p>
-              ) : null}
-            </div>
-          }
-        />
-      </DrawerBody>
+                {/* ROLE-AWARE, not a flat checkbox list. The same person is commonly
+                    both the owner and the life insured — two rows for one party, which
+                    the table's own comment calls the common case — so a single list
+                    could not say which role a tick meant. One form and one RPC, because
+                    the database checks the FINAL state of both roles together: moving a
+                    person from life insured to owner in one save is a single legitimate
+                    change, and two separate saves would refuse it halfway. */}
+                <FieldBox
+                  title="People"
+                  action={savePolicyDetails}
+                  identity={identity}
+                  view={
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+                      <Field
+                        label="Owners"
+                        value={owners.length ? owners.map((o) => o.name).join(', ') : null}
+                      />
+                      <Field
+                        label="Lives insured"
+                        value={lives.length ? lives.map((l) => l.name).join(', ') : null}
+                      />
+                    </dl>
+                  }
+                  edit={
+                    <div className="flex flex-col gap-4">
+                      <PartyPicker
+                        legend="Owners"
+                        field="owner_party_ids"
+                        sentinel="owners_present"
+                        members={members}
+                        chosen={owners}
+                      />
+                      <PartyPicker
+                        legend="Lives insured"
+                        field="life_insured_party_ids"
+                        sentinel="lives_present"
+                        members={members}
+                        chosen={lives}
+                      />
+                      {parties.some((x) => !members.some((m) => m.id === x.party_id)) ? (
+                        <p className="text-xs text-neutral-500">
+                          Someone outside {groupName} also has a role on this policy. Saving here replaces
+                          both lists with the people ticked above.
+                        </p>
+                      ) : null}
+                    </div>
+                  }
+                />
+              </div>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }

@@ -156,6 +156,8 @@ describe('/groups/[id] round-trip depth', () => {
        accounts first, which is a third wave — and the chart is another jsonb
        column rather than a read at all. */
     expect(calls).toContain('group_account_posts')
+    /* And the policy drawer's, 19 September, on the same wave for the same reason. */
+    expect(calls).toContain('group_policy_posts')
     expect(calls).toContain('staff_directory')
     expect(calls).not.toContain('workflow_posts_summary')
     expect(calls).not.toContain('financial_account_valuations')
@@ -169,7 +171,7 @@ describe('/groups/[id] round-trip depth', () => {
        cannot see it — a loader chained to depth 2 sits under the member-detail
        floor of 2 and the total still reads 2. (Found by mutation: re-chaining
        the members read ahead of the other three passed the depth assertion.) */
-    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary', 'group_account_posts', 'staff_directory']) {
+    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary', 'group_account_posts', 'group_policy_posts', 'staff_directory']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

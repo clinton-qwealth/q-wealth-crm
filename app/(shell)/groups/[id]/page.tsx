@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import { getGroupAccountPosts, getStaffChoices } from '@/lib/workflows'
+import { getGroupAccountPosts, getGroupPolicyPosts, getStaffChoices } from '@/lib/workflows'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { accountMoney, owedMoney, ACCOUNT_LIVE, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
@@ -246,6 +246,7 @@ async function getAccountsData(groupId: string) {
     policiesRes,
     balanceRes,
     accountPosts,
+    policyPosts,
     staffChoices,
   ] = await Promise.all([
     supabase
@@ -270,6 +271,9 @@ async function getAccountsData(groupId: string) {
        would read 3 and fail. The account drawer's Activity tab renders out of
        this rather than fetching when it opens. */
     getGroupAccountPosts(groupId),
+    /* The policy drawer's Activity tab, 19 September — the same argument a
+       third time, and the same test holding it. */
+    getGroupPolicyPosts(groupId),
     getStaffChoices(),
   ])
 
@@ -290,6 +294,7 @@ async function getAccountsData(groupId: string) {
     policies: (policiesRes.data ?? []) as PolicyRow[],
     balance: (balanceRes.data ?? []) as BalanceItemRow[],
     accountPosts,
+    policyPosts,
     staffChoices,
     members,
     providers,
@@ -346,6 +351,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     policies: allPolicies,
     balance,
     accountPosts,
+    policyPosts,
     staffChoices,
     members: ownerOptions,
     providers,
@@ -642,6 +648,13 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                           policies={policies}
                           members={ownerOptions}
                           groupName={group.name}
+                          posts={policyPosts}
+                          staff={staffChoices}
+                          viewer={{
+                            id: staff.id,
+                            name: staff.full_name,
+                            canRemoveAnyImage: staff.access_profiles.manage_staff,
+                          }}
                         />
                       ) : undefined}
                     </DataSection>

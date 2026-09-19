@@ -341,6 +341,37 @@ export async function saveAccountDetails(
   return { ok: true }
 }
 
+/**
+ * Delete an account for good.
+ *
+ * Plain async rather than `useActionState`, like `removeMember`: the caller is
+ * a confirm dialog that has already done its own gating, and there is no form
+ * to read. Two things are deliberately NOT here:
+ *
+ * - **The word the user typed.** "Delete" is an arming gate in the UI — it
+ *   stops a slip of the hand — and not a rule. The database's rules are access
+ *   (RLS, unchanged) and provider (a BEFORE DELETE trigger that refuses any
+ *   account a feed maintains), and both bind the MCP and psql, which never
+ *   type anything. Sending the word would imply the server checked it.
+ * - **Any child cleanup.** Owners, valuations, allocations and posts cascade;
+ *   a policy held in the account keeps itself and drops the link. The migration
+ *   of 19 September records why that is already clean.
+ *
+ * The refusal sentences pass through unrewritten — "maintained by the HUB24
+ * feed, so it cannot be deleted here" is the one the reader needs.
+ */
+export async function deleteAccount(accountId: string): Promise<RecordDetailState> {
+  if (!accountId) return { error: 'No account selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('delete_financial_account', { p_account_id: accountId })
+  if (error) return { error: error.message }
+
+  /* The route pattern: a jointly owned account was on two groups' pages. */
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export async function savePolicyDetails(
   _prev: RecordDetailState,
   formData: FormData,
@@ -1308,6 +1339,62 @@ export async function postAccountActivity(
  * differs is only the route to revalidate.
  */
 export async function toggleAccountPostReaction(
+  postId: string,
+  reaction: unknown,
+): Promise<NoteState> {
+  if (!postId) return { error: 'No post selected.' }
+  if (!isReactionKey(reaction)) return { error: 'Not a reaction this feed offers.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('toggle_post_reaction', {
+    p_post_id: postId,
+    p_reaction: reaction,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
+/**
+ * Post to an insurance policy's activity.
+ *
+ * The third scope, 19 Sep 2026, and the third action rather than a scope
+ * argument on one — the reasoning on `postAccountActivity` holds a third time.
+ * `post_policy_activity()` shares `validate_post_body()` with the other two,
+ * so a document refused on one is refused on all with the same sentence.
+ */
+export async function postPolicyActivity(
+  policyId: string,
+  body: unknown,
+  parentPostId: string | null = null,
+): Promise<NoteState> {
+  if (!policyId) return { error: 'No policy selected.' }
+  if (!isPostDoc(body)) return { error: 'A post must be a document.' }
+  if (!postDocText(body)) return { error: 'Write something before posting.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('post_policy_activity', {
+    p_policy_id: policyId,
+    p_body: body,
+    p_parent_post_id: parentPostId,
+  })
+  if (error) return { error: error.message }
+
+  /* The route pattern: a policy whose owner and life insured sit in two groups
+     is on both of their pages. */
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
+/**
+ * Add or take away the caller's reaction to a post on a policy.
+ *
+ * Byte for byte the account version: the RPC keys by post alone. It exists
+ * under its own name because an action is named for the scope whose page it
+ * revalidates, and a reader of the feed's dispatch should see that scope.
+ */
+export async function togglePolicyPostReaction(
   postId: string,
   reaction: unknown,
 ): Promise<NoteState> {

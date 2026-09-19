@@ -18,8 +18,18 @@ import { PolicyList, coverAmount, type PolicyRow } from '@/components/policy-lis
  *  - there is no allocation, and no code path pretends there is.
  */
 
+/* Every action the feed imports has to be in the factory or the module mock
+   throws — the account drawer's test learned that on 17 September. */
 vi.mock('@/app/(shell)/groups/actions', () => ({
   savePolicyDetails: vi.fn(async () => ({ ok: true as const })),
+  postPolicyActivity: vi.fn(async () => ({ ok: true as const })),
+  togglePolicyPostReaction: vi.fn(async () => ({ ok: true as const })),
+  postAccountActivity: vi.fn(),
+  toggleAccountPostReaction: vi.fn(),
+  createPostMedia: vi.fn(),
+  postWorkflowActivity: vi.fn(),
+  redactPostMedia: vi.fn(),
+  togglePostReaction: vi.fn(),
 }))
 
 const BUNDLE: PolicyRow = {
@@ -101,13 +111,50 @@ const MEMBERS = [
   { id: 'p2', name: 'Reece Testsmith' },
 ]
 
+/** One post per policy, so the drawer must filter. */
+const POSTS = [
+  {
+    id: 'post-bundle', workflow_id: null, account_id: null, policy_id: 'pol1', task_id: null,
+    author_staff_id: 's1', author_name: 'Sarah Chen',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Reviewed the IP waiting period' }] }] },
+    body_text: 'Reviewed the IP waiting period', created_at: '2026-09-19T01:00:00Z',
+    mentioned: [], reactions: [], media: [], entities: [],
+    parent_post_id: null, root_post_id: null, parent_author_name: null,
+  },
+  {
+    id: 'post-lapsed', workflow_id: null, account_id: null, policy_id: 'pol2', task_id: null,
+    author_staff_id: 's1', author_name: 'Sarah Chen',
+    body: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A different policy' }] }] },
+    body_text: 'A different policy', created_at: '2026-09-19T02:00:00Z',
+    mentioned: [], reactions: [], media: [], entities: [],
+    parent_post_id: null, root_post_id: null, parent_author_name: null,
+  },
+] as never
+
+const STAFF = [{ id: 's1', name: 'Sarah Chen' }]
+const VIEWER = { id: 's1', name: 'Sarah Chen', canRemoveAnyImage: false }
+
 function list(policies: PolicyRow[] = [BUNDLE, LAPSED]) {
   return render(
     <ul>
-      <PolicyList policies={policies} members={MEMBERS} groupName="Testsmith Household" />
+      <PolicyList
+        policies={policies}
+        members={MEMBERS}
+        groupName="Testsmith Household"
+        posts={POSTS}
+        staff={STAFF}
+        viewer={VIEWER}
+      />
     </ul>,
   )
 }
+
+/** Open one of the drawer's three tabs. Overview is selected on open, and the
+ *  panels mount lazily, so anything on Details has to be asked for first. */
+const tab = (name: 'Overview' | 'Activity' | 'Details') =>
+  act(() => {
+    fireEvent.click(screen.getByRole('tab', { name }))
+  })
 
 const open = (name: string) =>
   act(() => {
@@ -150,7 +197,14 @@ describe('the policy list', () => {
     open('Janet — Life and IP')
     rerender(
       <ul>
-        <PolicyList policies={[LAPSED]} members={MEMBERS} groupName="Testsmith Household" />
+        <PolicyList
+          policies={[LAPSED]}
+          members={MEMBERS}
+          groupName="Testsmith Household"
+          posts={POSTS}
+          staff={STAFF}
+          viewer={VIEWER}
+        />
       </ul>,
     )
     expect(within(drawer(container)).getByRole('heading', { level: 2 }).textContent).toBe(
@@ -207,6 +261,7 @@ describe('the policy drawer', () => {
   test('states the premium with its frequency, and the account it is paid from', () => {
     const { container } = list()
     open('Janet — Life and IP')
+    tab('Details')
     const text = drawer(container).textContent!
     expect(text).toContain('$187.40, monthly')
     expect(text).toContain('Joint Super')
@@ -222,9 +277,11 @@ describe('the policy drawer', () => {
     expect(drawer(container).querySelector('[data-slot="alloc-ghost"]')).toBeNull()
   })
 
-  test('the read state contains no form control', () => {
+  test('the Overview and Details read states contain no form control', () => {
     const { container } = list()
     open('Janet — Life and IP')
+    expect(drawer(container).querySelectorAll('input, select, textarea')).toHaveLength(0)
+    tab('Details')
     expect(drawer(container).querySelectorAll('input, select, textarea')).toHaveLength(0)
   })
 
@@ -235,6 +292,7 @@ describe('the policy drawer', () => {
   test('reads the same person under both roles', () => {
     const { container } = list()
     open('Janet — Life and IP')
+    tab('Details')
     const d = within(drawer(container))
     const owners = d.getByText('Owners').closest('div')!
     const lives = d.getByText('Lives insured').closest('div')!
@@ -250,6 +308,7 @@ describe('the policy drawer', () => {
   test('editing People submits both role sets with their own sentinels', () => {
     list()
     open('Janet — Life and IP')
+    tab('Details')
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Edit people' }))
     })
@@ -267,6 +326,7 @@ describe('the policy drawer', () => {
   test('editing Details offers the name alone', () => {
     list()
     open('Janet — Life and IP')
+    tab('Details')
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: 'Edit details' }))
     })
@@ -274,5 +334,71 @@ describe('the policy drawer', () => {
     expect(
       Array.from(box.querySelectorAll('input, select')).map((el) => el.getAttribute('name')),
     ).toEqual(['policy_id', 'label'])
+  })
+})
+
+/**
+ * The tabs, 19 September: the account drawer's shape on a different record.
+ * Overview is the two totals and the covers; Details is the two forms; Activity
+ * is the stream. Nothing that belongs to the forms may leak onto Overview.
+ */
+describe('the policy drawer’s tabs', () => {
+  test('are Overview, Activity and Details, in that order', () => {
+    list()
+    open('Janet — Life and IP')
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Overview', 'Activity', 'Details'])
+  })
+
+  test('and Overview is the one open on arrival', () => {
+    list()
+    open('Janet — Life and IP')
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  test('Overview carries the totals and the covers, and none of the forms', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    const d = drawer(container)
+    expect(d.textContent).toContain('$750,000')
+    expect(d.querySelectorAll('[data-slot="cover"]')).toHaveLength(2)
+    expect(within(d).queryByText('Owners')).toBeNull()
+    expect(within(d).queryByText('Policy number')).toBeNull()
+  })
+})
+
+describe('the policy drawer’s Activity tab', () => {
+  test('shows this policy’s posts and not another’s', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    tab('Activity')
+    expect(drawer(container).textContent).toContain('Reviewed the IP waiting period')
+    expect(drawer(container).textContent).not.toContain('A different policy')
+  })
+
+  test('and the second policy sees its own', () => {
+    const { container } = list()
+    open('Reece — Trauma')
+    tab('Activity')
+    expect(drawer(container).textContent).toContain('A different policy')
+    expect(drawer(container).textContent).not.toContain('Reviewed the IP waiting period')
+  })
+
+  /* No uploader on a policy, so the attach buttons are DISABLED rather than
+     absent — the composer's own contract, the same as on an account. Media is
+     keyed and path-derived by workflow. */
+  test('disables the attach buttons, because a policy post carries no files', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    tab('Activity')
+    const d = drawer(container)
+    expect(within(d).getByRole('button', { name: 'Image' }).getAttribute('aria-disabled')).toBe('true')
+    expect(within(d).getByRole('button', { name: 'Attach file' }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  test('but does offer a composer', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    tab('Activity')
+    expect(within(drawer(container)).getByRole('button', { name: /post/i })).toBeTruthy()
   })
 })

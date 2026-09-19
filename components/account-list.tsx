@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityFeed } from './activity-feed'
 import { AllocationBars } from './allocation-bars'
 import { AllocationDonut } from './allocation-donut'
-import { Drawer, DrawerBody, DrawerHeader } from './drawer'
+import { DeleteAccountDialog } from './delete-account-dialog'
+import { Drawer, DrawerBody, DrawerFooter, DrawerHeader } from './drawer'
 import { Tabs } from './tabs'
 import { ValueBars } from './value-bars'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
@@ -115,8 +116,36 @@ export function AccountList({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const account = accounts.find((a) => a.account_id === selectedId) ?? null
 
+  /*
+   * The last deletion, by name, so the list can say what just happened.
+   *
+   * Closing the drawer EXPLICITLY on a delete is what keeps the revalidated
+   * page out of the "Account moved" branch below — the account is gone from the
+   * list either way, and that branch's sentence ("it still exists…") would be
+   * the wrong one. And focus has to go somewhere: the row's trigger button no
+   * longer exists, so the browser's own restore falls to `body`. The status
+   * line takes it instead, and a screen reader announces the outcome.
+   */
+  const [deleted, setDeleted] = useState<string | null>(null)
+  const status = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    if (deleted) status.current?.focus()
+  }, [deleted])
+
   return (
     <>
+      {deleted ? (
+        <p
+          ref={status}
+          role="status"
+          tabIndex={-1}
+          data-slot="deleted-status"
+          className="mb-3 text-sm text-neutral-600 outline-none"
+        >
+          {deleted} was deleted.
+        </p>
+      ) : null}
+
       {accounts.map((a) => (
         <DataRow
           key={a.account_id}
@@ -134,7 +163,15 @@ export function AccountList({
               baselinePoints={a.baseline_points}
             />
           }
-          trigger={{ label: `Open ${a.label}`, onClick: () => setSelectedId(a.account_id) }}
+          trigger={{
+            label: `Open ${a.label}`,
+            onClick: () => {
+              /* Opening a record is what says the reader has moved on from the
+                 last deletion's notice. */
+              setDeleted(null)
+              setSelectedId(a.account_id)
+            },
+          }}
         />
       ))}
 
@@ -152,6 +189,10 @@ export function AccountList({
             staff={staff}
             viewer={viewer}
             onClose={() => setSelectedId(null)}
+            onDeleted={(label) => {
+              setSelectedId(null)
+              setDeleted(label)
+            }}
           />
         ) : (
           /*
@@ -213,6 +254,7 @@ function AccountPanel({
   staff,
   viewer,
   onClose,
+  onDeleted,
 }: {
   account: AccountRow
   members: { id: string; name: string }[]
@@ -221,11 +263,30 @@ function AccountPanel({
   staff: Staff[]
   viewer: Viewer
   onClose: () => void
+  /** The account was deleted. The owner closes the drawer and says so. */
+  onDeleted: (label: string) => void
 }) {
   const live = a.status === ACCOUNT_LIVE
   const typeLabel = ACCOUNT_TYPE_LABEL[a.account_type] ?? a.account_type
   const owners = a.owner_parties ?? []
   const identity = <input type="hidden" name="account_id" value={a.account_id} />
+
+  /*
+   * The delete button and its gate.
+   *
+   * `fed` reads the view's `provider`, which is `parties.display_name` joined on
+   * the very column the database's BEFORE DELETE trigger checks — so the button
+   * and the trigger cannot disagree about which accounts are a feed's. The
+   * button is DISABLED for those with the reason beside it, rather than hidden:
+   * a control that is sometimes there and sometimes not reads as a fault, and
+   * the sentence is the useful part. The database refuses regardless; this is
+   * the friendlier of two identical answers.
+   *
+   * The confirm dialog exists only while confirming. See its docblock for why.
+   */
+  const fed = a.provider !== null
+  const [confirming, setConfirming] = useState(false)
+  const postCount = posts.filter((p) => p.account_id === a.account_id).length
 
   return (
     <>
@@ -416,6 +477,39 @@ function AccountPanel({
           },
         ]}
       />
+
+      {/* The one control in the drawer that is not about reading. Red because
+          it is the one destructive thing here, and at the foot because it is
+          the last thing a reader should meet, after everything the record has
+          to say. `DrawerFooter` pins it beneath the scrolling tabs. */}
+      <DrawerFooter>
+        <div className="flex items-center justify-between gap-4">
+          {fed ? (
+            <p data-slot="fed-notice" className="text-xs leading-snug text-neutral-500">
+              Maintained by the {a.provider} feed — close it at the provider instead.
+            </p>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            disabled={fed}
+            onClick={() => setConfirming(true)}
+            className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
+          >
+            Delete account
+          </button>
+        </div>
+      </DrawerFooter>
+
+      {confirming ? (
+        <DeleteAccountDialog
+          account={a}
+          postCount={postCount}
+          onCancel={() => setConfirming(false)}
+          onDeleted={onDeleted}
+        />
+      ) : null}
     </>
   )
 }

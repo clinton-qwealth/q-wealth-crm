@@ -217,3 +217,28 @@ export function DrawerBody({ children }: { children: ReactNode }) {
     <div className={`flex-1 space-y-5 overflow-y-auto ${PANEL_GUTTER} pb-8`}>{children}</div>
   )
 }
+
+/**
+ * The one part of a drawer that never scrolls: a band pinned to the foot.
+ *
+ * `Drawer` renders its children in a `flex h-full flex-col`, and both a
+ * `DrawerBody` and a `<Tabs fill>` are `flex-1 min-h-0` — so a third child with
+ * `shrink-0` sits beneath whichever of those is scrolling and takes exactly its
+ * own height. Added 19 Sep 2026 for the account drawer's Delete button, and put
+ * HERE rather than in `account-list.tsx` for the reason at the top of this file:
+ * a footer hand-rolled beside the tabs would have been the first copy.
+ *
+ * The tint and the rule are the add-forms' footer band, so a control here reads
+ * as the same kind of thing as a modal's Save row: the place the panel's actions
+ * live, apart from what it is showing.
+ */
+export function DrawerFooter({ children }: { children: ReactNode }) {
+  return (
+    <div
+      data-slot="drawer-footer"
+      className={`${PANEL_GUTTER} shrink-0 border-t border-neutral-200 bg-neutral-50/60 py-3`}
+    >
+      {children}
+    </div>
+  )
+}

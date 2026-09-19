@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createPostMedia,
   postAccountActivity,
+  postPolicyActivity,
   postWorkflowActivity,
   redactPostMedia,
   toggleAccountPostReaction,
+  togglePolicyPostReaction,
   togglePostReaction,
 } from '@/app/(shell)/groups/actions'
 import {
@@ -48,6 +50,7 @@ type Viewer = { id: string; name: string; canRemoveAnyImage: boolean }
 export type FeedScope =
   | { kind: 'workflow'; workflowId: string; taskId: string | null }
   | { kind: 'account'; accountId: string }
+  | { kind: 'policy'; policyId: string }
 
 /**
  * The activity feed: a composer, then what has been posted, newest first.
@@ -88,7 +91,9 @@ export function ActivityFeed({
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
 
   const shown =
-    scope.kind === 'account'
+    scope.kind === 'policy'
+      ? posts.filter((p) => p.policy_id === scope.policyId)
+      : scope.kind === 'account'
       ? posts.filter((p) => p.account_id === scope.accountId)
       : scope.taskId === null
         ? posts.filter((p) => p.workflow_id === scope.workflowId)
@@ -150,6 +155,9 @@ export function ActivityFeed({
       id: `pending-${Date.now()}`,
       workflow_id: scope.kind === 'workflow' ? scope.workflowId : null,
       account_id: scope.kind === 'account' ? scope.accountId : null,
+      /* The same field for the same reason: without it the provisional post is
+         filtered out of its own feed and flickers away until revalidation. */
+      policy_id: scope.kind === 'policy' ? scope.policyId : null,
       task_id: scope.kind === 'workflow' ? scope.taskId : null,
       author_staff_id: viewer.id,
       author_name: viewer.name,
@@ -181,9 +189,11 @@ export function ActivityFeed({
     let result: Awaited<ReturnType<typeof postWorkflowActivity>>
     try {
       result =
-        scope.kind === 'account'
-          ? await postAccountActivity(scope.accountId, doc, parentPostId)
-          : await postWorkflowActivity(scope.workflowId, scope.taskId, doc, parentPostId)
+        scope.kind === 'policy'
+          ? await postPolicyActivity(scope.policyId, doc, parentPostId)
+          : scope.kind === 'account'
+            ? await postAccountActivity(scope.accountId, doc, parentPostId)
+            : await postWorkflowActivity(scope.workflowId, scope.taskId, doc, parentPostId)
     } catch {
       result = { error: 'The post could not be saved. Nothing was lost — try again.' }
     }
@@ -250,9 +260,11 @@ export function ActivityFeed({
     let result: Awaited<ReturnType<typeof togglePostReaction>>
     try {
       result =
-        scope.kind === 'account'
-          ? await toggleAccountPostReaction(postId, key)
-          : await togglePostReaction(scope.workflowId, postId, key)
+        scope.kind === 'policy'
+          ? await togglePolicyPostReaction(postId, key)
+          : scope.kind === 'account'
+            ? await toggleAccountPostReaction(postId, key)
+            : await togglePostReaction(scope.workflowId, postId, key)
     } catch {
       result = { error: 'The reaction could not be saved. Try again.' }
     }

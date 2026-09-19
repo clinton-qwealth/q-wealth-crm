@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { AccountList, type AccountRow } from '@/components/account-list'
+import * as actions from '@/app/(shell)/groups/actions'
 
 /**
  * The investment-account list and the drawer it opens.
@@ -27,6 +28,7 @@ import { AccountList, type AccountRow } from '@/components/account-list'
 
 vi.mock('@/app/(shell)/groups/actions', () => ({
   saveAccountDetails: vi.fn(async () => ({ ok: true as const })),
+  deleteAccount: vi.fn(async () => ({ ok: true as const })),
   postAccountActivity: vi.fn(async () => ({ ok: true as const })),
   toggleAccountPostReaction: vi.fn(async () => ({ ok: true as const })),
   createPostMedia: vi.fn(),
@@ -655,3 +657,219 @@ describe('the Activity tab', () => {
   })
 })
 
+/**
+ * Deleting an account, from the foot of its drawer.
+ *
+ * ## What is being guarded
+ *
+ * Three things, each of which a plausible screen would get wrong:
+ *
+ *  1. the gate — the confirm is armed by the word `Delete` EXACTLY, and a
+ *     lowercase or trailing-space version leaves it disabled;
+ *  2. the outcome — on success the drawer closes and the list says what
+ *     happened, rather than falling into the "Account moved" sentence the
+ *     revalidated page would otherwise produce; on failure the dialog stays
+ *     open with the refusal beneath the field and the typed word intact;
+ *  3. the count — one `<dialog>` at rest, two only while confirming, so the
+ *     list's own one-dialog rule and the e2e locator both hold.
+ *
+ * The fed rule is the database's; here it is only that the button is disabled
+ * for a fed account and says why. `WRAP` has a provider, `SUPER` does not.
+ */
+describe('deleting an account', () => {
+  beforeEach(() => {
+    vi.mocked(actions.deleteAccount).mockClear()
+    vi.mocked(actions.deleteAccount).mockResolvedValue({ ok: true as const })
+  })
+
+  const deleteButton = (d: HTMLElement) =>
+    within(d).getByRole('button', { name: 'Delete account' })
+  /* The second dialog in the document is the confirm, while it exists. */
+  const confirmDialog = (container: HTMLElement) =>
+    container.querySelectorAll('dialog')[1] as HTMLElement | undefined
+  const type = (input: HTMLElement, value: string) =>
+    act(() => {
+      fireEvent.change(input, { target: { value } })
+    })
+  const beginDelete = (container: HTMLElement) => {
+    act(() => {
+      fireEvent.click(deleteButton(drawer(container)))
+    })
+    return confirmDialog(container)!
+  }
+
+  test('the button sits in a footer pinned as the drawer’s last child', () => {
+    const { container } = list()
+    open('Joint Super')
+    const column = drawer(container).firstElementChild!
+    const footer = column.lastElementChild!
+    expect(footer.getAttribute('data-slot')).toBe('drawer-footer')
+    expect(footer.className).toContain('shrink-0')
+    expect(within(footer as HTMLElement).getByRole('button', { name: 'Delete account' })).toBeTruthy()
+  })
+
+  /* The view's `provider` is joined on the column the trigger checks, so the
+     button and the database agree about which accounts are a feed's. */
+  test('is disabled for a fed account, and says why', () => {
+    const { container } = list()
+    open('Netwealth Wrap')
+    const d = drawer(container)
+    expect(deleteButton(d).hasAttribute('disabled')).toBe(true)
+    expect(d.querySelector('[data-slot="fed-notice"]')!.textContent).toContain('HUB24 feed')
+  })
+
+  test('and enabled, with no notice, for a hand-entered one', () => {
+    const { container } = list()
+    open('Joint Super')
+    const d = drawer(container)
+    expect(deleteButton(d).hasAttribute('disabled')).toBe(false)
+    expect(d.querySelector('[data-slot="fed-notice"]')).toBeNull()
+  })
+
+  test('opens a second dialog only while confirming', () => {
+    const { container } = list()
+    open('Joint Super')
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+    const confirm = beginDelete(container)
+    expect(container.querySelectorAll('dialog')).toHaveLength(2)
+    expect(confirm.hasAttribute('open')).toBe(true)
+    expect(confirm.getAttribute('data-slot')).toBe('delete-account-dialog')
+  })
+
+  test('names what will go, so the reader is deciding about a record and not a button', () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    const text = confirm.textContent ?? ''
+    expect(text).toContain('Delete Joint Super?')
+    expect(text).toContain('99887766')
+    expect(text).toContain('Janet Testsmith, Reece Testsmith')
+    expect(text).toContain('1 activity post go')
+    expect(text).toContain('kept and unlinked')
+    expect(text).toContain('cannot be undone')
+  })
+
+  /**
+   * THE GATE. Exact, case-sensitive, untrimmed. Each of the near misses is a
+   * mutation somebody would write to be "friendlier", and each makes the gate
+   * a little less of one.
+   */
+  test('arms the confirm only on the exact word Delete', () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    const input = within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' })
+    const button = within(confirm).getByRole('button', { name: 'Delete account' })
+
+    expect(button.hasAttribute('disabled'), 'empty').toBe(true)
+    type(input, 'delete')
+    expect(button.hasAttribute('disabled'), 'lowercase').toBe(true)
+    type(input, 'Delete ')
+    expect(button.hasAttribute('disabled'), 'trailing space').toBe(true)
+    type(input, 'DELETE')
+    expect(button.hasAttribute('disabled'), 'shouting').toBe(true)
+    type(input, 'Delete')
+    expect(button.hasAttribute('disabled'), 'exact').toBe(false)
+  })
+
+  test('confirming deletes THIS account, closes the drawer, and says so where focus lands', async () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    type(within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' }), 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete account' }))
+    })
+
+    expect(actions.deleteAccount).toHaveBeenCalledTimes(1)
+    expect(actions.deleteAccount).toHaveBeenCalledWith('a2')
+
+    /* Closed explicitly — NOT the "Account moved" branch, whose sentence would
+       be false here. And the confirm went with the panel. */
+    expect(drawer(container).textContent).toBe('')
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Joint Super was deleted.')
+    expect(document.activeElement).toBe(status)
+  })
+
+  test('the notice clears when the reader opens another record', async () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    type(within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' }), 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete account' }))
+    })
+    expect(screen.getByRole('status')).toBeTruthy()
+    open('Netwealth Wrap')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  /**
+   * The refusal outlives the confirmation it came from — `RemoveMember`'s rule.
+   * A dialog that snapped shut on an error dropped its own message on the same
+   * render. The sentence is the database's, passed through unrewritten.
+   */
+  test('a refusal stays on screen, with the dialog open and the word still typed', async () => {
+    vi.mocked(actions.deleteAccount).mockResolvedValueOnce({
+      error: 'This account is maintained by the HUB24 feed, so it cannot be deleted here. Close it at the provider instead.',
+    })
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    const input = within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' })
+    type(input, 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete account' }))
+    })
+
+    expect(within(confirm).getByRole('alert').textContent).toBe(
+      'This account is maintained by the HUB24 feed, so it cannot be deleted here. Close it at the provider instead.',
+    )
+    expect(confirm.hasAttribute('open')).toBe(true)
+    expect((input as HTMLInputElement).value).toBe('Delete')
+    expect(drawer(container).textContent).toContain('Joint Super')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  test('an action that THROWS is a refusal too', async () => {
+    vi.mocked(actions.deleteAccount).mockRejectedValueOnce(new Error('network'))
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    type(within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' }), 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete account' }))
+    })
+    expect(within(confirm).getByRole('alert').textContent).toContain('could not be deleted')
+    expect(confirm.hasAttribute('open')).toBe(true)
+  })
+
+  test('Cancel closes only the confirm, and nothing is called', () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container)
+    act(() => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    })
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+    expect(drawer(container).textContent).toContain('Joint Super')
+    expect(actions.deleteAccount).not.toHaveBeenCalled()
+  })
+
+  /* Escape reaches the dialog as a `close` event the browser fires; jsdom's
+     stub fires it from `close()`. Same path as Cancel, asserted separately so
+     a handler wired to the button alone cannot pass. */
+  test('and so does the dialog closing on its own, as Escape does', () => {
+    const { container } = list()
+    open('Joint Super')
+    const confirm = beginDelete(container) as HTMLDialogElement
+    act(() => {
+      confirm.close()
+    })
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+    expect(drawer(container).textContent).toContain('Joint Super')
+  })
+})

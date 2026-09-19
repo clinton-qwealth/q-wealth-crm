@@ -268,6 +268,28 @@ export async function getGroupAccountPosts(groupId: string): Promise<WorkflowPos
 }
 
 /**
+ * Every post on the policies of one client group — `getGroupAccountPosts` with
+ * the policy view, and the same reasons: read on the page's first wave, thrown
+ * on error, the same columns as the other readers plus the scope column this
+ * one is keyed by.
+ */
+export async function getGroupPolicyPosts(groupId: string): Promise<WorkflowPost[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('group_policy_posts')
+    .select(
+      'id, workflow_id, account_id, policy_id, task_id, author_staff_id, author_name, body, body_text, ' +
+        'created_at, mentioned, reactions, media, entities, parent_post_id, root_post_id, ' +
+        'parent_author_name',
+    )
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as WorkflowPost[]
+}
+
+/**
  * A workflow's recorded task actions — what people did from a Tools and Actions tab.
  *
  * Every action on the WORKFLOW, so the task panel filters to its own task

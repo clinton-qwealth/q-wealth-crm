@@ -133,7 +133,10 @@ test.describe('authenticated staff access', () => {
     test.skip((await row.count()) === 0, 'This group has no accounts to open.')
 
     await row.click()
-    const drawer = page.locator('dialog[open]')
+    /* Scoped to the drawer's own class since 19 September: the account drawer
+       can open a confirm dialog over itself, and a bare `dialog[open]` would
+       then match two elements and fail strict mode on an unrelated line. */
+    const drawer = page.locator('dialog.qw-drawer[open]')
     await expect(drawer).toBeVisible()
 
     /* Initial focus lands on the heading, so a screen reader announces the
