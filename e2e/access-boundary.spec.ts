@@ -41,6 +41,30 @@ test.describe('unauthenticated access', () => {
     await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
   })
 
+  /**
+   * The field labels read left, and this is measured rather than inspected.
+   *
+   * The card around these forms centres itself, for its logo and its heading,
+   * and **a label inherits that** — so the labels sat centred over their inputs
+   * until 20 September 2026, reading as captions. Nothing in the form's own
+   * markup was wrong, which is why it survived review and was reported by
+   * somebody looking at the page.
+   *
+   * A class scan cannot see this: the property came from an ancestor, and the
+   * element that carries it is in a different file from the element that reads
+   * wrong. Computed style in a real browser is the only thing that measures it,
+   * which is why the assertion lives here and not in the unit suite.
+   */
+  test('the sign-up form reads left, not centred under the card heading', async ({ page }) => {
+    await page.goto('/request-access')
+    for (const label of ['First name', 'Last name', 'Q Wealth email', 'Password']) {
+      await expect(page.getByText(label, { exact: true })).toHaveCSS('text-align', 'left')
+    }
+    /* The heading above them is still centred — the fix is scoped to the form,
+       not a blanket removal of the card's own alignment. */
+    await expect(page.getByRole('heading', { name: 'Request access' })).toHaveCSS('text-align', 'center')
+  })
+
   test('the login page itself is reachable', async ({ page }) => {
     await page.goto('/login')
     await expect(page.getByLabel(/email/i)).toBeVisible()

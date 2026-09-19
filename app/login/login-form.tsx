@@ -11,7 +11,7 @@ export function LoginForm({ next }: { next?: string }) {
       {next ? <input type="hidden" name="next" value={next} /> : null}
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-left text-xs font-medium text-neutral-600">
+        <span className="text-xs font-medium text-neutral-600">
           Email
         </span>
         <input
@@ -19,12 +19,12 @@ export function LoginForm({ next }: { next?: string }) {
           type="email"
           autoComplete="username"
           required
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15 text-left"
+          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15"
         />
       </label>
 
       <label className="flex flex-col gap-1.5">
-        <span className="text-left text-xs font-medium text-neutral-600">
+        <span className="text-xs font-medium text-neutral-600">
           Password
         </span>
         <input
@@ -32,7 +32,7 @@ export function LoginForm({ next }: { next?: string }) {
           type="password"
           autoComplete="current-password"
           required
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15 text-left"
+          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-brand-300 focus:ring-2 focus:ring-brand/15"
         />
       </label>
 
