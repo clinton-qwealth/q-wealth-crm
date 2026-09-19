@@ -32,7 +32,11 @@ test.describe('unauthenticated access', () => {
   test('the request-access page is reachable, and offers only a sign-up form', async ({ page }) => {
     await page.goto('/request-access')
     await expect(page.getByRole('heading', { name: 'Request access' })).toBeVisible()
-    await expect(page.getByLabel(/full name/i)).toBeVisible()
+    /* Two name boxes since 19 Sep 2026, when a staff member's name became two
+       columns. Asserted separately rather than as one /name/ match, which would
+       pass with either box missing. */
+    await expect(page.getByLabel(/first name/i)).toBeVisible()
+    await expect(page.getByLabel(/last name/i)).toBeVisible()
     await expect(page.getByLabel(/email/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
   })
