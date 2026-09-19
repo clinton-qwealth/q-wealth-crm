@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityFeed } from './activity-feed'
-import { Drawer, DrawerBody, DrawerHeader } from './drawer'
+import { DeleteRecordDialog } from './delete-record-dialog'
+import { Drawer, DrawerBody, DrawerFooter, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox } from './field-box'
 import { DataRow } from './data-section'
 import { Tabs } from './tabs'
@@ -18,7 +19,7 @@ import {
 } from './ui'
 import type { WorkflowPost } from '@/lib/workflow-board'
 import { formatCalendarDate } from '@/lib/note-date'
-import { savePolicyDetails } from '@/app/(shell)/groups/actions'
+import { deletePolicy, savePolicyDetails } from '@/app/(shell)/groups/actions'
 
 /**
  * The insurance policies list, and the one drawer that reads any of them.
@@ -145,8 +146,30 @@ export function PolicyList({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const policy = policies.find((p) => p.policy_id === selectedId) ?? null
 
+  /* The last deletion, by name — `AccountList`'s notice, for the reasons
+     written there: the drawer closes explicitly so the revalidated page does
+     not reach "Policy moved", and focus lands here because the row's trigger
+     no longer exists. */
+  const [deleted, setDeleted] = useState<string | null>(null)
+  const status = useRef<HTMLParagraphElement>(null)
+  useEffect(() => {
+    if (deleted) status.current?.focus()
+  }, [deleted])
+
   return (
     <>
+      {deleted ? (
+        <p
+          ref={status}
+          role="status"
+          tabIndex={-1}
+          data-slot="deleted-status"
+          className="mb-3 text-sm text-neutral-600 outline-none"
+        >
+          {deleted} was deleted.
+        </p>
+      ) : null}
+
       {policies.map((p) => (
         <DataRow
           key={p.policy_id}
@@ -162,7 +185,13 @@ export function PolicyList({
             .filter(Boolean)
             .join(' · ')}
           meta={coverSummary(p.total_lump_sum_cover, p.total_monthly_benefit) ?? undefined}
-          trigger={{ label: `Open ${p.label}`, onClick: () => setSelectedId(p.policy_id) }}
+          trigger={{
+            label: `Open ${p.label}`,
+            onClick: () => {
+              setDeleted(null)
+              setSelectedId(p.policy_id)
+            },
+          }}
         />
       ))}
 
@@ -180,6 +209,10 @@ export function PolicyList({
             staff={staff}
             viewer={viewer}
             onClose={() => setSelectedId(null)}
+            onDeleted={(label) => {
+              setSelectedId(null)
+              setDeleted(label)
+            }}
           />
         ) : (
           /* A policy belongs to the group of ANYONE with a role on it, so an
@@ -214,6 +247,7 @@ function PolicyPanel({
   staff,
   viewer,
   onClose,
+  onDeleted,
 }: {
   policy: PolicyRow
   members: { id: string; name: string }[]
@@ -222,6 +256,8 @@ function PolicyPanel({
   staff: Staff[]
   viewer: Viewer
   onClose: () => void
+  /** The policy was deleted. The owner closes the drawer and says so. */
+  onDeleted: (label: string) => void
 }) {
   const live = p.status === POLICY_LIVE
   const parties = p.parties ?? []
@@ -231,6 +267,11 @@ function PolicyPanel({
   const lumpSum = p.total_lump_sum_cover == null ? null : Number(p.total_lump_sum_cover)
   const monthly = p.total_monthly_benefit == null ? null : Number(p.total_monthly_benefit)
   const identity = <input type="hidden" name="policy_id" value={p.policy_id} />
+
+  /* The delete button and its confirm — the account drawer's, without the fed
+     rule: no feed maintains a policy, so there is nothing to disable it for. */
+  const [confirming, setConfirming] = useState(false)
+  const postCount = posts.filter((x) => x.policy_id === p.policy_id).length
 
   return (
     <>
@@ -467,6 +508,41 @@ function PolicyPanel({
           },
         ]}
       />
+
+      <DrawerFooter>
+        <div className="flex items-center justify-end gap-4">
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="shrink-0 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
+          >
+            Delete policy
+          </button>
+        </div>
+      </DrawerFooter>
+
+      {confirming ? (
+        <DeleteRecordDialog
+          record="policy"
+          label={p.label}
+          onDelete={() => deletePolicy(p.policy_id)}
+          onCancel={() => setConfirming(false)}
+          onDeleted={onDeleted}
+        >
+          This removes <strong className="font-semibold text-neutral-900">{p.label}</strong>
+          {p.policy_number ? ` (${p.policy_number})` : ''}
+          {parties.length
+            ? `, with ${Array.from(new Set(parties.map((x) => x.name))).join(' and ')} as its people`
+            : ''}
+          . Its {covers.length === 1 ? 'cover' : `${covers.length} covers`}
+          {postCount > 0
+            ? ` and ${postCount} activity ${postCount === 1 ? 'post go' : 'posts go'} with it`
+            : covers.length === 1
+              ? ' goes with it'
+              : ' go with it'}
+          . The account it is held in is not touched. This cannot be undone.
+        </DeleteRecordDialog>
+      ) : null}
     </>
   )
 }

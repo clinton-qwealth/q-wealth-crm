@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityFeed } from './activity-feed'
 import { AllocationBars } from './allocation-bars'
 import { AllocationDonut } from './allocation-donut'
-import { DeleteAccountDialog } from './delete-account-dialog'
+import { DeleteRecordDialog } from './delete-record-dialog'
 import { Drawer, DrawerBody, DrawerFooter, DrawerHeader } from './drawer'
 import { Tabs } from './tabs'
 import { ValueBars } from './value-bars'
@@ -25,7 +25,7 @@ import type { WorkflowPost } from '@/lib/workflow-board'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { allocation, type AssetClass } from '@/lib/allocation'
 import { formatCalendarDate, formatNoteDate } from '@/lib/note-date'
-import { saveAccountDetails } from '@/app/(shell)/groups/actions'
+import { deleteAccount, saveAccountDetails } from '@/app/(shell)/groups/actions'
 
 /**
  * The investment accounts list, and the one drawer that reads any of them.
@@ -503,12 +503,21 @@ function AccountPanel({
       </DrawerFooter>
 
       {confirming ? (
-        <DeleteAccountDialog
-          account={a}
-          postCount={postCount}
+        <DeleteRecordDialog
+          record="account"
+          label={a.label}
+          onDelete={() => deleteAccount(a.account_id)}
           onCancel={() => setConfirming(false)}
           onDeleted={onDeleted}
-        />
+        >
+          This removes <strong className="font-semibold text-neutral-900">{a.label}</strong> (
+          {a.account_number}){owners.length ? `, owned by ${owners.map((o) => o.name).join(', ')}` : ''}.
+          Its valuation history
+          {postCount > 0
+            ? ` and ${postCount} activity ${postCount === 1 ? 'post go' : 'posts go'} with it`
+            : ' goes with it'}
+          . A policy held inside it is kept and unlinked. This cannot be undone.
+        </DeleteRecordDialog>
       ) : null}
     </>
   )

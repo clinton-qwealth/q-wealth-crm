@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { PolicyList, coverAmount, type PolicyRow } from '@/components/policy-list'
+import * as actions from '@/app/(shell)/groups/actions'
 
 /**
  * The insurance-policy list and the drawer it opens.
@@ -22,6 +23,7 @@ import { PolicyList, coverAmount, type PolicyRow } from '@/components/policy-lis
    throws — the account drawer's test learned that on 17 September. */
 vi.mock('@/app/(shell)/groups/actions', () => ({
   savePolicyDetails: vi.fn(async () => ({ ok: true as const })),
+  deletePolicy: vi.fn(async () => ({ ok: true as const })),
   postPolicyActivity: vi.fn(async () => ({ ok: true as const })),
   togglePolicyPostReaction: vi.fn(async () => ({ ok: true as const })),
   postAccountActivity: vi.fn(),
@@ -400,5 +402,95 @@ describe('the policy drawer’s Activity tab', () => {
     open('Janet — Life and IP')
     tab('Activity')
     expect(within(drawer(container)).getByRole('button', { name: /post/i })).toBeTruthy()
+  })
+})
+
+/**
+ * Deleting a policy from the foot of its drawer — the account drawer's delete,
+ * through the same `DeleteRecordDialog`, so what is guarded here is what
+ * differs: the noun, the warning, the action, and that no fed rule disables
+ * the button. The gate itself (exact word, disabled until typed, refusal stays
+ * on screen) is the dialog's and is proved in `account-drawer.test.tsx`.
+ */
+describe('deleting a policy', () => {
+  beforeEach(() => {
+    vi.mocked(actions.deletePolicy).mockClear()
+    vi.mocked(actions.deletePolicy).mockResolvedValue({ ok: true as const })
+  })
+  const confirmDialog = (c: HTMLElement) => c.querySelectorAll('dialog')[1] as HTMLElement
+  const type = (input: HTMLElement, value: string) =>
+    act(() => {
+      fireEvent.change(input, { target: { value } })
+    })
+  const beginDelete = (c: HTMLElement) => {
+    act(() => {
+      fireEvent.click(within(drawer(c)).getByRole('button', { name: 'Delete policy' }))
+    })
+    return confirmDialog(c)
+  }
+
+  test('the button sits in a footer pinned as the drawer’s last child, always enabled', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    const footer = drawer(container).firstElementChild!.lastElementChild!
+    expect(footer.getAttribute('data-slot')).toBe('drawer-footer')
+    const button = within(footer as HTMLElement).getByRole('button', { name: 'Delete policy' })
+    expect(button.hasAttribute('disabled')).toBe(false)
+    /* No fed notice on a policy — nothing feeds one. */
+    expect(drawer(container).querySelector('[data-slot="fed-notice"]')).toBeNull()
+  })
+
+  test('opens the shared confirm dialog, marked as a policy, only while confirming', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+    const confirm = beginDelete(container)
+    expect(container.querySelectorAll('dialog')).toHaveLength(2)
+    expect(confirm.getAttribute('data-slot')).toBe('delete-record-dialog')
+    expect(confirm.getAttribute('data-record')).toBe('policy')
+  })
+
+  test('names what will go — the people, the covers, the posts — and what is not touched', () => {
+    const { container } = list()
+    open('Janet — Life and IP')
+    const text = beginDelete(container).textContent ?? ''
+    expect(text).toContain('Delete Janet — Life and IP?')
+    expect(text).toContain('TAL-99120')
+    /* The same person under both roles is named once. */
+    expect(text).toContain('with Janet Testsmith as its people')
+    expect(text).not.toContain('Janet Testsmith and Janet Testsmith')
+    expect(text).toContain('2 covers and 1 activity post go with it')
+    expect(text).toContain('held in is not touched')
+  })
+
+  test('confirming deletes THIS policy, closes the drawer, and says so where focus lands', async () => {
+    const { container } = list()
+    open('Reece — Trauma')
+    const confirm = beginDelete(container)
+    type(within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' }), 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete policy' }))
+    })
+    expect(actions.deletePolicy).toHaveBeenCalledWith('pol2')
+    expect(drawer(container).textContent).toBe('')
+    expect(container.querySelectorAll('dialog')).toHaveLength(1)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Reece — Trauma was deleted.')
+    expect(document.activeElement).toBe(status)
+  })
+
+  test('a refusal stays on screen with the drawer still open', async () => {
+    vi.mocked(actions.deletePolicy).mockResolvedValueOnce({ error: 'No such policy, or not one you have access to' })
+    const { container } = list()
+    open('Reece — Trauma')
+    const confirm = beginDelete(container)
+    type(within(confirm).getByRole('textbox', { name: 'Type Delete to confirm' }), 'Delete')
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Delete policy' }))
+    })
+    expect(within(confirm).getByRole('alert').textContent).toBe('No such policy, or not one you have access to')
+    expect(confirm.hasAttribute('open')).toBe(true)
+    expect(drawer(container).textContent).toContain('Reece — Trauma')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

@@ -1,13 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import { FIELD_INPUT } from './field-box'
-import type { AccountRow } from './account-list'
-import { deleteAccount } from '@/app/(shell)/groups/actions'
+import type { RecordDetailState } from '@/app/(shell)/groups/actions'
 
 /**
- * "Delete this account?" — the one destructive confirmation in the product that
- * asks the reader to type a word.
+ * "Delete this record?" — the one destructive confirmation in the product that
+ * asks the reader to type a word. Built for accounts on 19 September and
+ * generalised the same day when policies asked for it: the SECOND copy is the
+ * moment `field-box.tsx` says to extract, and this is what the extraction
+ * looks like. The dialog owns the gate, the outcome and the focus; the panel
+ * that opens it supplies the record's name, the sentence about what will go,
+ * and the action to call.
  *
  * ## Why a dialog over the drawer, and why it is mounted only while confirming
  *
@@ -49,18 +53,25 @@ import { deleteAccount } from '@/app/(shell)/groups/actions'
  * call survived every test, which is how that was learned — so this is
  * tidiness rather than a guard, and is recorded as exactly that.
  */
-export function DeleteAccountDialog({
-  account,
-  postCount,
+export function DeleteRecordDialog({
+  record,
+  label,
+  children,
+  onDelete,
   onCancel,
   onDeleted,
 }: {
-  account: AccountRow
-  /** Posts on this account, which the delete removes too. */
-  postCount: number
+  /** The noun on the red button — "Delete account", "Delete policy". */
+  record: 'account' | 'policy'
+  /** The record's own name, for the title and the notice afterwards. */
+  label: string
+  /** The warning: what goes with it and what stays. The panel knows; this does not. */
+  children: ReactNode
+  /** The server action, already bound to the record's id. */
+  onDelete: () => Promise<RecordDetailState>
   /** Escape, backdrop, Cancel — any close that is not a deletion. */
   onCancel: () => void
-  /** The account is gone. The parent closes the drawer and says so. */
+  /** The record is gone. The parent closes the drawer and says so. */
   onDeleted: (label: string) => void
 }) {
   const ref = useRef<HTMLDialogElement>(null)
@@ -90,28 +101,28 @@ export function DeleteAccountDialog({
     if (!armed || busy) return
     setError(null)
     start(async () => {
-      let result: Awaited<ReturnType<typeof deleteAccount>>
+      let result: RecordDetailState
       try {
-        result = await deleteAccount(account.account_id)
+        result = await onDelete()
       } catch {
-        result = { error: 'The account could not be deleted. Nothing was changed — try again.' }
+        result = { error: `The ${record} could not be deleted. Nothing was changed — try again.` }
       }
       if (result && 'error' in result) {
         setError(result.error)
         return
       }
-      onDeleted(account.label)
+      onDeleted(label)
     })
   }
 
-  const owners = (account.owner_parties ?? []).map((o) => o.name).join(', ')
-  const titleId = 'delete-account-title'
+  const titleId = 'delete-record-title'
 
   return (
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      data-slot="delete-account-dialog"
+      data-slot="delete-record-dialog"
+      data-record={record}
       onClick={(e) => {
         /* A backdrop click lands on the dialog itself; a click inside lands on
            the panel. The identity test is what tells them apart. */
@@ -122,18 +133,13 @@ export function DeleteAccountDialog({
       <div className="flex flex-col">
         <div className="border-b border-neutral-100 px-5 py-4">
           <h2 id={titleId} className="text-base font-semibold tracking-tight text-neutral-900">
-            Delete {account.label}?
+            Delete {label}?
           </h2>
         </div>
 
         <div className="space-y-4 px-5 py-4">
-          <p className="text-sm leading-relaxed text-neutral-700">
-            This removes <strong className="font-semibold text-neutral-900">{account.label}</strong> (
-            {account.account_number}){owners ? `, owned by ${owners}` : ''}. Its valuation history
-            {postCount > 0
-              ? ` and ${postCount} activity ${postCount === 1 ? 'post go' : 'posts go'} with it`
-              : ' goes with it'}
-            . A policy held inside it is kept and unlinked. This cannot be undone.
+          <p data-slot="delete-warning" className="text-sm leading-relaxed text-neutral-700">
+            {children}
           </p>
 
           <label className="flex flex-col gap-1.5">
@@ -178,7 +184,7 @@ export function DeleteAccountDialog({
             disabled={!armed || busy}
             className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
           >
-            {busy ? 'Deleting…' : 'Delete account'}
+            {busy ? 'Deleting…' : `Delete ${record}`}
           </button>
         </div>
       </div>

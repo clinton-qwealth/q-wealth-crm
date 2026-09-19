@@ -733,7 +733,8 @@ describe('deleting an account', () => {
     const confirm = beginDelete(container)
     expect(container.querySelectorAll('dialog')).toHaveLength(2)
     expect(confirm.hasAttribute('open')).toBe(true)
-    expect(confirm.getAttribute('data-slot')).toBe('delete-account-dialog')
+    expect(confirm.getAttribute('data-slot')).toBe('delete-record-dialog')
+    expect(confirm.getAttribute('data-record')).toBe('account')
   })
 
   test('names what will go, so the reader is deciding about a record and not a button', () => {

@@ -372,6 +372,25 @@ export async function deleteAccount(accountId: string): Promise<RecordDetailStat
   return { ok: true }
 }
 
+/**
+ * Delete a policy for good. `deleteAccount` with the noun changed and the
+ * same two deliberate absences — the typed word and any child cleanup — for
+ * the reasons written there. No provider rule applies: no feed maintains a
+ * policy, so there is nothing for the database to refuse on that ground.
+ */
+export async function deletePolicy(policyId: string): Promise<RecordDetailState> {
+  if (!policyId) return { error: 'No policy selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('delete_insurance_policy', { p_policy_id: policyId })
+  if (error) return { error: error.message }
+
+  /* The route pattern: a policy whose owner and life insured sit in two
+     groups was on both of their pages. */
+  revalidatePath(GROUP_PAGE, 'page')
+  return { ok: true }
+}
+
 export async function savePolicyDetails(
   _prev: RecordDetailState,
   formData: FormData,
