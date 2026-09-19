@@ -51,17 +51,13 @@ export function AuthShell({
             <p className="mt-1.5 text-sm leading-relaxed text-neutral-600">{description}</p>
           ) : null}
 
-          {/* The card centres its logo, title and description. The FORM is not
-              part of that: a field label centred over its input reads as a
-              caption rather than a label, and a paragraph of instructions is
-              harder to scan. Left-aligned here, once, rather than by each form
-              undoing the inherited centring on every label and input — which is
-              what the sign-in and code forms had been doing, and what the
-              request-access form was written without, so its labels sat centred
-              until 20 Sep 2026. Anything that genuinely wants centring says so
-              itself, and still wins: the six-digit code input, and the sign-in
-              page's "New to Q Wealth?" line. */}
-          <div className="mt-6 text-left">{children}</div>
+          {/* The card centres its logo, title and description, and the form
+              inside it inherits that. Fields must not: a label centred over its
+              input reads as a caption. They say so themselves, with `.qw-field`
+              — see globals.css. Left-aligning this whole slot instead was tried
+              on 20 Sep 2026 and was wrong: it dragged the enrolment panel's
+              instructions and QR block left with it. */}
+          <div className="mt-6">{children}</div>
         </div>
 
         {footer ? (

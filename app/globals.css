@@ -507,3 +507,28 @@ dialog.qw-drawer[open]::backdrop {
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Form fields inside the sign-in card read LEFT; the card around them is centred
+
+   The auth card — sign in, the code challenge, enrolment, request access —
+   centres itself for its logo, heading and description, and that is right for
+   those. A field does not inherit it well: a label centred over its own input
+   reads as a caption rather than as the name of the box beneath it, and an
+   error message about a field belongs above the field's left edge, not floating
+   in the middle of the card.
+
+   So the alignment is re-asserted per field group rather than per screen. The
+   same reasoning, and the same shape of fix, as `.qw-modal` and `.qw-drawer`
+   above: a component that can be mounted anywhere states the alignment it needs
+   instead of hoping for it.
+
+   The house rule this encodes, given on 20 September 2026: INPUTS AND THEIR
+   LABELS ARE ALWAYS LEFT; everything else in a sign-in flow is typically
+   centred. Two deliberate exceptions live in the components rather than here,
+   because they are about one control rather than the rule — the six-digit code
+   boxes centre their own digits.
+--------------------------------------------------------------------------- */
+.qw-field {
+  text-align: left;
+}

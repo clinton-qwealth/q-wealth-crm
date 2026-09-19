@@ -42,27 +42,33 @@ test.describe('unauthenticated access', () => {
   })
 
   /**
-   * The field labels read left, and this is measured rather than inspected.
+   * The alignment rule, measured in a real browser.
    *
-   * The card around these forms centres itself, for its logo and its heading,
-   * and **a label inherits that** — so the labels sat centred over their inputs
-   * until 20 September 2026, reading as captions. Nothing in the form's own
-   * markup was wrong, which is why it survived review and was reported by
-   * somebody looking at the page.
+   * **Inputs and their labels always read left; everything else in a sign-in
+   * flow is centred.** The card centres itself for its logo and heading, and a
+   * field inherits that unless it says otherwise — which is how the sign-up
+   * labels came to sit centred over their boxes, reading as captions.
    *
-   * A class scan cannot see this: the property came from an ancestor, and the
-   * element that carries it is in a different file from the element that reads
-   * wrong. Computed style in a real browser is the only thing that measures it,
-   * which is why the assertion lives here and not in the unit suite.
+   * A class scan cannot see this: the property comes from an ancestor, in a
+   * different file from the element that reads wrong. Computed style is the only
+   * thing that measures it. Only the two public screens are reachable here;
+   * `__tests__/auth-field-alignment.test.ts` covers the MFA screens, which need
+   * a session this suite has no fixture for.
    */
-  test('the sign-up form reads left, not centred under the card heading', async ({ page }) => {
+  test('fields read left and the card around them stays centred', async ({ page }) => {
     await page.goto('/request-access')
     for (const label of ['First name', 'Last name', 'Q Wealth email', 'Password']) {
       await expect(page.getByText(label, { exact: true })).toHaveCSS('text-align', 'left')
     }
-    /* The heading above them is still centred — the fix is scoped to the form,
-       not a blanket removal of the card's own alignment. */
     await expect(page.getByRole('heading', { name: 'Request access' })).toHaveCSS('text-align', 'center')
+
+    await page.goto('/login')
+    for (const label of ['Email', 'Password']) {
+      await expect(page.getByText(label, { exact: true })).toHaveCSS('text-align', 'left')
+    }
+    await expect(page.getByRole('heading', { name: 'Staff sign in' })).toHaveCSS('text-align', 'center')
+    /* Prose, not a field: it stays with the card. */
+    await expect(page.getByText(/New to Q Wealth\?/)).toHaveCSS('text-align', 'center')
   })
 
   /**
@@ -86,6 +92,8 @@ test.describe('unauthenticated access', () => {
     const alert = page.locator('[data-slot="arrival-notice"]')
     await expect(alert).toContainText(/expired or has already been used/i)
     await expect(alert).toHaveAttribute('role', 'alert')
+    /* Centred: a sentence about how you arrived is not a field error. */
+    await expect(alert).toHaveCSS('text-align', 'center')
     await expect(page.getByLabel(/password/i), 'the form is still there to use').toBeVisible()
   })
 

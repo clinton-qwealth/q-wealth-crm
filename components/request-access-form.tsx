@@ -28,7 +28,7 @@ function NameFields({ first = '', last = '' }: { first?: string; last?: string }
     <div className="grid grid-cols-2 gap-3">
       {/* 60 each, matching the limit `request_staff_access()` enforces, so the
           database cannot be made to refuse a name this form accepted. */}
-      <label className="flex flex-col gap-1">
+      <label className="qw-field flex flex-col gap-1">
         <span className={LABEL}>First name</span>
         <input
           name="first_name"
@@ -39,7 +39,7 @@ function NameFields({ first = '', last = '' }: { first?: string; last?: string }
           className={FIELD}
         />
       </label>
-      <label className="flex flex-col gap-1">
+      <label className="qw-field flex flex-col gap-1">
         <span className={LABEL}>Last name</span>
         <input
           name="last_name"
@@ -86,16 +86,16 @@ export function SignUpForm() {
   return (
     <form action={action} className="flex flex-col gap-3">
       <NameFields />
-      <label className="flex flex-col gap-1">
+      <label className="qw-field flex flex-col gap-1">
         <span className={LABEL}>Q Wealth email</span>
         <input name="email" type="email" required autoComplete="email" placeholder="you@qwealth.com.au" className={FIELD} />
       </label>
-      <label className="flex flex-col gap-1">
+      <label className="qw-field flex flex-col gap-1">
         <span className={LABEL}>Password</span>
         <input name="password" type="password" required minLength={12} autoComplete="new-password" className={FIELD} />
       </label>
       {state && 'error' in state ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="qw-field text-sm text-red-600">
           {state.error}
         </p>
       ) : null}
@@ -119,7 +119,7 @@ export function RequestAccessForm({
       {next ? <input type="hidden" name="next" value={next} /> : null}
       <NameFields first={suggested?.first_name} last={suggested?.last_name} />
       {state && 'error' in state ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="qw-field text-sm text-red-600">
           {state.error}
         </p>
       ) : null}

@@ -10,7 +10,7 @@ export function LoginForm({ next }: { next?: string }) {
     <form action={formAction} className="flex flex-col gap-4">
       {next ? <input type="hidden" name="next" value={next} /> : null}
 
-      <label className="flex flex-col gap-1.5">
+      <label className="qw-field flex flex-col gap-1.5">
         <span className="text-xs font-medium text-neutral-600">
           Email
         </span>
@@ -23,7 +23,7 @@ export function LoginForm({ next }: { next?: string }) {
         />
       </label>
 
-      <label className="flex flex-col gap-1.5">
+      <label className="qw-field flex flex-col gap-1.5">
         <span className="text-xs font-medium text-neutral-600">
           Password
         </span>
@@ -37,7 +37,7 @@ export function LoginForm({ next }: { next?: string }) {
       </label>
 
       {state?.error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="qw-field text-sm text-red-600">
           {state.error}
         </p>
       ) : null}

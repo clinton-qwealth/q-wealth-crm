@@ -43,7 +43,7 @@ export function ChallengeForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
-      <label className="flex flex-col gap-1.5">
+      <label className="qw-field flex flex-col gap-1.5">
         <span className="text-xs font-medium text-neutral-600">
           Authentication code
         </span>
@@ -61,7 +61,7 @@ export function ChallengeForm({ next }: { next: string }) {
       </label>
 
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="qw-field text-sm text-red-600">
           {error}
         </p>
       ) : null}
