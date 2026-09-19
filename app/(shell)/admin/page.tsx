@@ -37,6 +37,9 @@ export default async function AdminPage() {
     getAccessProfiles(),
   ])
 
+  /* Derived from the rows already in the wave, not a second count query. */
+  const pending = staffRows.filter((s) => s.status === 'pending').length
+
   return (
     <>
       <PageHeading
@@ -58,7 +61,7 @@ export default async function AdminPage() {
             },
             {
               id: 'staff',
-              label: 'Staff',
+              label: pending > 0 ? `Staff (${pending} awaiting approval)` : 'Staff',
               panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
             },
           ]}

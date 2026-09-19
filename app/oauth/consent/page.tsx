@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { getCurrentStaff } from '@/lib/staff'
+import { getCurrentStaff, getRegistration } from '@/lib/staff'
+import { RequestAccessForm } from '@/components/request-access-form'
 import { getMfaState } from '@/lib/mfa'
 import { ConsentForm } from './consent-form'
 import { ConsentShell } from './consent-shell'
@@ -53,6 +54,43 @@ export default async function ConsentPage({
   // hand out something useless and confusing.
   const staff = await getCurrentStaff()
   if (!staff) {
+    /*
+     * Three kinds of not-staff, since 19 September. No row at all is a person
+     * who signed up and has not yet asked: this is where "register via the
+     * MCP" lands, so the request form is offered here, before the MFA check —
+     * enrolment comes after approval. A pending row is a person waiting. An
+     * inactive row is refused as before. None of them reaches ConsentForm:
+     * a token is issued only past `getCurrentStaff()`.
+     */
+    const registration = await getRegistration()
+    const row = registration.signedIn ? registration.row : null
+    if (!row) {
+      return (
+        <ConsentShell title="Request access to Q Wealth CRM">
+          <p>
+            You are signed in as <span className="font-medium">{user.email}</span>, but that
+            account is not yet a Q Wealth staff member. Ask to join, and an administrator will
+            approve you with an access profile.
+          </p>
+          <RequestAccessForm
+            suggestedName={registration.signedIn ? registration.suggestedName : null}
+            next={returnTo}
+          />
+        </ConsentShell>
+      )
+    }
+    if (row.status === 'pending') {
+      return (
+        <ConsentShell title="Awaiting approval">
+          <p>
+            Your request to join Q Wealth CRM as{' '}
+            <span className="font-medium">{row.full_name}</span> is with the administrators.
+            Once approved, sign in to the CRM, set up two-factor authentication, then start this
+            connection again.
+          </p>
+        </ConsentShell>
+      )
+    }
     return (
       <ConsentShell title="Not a Q Wealth staff account">
         <p>

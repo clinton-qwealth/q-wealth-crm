@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
+import { approveStaffRegistration, declineStaffRegistration, saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
 import {
   isStaffAvatarType,
@@ -16,6 +16,7 @@ import { DataRow } from './data-section'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
 import { Pill, SHEET } from './ui'
+import { formatNoteDateTime } from '@/lib/note-date'
 
 /**
  * The staff, and the one drawer that edits any of them.
@@ -57,13 +58,21 @@ export function StaffList({
   viewer: Viewer
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const person = staff.find((s) => s.id === selectedId) ?? null
+  /* The queue and the list are the same rows in two states. A pending person
+     is not yet on the staff, so they are not in the list they would be edited
+     from; they are in the queue, where the only two things to do are the two
+     things that can be done. */
+  const waiting = staff.filter((s) => s.status === 'pending')
+  const members = staff.filter((s) => s.status !== 'pending')
+  const person = members.find((s) => s.id === selectedId) ?? null
 
   return (
     <>
+      {waiting.length > 0 ? <AwaitingApproval requests={waiting} profiles={profiles} /> : null}
+
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
-          {staff.map((s) => (
+          {members.map((s) => (
             <DataRow
               key={s.id}
               leading={<Avatar staffId={s.id} name={s.full_name} avatarPath={s.avatar_path} />}
@@ -303,5 +312,128 @@ function PhotoBox({ person: p }: { person: StaffRow }) {
         </div>
       }
     />
+  )
+}
+
+/**
+ * People who have asked to join, since 19 September.
+ *
+ * Each request is a row with the two decisions beside it. Approve needs a
+ * profile chosen first — no default, because "which access" is the whole
+ * decision and a preselected Adviser would be made by whoever pressed fastest.
+ * Decline is behind one confirm, not a typed word: it is reversible in the
+ * sense that matters (the row stays, an administrator can reactivate it from
+ * the list below), so the account-delete ceremony would be theatre here.
+ */
+function AwaitingApproval({ requests, profiles }: { requests: StaffRow[]; profiles: AccessProfileChoice[] }) {
+  return (
+    <section data-slot="awaiting-approval" aria-labelledby="awaiting-heading" className="mb-6">
+      <h3 id="awaiting-heading" className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        Awaiting approval
+      </h3>
+      <div className={SHEET}>
+        <ul className="divide-y divide-neutral-200/80">
+          {requests.map((r) => (
+            <RequestRow key={r.id} request={r} profiles={profiles} />
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
+function RequestRow({ request: r, profiles }: { request: StaffRow; profiles: AccessProfileChoice[] }) {
+  const [profileId, setProfileId] = useState('')
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+
+  function approve() {
+    setError(null)
+    start(async () => {
+      const result = await approveStaffRegistration(r.id, profileId)
+      if (result && 'error' in result) setError(result.error)
+    })
+  }
+  function decline() {
+    setError(null)
+    start(async () => {
+      const result = await declineStaffRegistration(r.id)
+      if (result && 'error' in result) setError(result.error)
+      setConfirming(false)
+    })
+  }
+
+  return (
+    <li data-slot="access-request" className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar staffId={r.id} name={r.full_name} avatarPath={null} />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-neutral-900">{r.full_name}</div>
+          <div className="truncate text-xs text-neutral-500">
+            {r.email} · asked {formatNoteDateTime(r.created_at)}
+          </div>
+          {error ? (
+            <p role="alert" className="mt-1 text-xs text-red-600">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {confirming ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
+          <span className="text-neutral-700">Decline {r.full_name}?</span>
+          <button
+            type="button"
+            onClick={decline}
+            disabled={busy}
+            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/40"
+          >
+            {busy ? 'Declining…' : 'Yes, decline'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 outline-none hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            Keep
+          </button>
+        </div>
+      ) : (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <select
+            aria-label={`Access profile for ${r.full_name}`}
+            value={profileId}
+            onChange={(e) => setProfileId(e.target.value)}
+            disabled={busy}
+            className={FIELD_INPUT}
+          >
+            <option value="">Choose a profile</option>
+            {profiles.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={approve}
+            disabled={busy || profileId === ''}
+            className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            {busy ? 'Approving…' : 'Approve'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-neutral-600 outline-none transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:ring-2 focus-visible:ring-red-500/30"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+    </li>
   )
 }

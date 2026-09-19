@@ -55,9 +55,9 @@ export function Avatar({
 
   if (avatarPath && !broken) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- served by our own
-      // route with a per-caller redirect; next/image would try to optimise a
-      // URL that answers 302.
+      /* Served by our own route with a per-caller redirect; next/image would
+         try to optimise a URL that answers 302. */
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={staffAvatarUrl(staffId, avatarPath)}
         alt=""

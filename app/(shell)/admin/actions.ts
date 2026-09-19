@@ -158,3 +158,43 @@ export async function setStaffAvatar(staffId: string, path: string | null): Prom
   revalidatePath('/profile')
   return { ok: true }
 }
+
+/**
+ * Approve a pending access request with a profile.
+ *
+ * One database function, one transaction: the row goes active and the
+ * assignment is inserted together, through the administrator's own RLS so the
+ * audit trail names who approved. Every refusal — not an administrator,
+ * already decided, no such profile — is the database's sentence, unrewritten.
+ * The shape check on the ids is the front-door rule: nothing forwarded that
+ * is not the kind of thing asked for.
+ */
+export async function approveStaffRegistration(staffId: string, profileId: string): Promise<StaffDetailState> {
+  if (!UUID.test(staffId)) return { error: 'No request selected.' }
+  if (!UUID.test(profileId)) return { error: 'Choose an access profile.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('approve_staff_registration', { p_staff_id: staffId, p_profile_id: profileId })
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+/**
+ * Decline a pending request: the row becomes inactive, which is the state the
+ * Phase 2 function already knows how to reach and whose rules already refuse
+ * a return to pending. Nothing is deleted — the audit trail and the row both
+ * say a request was made and refused, and the person cannot ask again from
+ * the same account.
+ */
+export async function declineStaffRegistration(staffId: string): Promise<StaffDetailState> {
+  if (!UUID.test(staffId)) return { error: 'No request selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_staff_patch', { p_staff_id: staffId, p_patch: { status: 'inactive' } })
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}

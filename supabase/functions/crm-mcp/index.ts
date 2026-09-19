@@ -139,7 +139,12 @@ function fail(message: string) {
 // profile_id was moved out of staff_users on 31 Aug 2026 so that staff identity
 // could be readable by colleagues while the permission mapping stayed restricted
 // to administrators. Each staff member can always read their own assignment.
-async function getStaff(db: SupabaseClient, authUserId: string): Promise<Staff | null> {
+//
+// Since 19 Sep 2026 a row may exist WITHOUT a profile: a person who asked to
+// join and is awaiting approval, or one whose request was declined. The gate
+// wants to tell those apart from "no row at all", so the row's status comes
+// back alongside the staff object, which stays null until a profile exists.
+async function getStaff(db: SupabaseClient, authUserId: string): Promise<{ staff: Staff | null; rowStatus: string | null }> {
   const { data, error } = await db
     .from('staff_users')
     .select(
@@ -147,7 +152,7 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<Staff |
     )
     .eq('auth_user_id', authUserId)
     .maybeSingle()
-  if (error || !data) return null
+  if (error || !data) return { staff: null, rowStatus: null }
 
   // The assignment is to-one (its primary key is staff_id), so PostgREST returns
   // an object. Tolerate an array too, in case relationship detection changes.
@@ -160,19 +165,22 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<Staff |
   const profile = assignment?.access_profiles
   // No profile means no permissions at all. Refuse rather than proceed with a
   // partially-populated staff object.
-  if (!profile) return null
+  if (!profile) return { staff: null, rowStatus: row.status as string }
 
   return {
-    id: row.id as string,
-    full_name: row.full_name as string,
-    email: row.email as string,
-    status: row.status as string,
-    access_profiles: profile,
+    staff: {
+      id: row.id as string,
+      full_name: row.full_name as string,
+      email: row.email as string,
+      status: row.status as string,
+      access_profiles: profile,
+    },
+    rowStatus: row.status as string,
   }
 }
 
 function buildServer(db: SupabaseClient, staff: Staff) {
-  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.0' })
+  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.1' })
 
   server.registerTool(
     'whoami',
@@ -708,13 +716,22 @@ app.all('/', async (c) => {
     })
   }
 
-  const staff = await getStaff(db, userData.user.id)
+  const { staff, rowStatus } = await getStaff(db, userData.user.id)
   if (!staff || staff.status !== 'active') {
+    // Three sentences for three situations, so a person setting up the
+    // connector learns what to do next rather than only that they may not.
+    // None of them changes what is granted: nothing, in every case.
+    const message =
+      rowStatus === 'pending'
+        ? 'Your request to join Q Wealth CRM is awaiting an administrator\'s approval'
+        : rowStatus === null
+          ? 'This account is not a Q Wealth staff member — sign in to the CRM and request access'
+          : 'Not an active Q Wealth staff member'
     logRejection('Authenticated but not active staff', {
       email: userData.user.email,
-      staff_row: staff ? 'found but inactive' : 'none',
+      staff_row: rowStatus ?? 'none',
     })
-    return new Response(JSON.stringify({ error: 'Not an active Q Wealth staff member' }), {
+    return new Response(JSON.stringify({ error: message }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
     })

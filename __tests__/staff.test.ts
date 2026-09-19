@@ -13,7 +13,10 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
  * React's `cache()` is a pass-through outside a server render, so each call
  * here runs fresh; that is what lets the cases stand alone.
  */
-type Claims = { data: { claims: { sub: string; aal: string } } | null; error: { message: string } | null }
+type Claims = {
+  data: { claims: { sub: string; aal: string; email?: string; user_metadata?: Record<string, unknown> } } | null
+  error: { message: string } | null
+}
 
 const queries: string[] = []
 const selects: string[] = []
@@ -54,7 +57,7 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { getCurrentStaff } = await import('@/lib/staff')
+const { getCurrentStaff, getRegistration } = await import('@/lib/staff')
 
 const PROFILE = {
   name: 'Adviser',
@@ -185,5 +188,43 @@ describe('what getCurrentStaff asks for', () => {
     for (const f of ['view_all_groups', 'view_sensitive', 'manage_groups', 'manage_staff', 'file_unmatched_notes', 'verify_identity']) {
       expect(cols, `the profile embed names ${f}`).toContain(f)
     }
+  })
+})
+
+/**
+ * `getRegistration()` — the question asked when `getCurrentStaff()` says null:
+ * is anyone signed in, and where do they stand? Four answers, and the one thing
+ * that must NOT change: a pending row is still null from `getCurrentStaff()`.
+ */
+describe('getRegistration', () => {
+  test('signed out: no query at all', async () => {
+    CLAIMS = { data: null, error: null }
+    await expect(getRegistration()).resolves.toEqual({ signedIn: false })
+    expect(queries).toEqual([])
+  })
+
+  test('signed in with no row: the email and the sign-up name, for the request form', async () => {
+    CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'new@qwealth.com.au', user_metadata: { full_name: '  Nina New ' } } }, error: null }
+    ROW = null
+    const r = await getRegistration()
+    expect(r).toEqual({ signedIn: true, email: 'new@qwealth.com.au', suggestedName: 'Nina New', row: null })
+    expect(eqCalls).toEqual([['auth_user_id', 'user-1']])
+    expect(selects[0]).not.toContain('access_profiles')
+  })
+
+  test('a pending row comes back as pending, and a blank metadata name is null', async () => {
+    CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'new@qwealth.com.au', user_metadata: { full_name: '   ' } } }, error: null }
+    ROW = { id: 's9', full_name: 'Nina New', email: 'new@qwealth.com.au', status: 'pending' }
+    const r = await getRegistration()
+    expect(r.signedIn && r.row).toEqual({ id: 's9', full_name: 'Nina New', email: 'new@qwealth.com.au', status: 'pending' })
+    expect(r.signedIn && r.suggestedName).toBeNull()
+  })
+
+  test('a pending row is still NOT staff to getCurrentStaff', async () => {
+    CLAIMS = signedIn
+    ROW = row({ status: 'pending', staff_access_assignments: null })
+    await expect(getCurrentStaff()).resolves.toBeNull()
+    ROW = row({ status: 'pending' })
+    await expect(getCurrentStaff()).resolves.toBeNull()
   })
 })

@@ -24,6 +24,19 @@ test.describe('unauthenticated access', () => {
     })
   }
 
+  /**
+   * Since 19 Sep 2026 a stranger may create an account and ask to join. The
+   * page they do it on is public by design, and must show a sign-up form —
+   * nothing else — to someone with no session.
+   */
+  test('the request-access page is reachable, and offers only a sign-up form', async ({ page }) => {
+    await page.goto('/request-access')
+    await expect(page.getByRole('heading', { name: 'Request access' })).toBeVisible()
+    await expect(page.getByLabel(/full name/i)).toBeVisible()
+    await expect(page.getByLabel(/email/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
+  })
+
   test('the login page itself is reachable', async ({ page }) => {
     await page.goto('/login')
     await expect(page.getByLabel(/email/i)).toBeVisible()
@@ -55,7 +68,7 @@ test.describe('unauthenticated access', () => {
       }
     })
 
-    for (const path of PROTECTED) await page.goto(path)
+    for (const path of [...PROTECTED, '/request-access']) await page.goto(path)
 
     expect(leaked, `client data leaked to an anonymous visitor:\n${leaked.join('\n')}`).toEqual([])
   })

@@ -13,6 +13,8 @@ import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
 vi.mock('@/app/(shell)/admin/actions', () => ({
   saveStaffDetails: vi.fn(async () => ({ ok: true as const })),
   setStaffAvatar: vi.fn(async () => ({ ok: true as const })),
+  approveStaffRegistration: vi.fn(async () => ({ ok: true as const })),
+  declineStaffRegistration: vi.fn(async () => ({ ok: true as const })),
   loadAuditEntries: vi.fn(),
 }))
 vi.mock('@/lib/supabase/client', () => ({
@@ -24,8 +26,8 @@ const PROFILES: AccessProfileChoice[] = [
   { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true, verify_identity: false },
   { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false, verify_identity: true },
 ]
-const ME: StaffRow = { id: 's1', full_name: 'Sarah Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', full_name: 'Reece Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', profile: { id: 'pb', name: 'Adviser' } }
+const ME: StaffRow = { id: 's1', full_name: 'Sarah Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pa', name: 'Admin' } }
+const THEM: StaffRow = { id: 's2', full_name: 'Reece Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pb', name: 'Adviser' } }
 
 const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
@@ -130,5 +132,62 @@ describe('the staff drawer', () => {
     open('Sarah Chen')
     const input = within(drawer(container)).getByLabelText('Upload photo')
     expect(input.getAttribute('accept')).toBe('image/png,image/jpeg,image/webp')
+  })
+})
+
+/**
+ * The approval queue, since 19 September. A pending person is in the queue
+ * and not in the list; Approve waits for a profile; Decline asks once.
+ */
+const PENDING: StaffRow = { id: 's9', full_name: 'Nina New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', profile: null }
+
+describe('awaiting approval', () => {
+  test('is absent when nobody is waiting', () => {
+    const { container } = list()
+    expect(container.querySelector('[data-slot="awaiting-approval"]')).toBeNull()
+  })
+
+  test('a pending person is in the queue, not in the staff list', () => {
+    const { container } = render(<ul><StaffList staff={[ME, PENDING, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    const queue = container.querySelector('[data-slot="awaiting-approval"]')!
+    expect(queue.textContent).toContain('Nina New')
+    expect(queue.textContent).toContain('nina@qwealth.com.au')
+    expect(screen.queryByRole('button', { name: 'Open Nina New' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open Reece Testlee' })).toBeTruthy()
+  })
+
+  test('Approve is disabled until a profile is chosen, then sends both ids', async () => {
+    const { approveStaffRegistration } = await import('@/app/(shell)/admin/actions')
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    const approve = screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement
+    expect(approve.disabled).toBe(true)
+    const select = screen.getByRole('combobox', { name: 'Access profile for Nina New' }) as HTMLSelectElement
+    /* No default: the first option is the prompt, not a profile. */
+    expect(select.value).toBe('')
+    await act(async () => { fireEvent.change(select, { target: { value: 'pb' } }) })
+    expect(approve.disabled).toBe(false)
+    await act(async () => { fireEvent.click(approve) })
+    expect(approveStaffRegistration).toHaveBeenCalledWith('s9', 'pb')
+  })
+
+  test('Decline asks once, and Keep withdraws', async () => {
+    const { declineStaffRegistration } = await import('@/app/(shell)/admin/actions')
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Decline' })) })
+    expect(declineStaffRegistration).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Keep' })) })
+    expect(screen.queryByRole('button', { name: 'Yes, decline' })).toBeNull()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Decline' })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yes, decline' })) })
+    expect(declineStaffRegistration).toHaveBeenCalledWith('s9')
+  })
+
+  test('the database’s refusal is shown beside the request', async () => {
+    const { approveStaffRegistration } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(approveStaffRegistration).mockResolvedValueOnce({ error: 'This request has already been decided' })
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: 'Access profile for Nina New' }), { target: { value: 'pa' } }) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })) })
+    expect(screen.getByRole('alert').textContent).toBe('This request has already been decided')
   })
 })

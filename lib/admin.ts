@@ -86,6 +86,8 @@ export type StaffRow = {
   email: string
   status: string
   avatar_path: string | null
+  /** When the row was made — for a pending request, when the person asked. */
+  created_at: string
   profile: { id: string; name: string } | null
 }
 
@@ -105,13 +107,15 @@ export type AccessProfileChoice = {
  * Everyone on the staff, with their profile, for the Staff tab. Reads the
  * base table rather than the directory: the directory carries no profile,
  * and the base table's policy admits an administrator. Inactive people are
- * listed on purpose — notes reference their authors forever.
+ * listed on purpose — notes reference their authors forever. Pending people
+ * come back too, since 19 September: the Staff tab shows them as the queue
+ * awaiting approval, so no second read is needed for the count.
  */
 export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('staff_users')
-    .select('id, full_name, email, status, avatar_path, staff_access_assignments(profile_id, access_profiles(id, name))')
+    .select('id, full_name, email, status, avatar_path, created_at, staff_access_assignments(profile_id, access_profiles(id, name))')
     .order('full_name')
   if (error) throw new Error(`The staff list could not be read: ${error.message}`)
   return (data ?? []).map((r) => {
@@ -129,6 +133,7 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
       email: row.email as string,
       status: row.status as string,
       avatar_path: (row.avatar_path as string | null) ?? null,
+      created_at: row.created_at as string,
       profile: profile ? { id: profile.id, name: profile.name } : null,
     }
   })

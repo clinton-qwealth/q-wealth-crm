@@ -29,7 +29,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
 // Reachable without a session. /oauth/consent is public on purpose: it needs to
 // receive Supabase's redirect and then bounce to login itself, preserving the
 // authorization_id it was called with.
-const PUBLIC_PATHS = ['/login', '/auth', '/oauth/consent']
+const PUBLIC_PATHS = ['/login', '/auth', '/oauth/consent', '/request-access']
 
 export async function proxy(request: NextRequest) {
   const t0 = performance.now()

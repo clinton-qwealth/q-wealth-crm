@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getCurrentStaff } from '@/lib/staff'
+import { getCurrentStaff, getRegistration } from '@/lib/staff'
 import { isAdmin } from '@/lib/admin'
 import { getMfaState } from '@/lib/mfa'
 import { TopNav } from '@/components/top-nav'
@@ -14,7 +14,14 @@ import { TopNav } from '@/components/top-nav'
  */
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const staff = await getCurrentStaff()
-  if (!staff) redirect('/login')
+  if (!staff) {
+    /* Signed in but not active staff — a person who has asked to join, or
+       been declined, or a stranger — goes to the request page, which says
+       which. Until 19 September they were sent to the login page, signed in,
+       and shown the login form again: a loop with no exit. */
+    const registration = await getRegistration()
+    redirect(registration.signedIn ? '/request-access' : '/login')
+  }
 
   /*
    * Two-factor authentication is mandatory, enforced here rather than on each

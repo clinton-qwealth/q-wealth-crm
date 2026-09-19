@@ -97,6 +97,7 @@ export const TABLE_LABEL: Record<string, string> = {
   asset_liability_owners: 'Asset or liability owner',
   insurance_policies: 'Insurance policy',
   insurance_policy_parties: 'Policy party',
+  staff_email_domains: 'Staff email domain',
 }
 
 export const NOT_AUDITED_COPY =

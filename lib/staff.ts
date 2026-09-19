@@ -103,3 +103,52 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
     access_profiles: profile,
   }
 })
+
+/**
+ * Who is signed in, whether or not they are staff — the question the request
+ * page and the consent screen ask when `getCurrentStaff()` says null.
+ *
+ * `getCurrentStaff()`'s contract is unchanged: null for anything that is not an
+ * active staff member with a profile. This reads the same row through the same
+ * client and reports what is actually there: no row (a stranger who signed up),
+ * a pending row (asked, not yet approved), or an inactive one. A pending person
+ * can read their own row because `staff_read_own_row` says so; that policy is
+ * the only reason this can be an ordinary select.
+ *
+ * The name comes from the sign-up form via user metadata in the claims, so the
+ * request form can be prefilled. It is a suggestion; the function that writes
+ * the row takes what the person submits.
+ */
+export type Registration =
+  | { signedIn: false }
+  | {
+      signedIn: true
+      email: string | null
+      suggestedName: string | null
+      row: { id: string; full_name: string; email: string; status: string } | null
+    }
+
+export const getRegistration = cache(async (): Promise<Registration> => {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data: verified } = await supabase.auth.getClaims()
+  const claims = verified?.claims as
+    | { sub?: string; email?: string; user_metadata?: { full_name?: unknown } }
+    | undefined
+  if (!claims?.sub) return { signedIn: false }
+
+  const { data } = await supabase
+    .from('staff_users')
+    .select('id, full_name, email, status')
+    .eq('auth_user_id', claims.sub)
+    .maybeSingle()
+
+  const suggested = claims.user_metadata?.full_name
+  return {
+    signedIn: true,
+    email: claims.email ?? null,
+    suggestedName: typeof suggested === 'string' && suggested.trim() ? suggested.trim() : null,
+    row: data
+      ? { id: data.id as string, full_name: data.full_name as string, email: data.email as string, status: data.status as string }
+      : null,
+  }
+})

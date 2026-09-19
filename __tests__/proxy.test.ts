@@ -92,7 +92,7 @@ describe('the proxy', () => {
   })
 
   test('public paths pass without a session, by segment and not by prefix', async () => {
-    for (const path of ['/login', '/auth/callback', '/oauth/consent?authorization_id=a']) {
+    for (const path of ['/login', '/auth/callback', '/auth/confirm?token_hash=t&type=email', '/oauth/consent?authorization_id=a', '/request-access']) {
       const res = await proxy(request(path, ''))
       expect(res.status, path).toBe(200)
       expect(res.headers.get('location'), path).toBeNull()
@@ -101,6 +101,8 @@ describe('the proxy', () => {
        `path === p || path.startsWith(p + '/')`, a segment test. */
     const res = await proxy(request('/loginx', ''))
     expect(res.status).toBe(307)
+    /* And the Administration page is not public, whatever it is next to. */
+    expect((await proxy(request('/admin', ''))).status).toBe(307)
   })
 
   /**
