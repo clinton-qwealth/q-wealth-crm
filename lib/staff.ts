@@ -17,6 +17,8 @@ export type Staff = {
   full_name: string
   email: string
   status: string
+  /** Object path of their photo in the staff-avatars bucket, or null. See lib/avatar.ts. */
+  avatar_path: string | null
   access_profiles: AccessProfile
 }
 
@@ -71,7 +73,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
+      'id, full_name, email, status, avatar_path, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
     )
     .eq('auth_user_id', sub)
     .maybeSingle()
@@ -97,6 +99,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
     full_name: row.full_name as string,
     email: row.email as string,
     status: row.status as string,
+    avatar_path: (row.avatar_path as string | null) ?? null,
     access_profiles: profile,
   }
 })

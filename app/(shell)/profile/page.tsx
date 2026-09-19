@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { Avatar } from '@/components/avatar'
 import { getCurrentStaff } from '@/lib/staff'
 import { getMfaState } from '@/lib/mfa'
 import { signOut } from '@/app/actions'
@@ -35,7 +36,10 @@ export default async function ProfilePage() {
         <dl className="divide-y divide-neutral-100">
           <div className="flex items-center justify-between gap-4 py-2">
             <dt className="text-sm text-neutral-500">Name</dt>
-            <dd className="text-sm font-medium text-neutral-900">{staff.full_name}</dd>
+            <dd className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+              <Avatar staffId={staff.id} name={staff.full_name} avatarPath={staff.avatar_path} size="sm" />
+              {staff.full_name}
+            </dd>
           </div>
           <div className="flex items-center justify-between gap-4 py-2">
             <dt className="text-sm text-neutral-500">Email</dt>
@@ -49,8 +53,8 @@ export default async function ProfilePage() {
           </div>
         </dl>
         <p className="mt-3 text-xs leading-relaxed text-neutral-400">
-          Name, email and profile are set by an administrator. Editing them here is not
-          built yet.
+          Name, email, profile and photo are set by an administrator, under Administration in the
+          account menu.
         </p>
       </Card>
 

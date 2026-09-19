@@ -1,7 +1,9 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { getAuditEntries } from '@/lib/admin'
+import { STAFF_AVATAR_BUCKET } from '@/lib/avatar'
 import { TABLE_LABEL, type AuditCursor, type AuditEntry, type AuditFilters } from '@/lib/audit'
 
 export type AuditPage = { entries: AuditEntry[]; hasMore: boolean }
@@ -72,4 +74,87 @@ export async function loadAuditEntries(
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'The audit trail could not be read.' }
   }
+}
+
+export type StaffDetailState = { error: string } | { ok: true } | null
+
+const STATUSES = new Set(['active', 'inactive'])
+
+/**
+ * Save a staff member's details from the Staff tab's forms.
+ *
+ * Patch-shaped, like `saveAccountDetails`: KEY PRESENCE is the meaning, so a
+ * form carrying only a name leaves everything else alone. Only the five keys
+ * the database function knows are ever forwarded — anything else on the form
+ * is ignored here rather than refused there. Email is trimmed and lowercased
+ * before it travels. Every rule lives in the database and its sentences pass
+ * through unrewritten; the checks here are the friendlier of two identical
+ * answers, not the only one.
+ */
+export async function saveStaffDetails(_prev: StaffDetailState, formData: FormData): Promise<StaffDetailState> {
+  const staffId = String(formData.get('staff_id') ?? '')
+  if (!staffId) return { error: 'No staff member selected.' }
+
+  const patch: Record<string, unknown> = {}
+  if (formData.has('full_name')) {
+    const name = String(formData.get('full_name')).trim()
+    if (!name) return { error: 'Give the staff member a name.' }
+    patch.full_name = name
+  }
+  if (formData.has('email')) {
+    const email = String(formData.get('email')).trim().toLowerCase()
+    if (!email) return { error: 'Enter an email address.' }
+    patch.email = email
+  }
+  if (formData.has('status')) {
+    const status = String(formData.get('status'))
+    if (!STATUSES.has(status)) return { error: 'Choose a status.' }
+    patch.status = status
+  }
+  if (formData.has('profile_id')) {
+    const profile = String(formData.get('profile_id'))
+    if (!profile) return { error: 'Choose an access profile.' }
+    patch.profile_id = profile
+  }
+  if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_staff_patch', { p_staff_id: staffId, p_patch: patch })
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin')
+  /* The person's own profile page shows the same details. */
+  revalidatePath('/profile')
+  return { ok: true }
+}
+
+/**
+ * Set or remove a staff member's photo.
+ *
+ * THE ROW FIRST, THEN THE BYTES — `redactPostMedia`'s ordering. The function
+ * validates the new path (it must be under this person's prefix and the object
+ * must already exist) and returns the path it REPLACED, if any; only then are
+ * those old bytes removed. If the removal fails the row is already right and
+ * the orphan is what a sweep collects; the reverse order could leave a row
+ * pointing at nothing.
+ */
+export async function setStaffAvatar(staffId: string, path: string | null): Promise<StaffDetailState> {
+  if (!staffId) return { error: 'No staff member selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('update_staff_patch', {
+    p_staff_id: staffId,
+    p_patch: { avatar_path: path },
+  })
+  if (error) return { error: error.message }
+
+  const replaced = typeof data === 'string' && data ? data : null
+  if (replaced) {
+    /* Best effort. The row already says what the photo is. */
+    await supabase.storage.from(STAFF_AVATAR_BUCKET).remove([replaced])
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/profile')
+  return { ok: true }
 }

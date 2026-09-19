@@ -19,10 +19,14 @@ export function TopNav({
   staffName,
   staffEmail,
   isAdmin = false,
+  staffId,
+  avatarPath = null,
 }: {
   staffName?: string
   staffEmail?: string
   isAdmin?: boolean
+  staffId?: string
+  avatarPath?: string | null
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
@@ -53,7 +57,7 @@ export function TopNav({
             <HelpIcon className="h-[18px] w-[18px]" />
           </Link>
 
-          <ProfileMenu name={staffName} email={staffEmail} isAdmin={isAdmin} />
+          <ProfileMenu name={staffName} email={staffEmail} isAdmin={isAdmin} staffId={staffId} avatarPath={avatarPath} />
         </div>
       </div>
     </header>

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { signOut } from '@/app/actions'
 import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM } from '@/lib/nav'
+import { Avatar } from './avatar'
 import { UserIcon } from './icons'
 
 const ITEM_CLASS =
@@ -27,11 +28,16 @@ export function ProfileMenu({
   name,
   email,
   isAdmin = false,
+  staffId,
+  avatarPath = null,
 }: {
   name?: string
   email?: string
   /** One fact crosses the client boundary, not the permission matrix. */
   isAdmin?: boolean
+  /** With both, the trigger shows the person's photo instead of their initials. */
+  staffId?: string
+  avatarPath?: string | null
 }) {
   const links = isAdmin ? [...ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM] : [...ACCOUNT_MENU_ITEMS]
   const [open, setOpen] = useState(false)
@@ -90,7 +96,15 @@ export function ProfileMenu({
         aria-label={name ? `Account menu for ${name}` : 'Account menu'}
         className="flex h-8 w-8 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >
-        {initials ? (
+        {staffId && avatarPath && name ? (
+          <Avatar
+            staffId={staffId}
+            name={name}
+            avatarPath={avatarPath}
+            size="sm"
+            className={open ? 'ring-brand-300' : 'hover:ring-brand-200'}
+          />
+        ) : initials ? (
           <span
             className={[
               'flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition-colors',

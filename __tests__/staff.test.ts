@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 type Claims = { data: { claims: { sub: string; aal: string } } | null; error: { message: string } | null }
 
 const queries: string[] = []
+const selects: string[] = []
 let CLAIMS: Claims = { data: null, error: null }
 let ROW: Record<string, unknown> | null = null
 let ROW_ERROR: { message: string } | null = null
@@ -32,7 +33,10 @@ vi.mock('@/lib/supabase/server', () => ({
     auth: { getClaims, getUser },
     from: () => {
       const chain = {
-        select: () => chain,
+        select: (columns: string) => {
+          selects.push(columns)
+          return chain
+        },
         eq: (column: string, value: string) => {
           eqCalls.push([column, value])
           return chain
@@ -72,6 +76,7 @@ const row = (o: Record<string, unknown> = {}) => ({
 })
 
 beforeEach(() => {
+  selects.length = 0
   CLAIMS = { data: null, error: null }
   ROW = null
   ROW_ERROR = null
@@ -101,6 +106,7 @@ describe('getCurrentStaff', () => {
       full_name: 'A Adviser',
       email: 'a@example.com',
       status: 'active',
+      avatar_path: null,
       access_profiles: PROFILE,
     })
   })
@@ -158,5 +164,26 @@ describe('getCurrentStaff', () => {
     CLAIMS = { data: null, error: null }
     await getCurrentStaff()
     expect(queries).toEqual([])
+  })
+})
+
+/**
+ * The columns the select names, pinned. Two of them arrived late — the sixth
+ * permission flag on 19 September, the photo the same day — and a select that
+ * silently dropped either would pass every other test here, because the
+ * fixtures hand the row back regardless of what was asked for. A mutation
+ * removing `avatar_path` did exactly that.
+ */
+describe('what getCurrentStaff asks for', () => {
+  test('the select names the photo and every permission flag', async () => {
+    CLAIMS = signedIn
+    ROW = row()
+    await getCurrentStaff()
+    expect(selects).toHaveLength(1)
+    const cols = selects[0]
+    for (const c of ['id', 'full_name', 'email', 'status', 'avatar_path']) expect(cols).toContain(c)
+    for (const f of ['view_all_groups', 'view_sensitive', 'manage_groups', 'manage_staff', 'file_unmatched_notes', 'verify_identity']) {
+      expect(cols, `the profile embed names ${f}`).toContain(f)
+    }
   })
 })

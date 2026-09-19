@@ -5,8 +5,9 @@ import { createRoundTripHarness } from './helpers/round-trips'
  * How deep is the chain of Supabase round trips behind /admin, and who pays it?
  *
  * Depth is counted, not timed — see `helpers/round-trips.ts`. The page is held
- * to ONE wave: the audit entries and the actor list are issued together, and a
- * later tab's loader must join that `Promise.all` rather than follow it.
+ * to ONE wave: the audit entries, the actor list, the staff and the profiles
+ * are issued together, and a later tab's loader must join that `Promise.all`
+ * rather than follow it.
  *
  * And the gate runs BEFORE the wave. A non-administrator must reach
  * `notFound()` having issued no query at all — not because RLS would leak
@@ -26,10 +27,11 @@ function stubClient() {
       actor_staff_id: 's1', actor_context: 'api', actor_name: 'A Adviser', record_label: 'New',
     })),
     staff_directory: [{ id: 's1', full_name: 'A Adviser', status: 'active' }],
-    /* The tables a regression might read directly. Populated so a loader that
-       reaches for them still runs to full depth rather than returning early. */
+    /* The Staff tab's two reads, on the same wave since Phase 2. */
+    staff_users: [{ id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active', avatar_path: null, staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Admin' } } }],
+    access_profiles: [{ id: 'p1', name: 'Admin', description: null, view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true, verify_identity: false }],
+    /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
-    staff_users: [{ id: 's1' }],
   }
   const builder = (table: string) => {
     const data = fixtures[table] ?? []
@@ -72,10 +74,11 @@ describe('/admin round-trip depth', () => {
     expect(depth).toBe(1)
     expect(calls).toContain('audit_entries')
     expect(calls).toContain('staff_directory')
-    /* The view, not the table beneath it, and the directory, not the base table. */
+    expect(calls).toContain('staff_users')
+    expect(calls).toContain('access_profiles')
+    /* The view, not the table beneath it. */
     expect(calls).not.toContain('audit_log')
-    expect(calls).not.toContain('staff_users')
-    for (const first of ['audit_entries', 'staff_directory']) {
+    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

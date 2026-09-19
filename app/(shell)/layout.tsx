@@ -43,7 +43,13 @@ export default async function ShellLayout({ children }: { children: React.ReactN
        because their container has no background of its own. The layer below
        carries its own fallback colour, so nothing is lost. */
     <div className="flex min-h-dvh flex-col">
-      <TopNav staffName={staff.full_name} staffEmail={staff.email} isAdmin={isAdmin(staff)} />
+      <TopNav
+        staffName={staff.full_name}
+        staffEmail={staff.email}
+        isAdmin={isAdmin(staff)}
+        staffId={staff.id}
+        avatarPath={staff.avatar_path}
+      />
 
       {/*
         A fixed, cover-positioned layer rather than `bg-fixed` on the container.

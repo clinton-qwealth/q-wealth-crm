@@ -1,8 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import { AuditTrail } from '@/components/audit-trail'
+import { StaffList } from '@/components/staff-list'
 import { Tabs } from '@/components/tabs'
-import { Card, PageHeading, Placeholder, WORKING_AREA } from '@/components/ui'
-import { AUDIT_PAGE_SIZE, getAuditActors, getAuditEntries, isAdmin } from '@/lib/admin'
+import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
+import { AUDIT_PAGE_SIZE, getAccessProfiles, getAuditActors, getAuditEntries, getStaffForAdmin, isAdmin } from '@/lib/admin'
 import { getCurrentStaff } from '@/lib/staff'
 
 export const metadata = { title: 'Administration · Q Wealth CRM' }
@@ -29,9 +30,11 @@ export default async function AdminPage() {
   if (!staff) redirect('/login')
   if (!isAdmin(staff)) notFound()
 
-  const [page, actors] = await Promise.all([
+  const [page, actors, staffRows, profiles] = await Promise.all([
     getAuditEntries({ limit: AUDIT_PAGE_SIZE }),
     getAuditActors(),
+    getStaffForAdmin(),
+    getAccessProfiles(),
   ])
 
   return (
@@ -56,12 +59,7 @@ export default async function AdminPage() {
             {
               id: 'staff',
               label: 'Staff',
-              /* Dashed means planned and not built. Filled in the next phase. */
-              panel: (
-                <Placeholder className="h-64">
-                  Staff management — who works here, their access profile and their status — is being built.
-                </Placeholder>
-              ),
+              panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
             },
           ]}
         />
