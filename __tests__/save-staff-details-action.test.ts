@@ -51,11 +51,21 @@ beforeEach(() => {
 
 describe('saveStaffDetails', () => {
   test('forwards only the keys the form carried, and only the ones the function knows', async () => {
-    const res = await saveStaffDetails(null, form({ staff_id: 's2', full_name: '  Reece Testlee ', colour: 'blue' }))
+    const res = await saveStaffDetails(null, form({ staff_id: 's2', first_name: '  Reece ', last_name: ' Testlee ', colour: 'blue' }))
     expect(res).toEqual({ ok: true })
     const args = log[0].args[0] as Record<string, unknown>
     expect(args.p_staff_id).toBe('s2')
-    expect(patch()).toEqual({ full_name: 'Reece Testlee' })
+    expect(patch()).toEqual({ first_name: 'Reece', last_name: 'Testlee' })
+  })
+
+  /* The name is two boxes since 19 Sep 2026, and each one travels on its own:
+     renaming only the surname must not blank the first name. */
+  test('one half of the name travels alone', async () => {
+    await saveStaffDetails(null, form({ staff_id: 's2', last_name: 'Testlee-Brown' }))
+    expect(patch()).toEqual({ last_name: 'Testlee-Brown' })
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', first_name: 'Reece' }))
+    expect(patch()).toEqual({ first_name: 'Reece' })
   })
 
   test('lowercases and trims the email before it travels', async () => {
@@ -63,8 +73,9 @@ describe('saveStaffDetails', () => {
     expect(patch()).toEqual({ email: 'reece@qwealth.com.au' })
   })
 
-  test('a blank name, a blank email, a bad status and an empty profile are refused before any round trip', async () => {
-    expect(await saveStaffDetails(null, form({ staff_id: 's2', full_name: '  ' }))).toEqual({ error: 'Give the staff member a name.' })
+  test('a blank name part, a blank email, a bad status and an empty profile are refused before any round trip', async () => {
+    expect(await saveStaffDetails(null, form({ staff_id: 's2', first_name: '  ' }))).toEqual({ error: 'Enter a first name.' })
+    expect(await saveStaffDetails(null, form({ staff_id: 's2', last_name: '  ' }))).toEqual({ error: 'Enter a last name.' })
     expect(await saveStaffDetails(null, form({ staff_id: 's2', email: ' ' }))).toEqual({ error: 'Enter an email address.' })
     expect(await saveStaffDetails(null, form({ staff_id: 's2', status: 'pending' }))).toEqual({ error: 'Choose a status.' })
     expect(await saveStaffDetails(null, form({ staff_id: 's2', profile_id: '' }))).toEqual({ error: 'Choose an access profile.' })
@@ -73,7 +84,7 @@ describe('saveStaffDetails', () => {
 
   test('a form with nothing to change, or no staff member, is refused', async () => {
     expect(await saveStaffDetails(null, form({ staff_id: 's2' }))).toEqual({ error: 'Nothing to save.' })
-    expect(await saveStaffDetails(null, form({ full_name: 'X' }))).toEqual({ error: 'No staff member selected.' })
+    expect(await saveStaffDetails(null, form({ first_name: 'X' }))).toEqual({ error: 'No staff member selected.' })
     expect(log).toEqual([])
   })
 
@@ -84,7 +95,7 @@ describe('saveStaffDetails', () => {
   })
 
   test('success revalidates the admin page and the profile page', async () => {
-    await saveStaffDetails(null, form({ staff_id: 's2', full_name: 'X' }))
+    await saveStaffDetails(null, form({ staff_id: 's2', first_name: 'X' }))
     expect(vi.mocked(revalidatePath).mock.calls).toEqual([['/admin'], ['/profile']])
   })
 })

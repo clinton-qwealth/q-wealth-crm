@@ -97,8 +97,11 @@ describe('getAuditEntries', () => {
 })
 
 describe('getAuditActors', () => {
-  test('reads the directory, every status, by name', async () => {
-    rows = [{ id: 's2', full_name: 'Former Colleague', status: 'inactive' }, { id: 's1', full_name: 'Wide Adviser', status: 'active' }]
+  test('reads the directory, every status, and composes the name', async () => {
+    rows = [
+      { id: 's2', first_name: 'Former', last_name: 'Colleague', status: 'inactive' },
+      { id: 's1', first_name: 'Wide', last_name: 'Adviser', status: 'active' },
+    ]
     const actors = await getAuditActors()
     expect(called('from')).toEqual([['staff_directory']])
     expect(called('eq')).toEqual([])
@@ -106,5 +109,14 @@ describe('getAuditActors', () => {
       { id: 's2', name: 'Former Colleague', status: 'inactive' },
       { id: 's1', name: 'Wide Adviser', status: 'active' },
     ])
+  })
+
+  /* THE SORT IS THE DATABASE'S, and it is surname-first since 19 Sep 2026.
+     Ordering in the component would sort the rows it was handed rather than the
+     set, which is only the same thing while every staff member fits on one page. */
+  test('orders by last name, then first', async () => {
+    rows = []
+    await getAuditActors()
+    expect(called('order')).toEqual([['last_name'], ['first_name']])
   })
 })

@@ -5,6 +5,7 @@ import { getMfaState } from '@/lib/mfa'
 import { signOut } from '@/app/actions'
 import { Card, PageHeading, Pill } from '@/components/ui'
 import { EnrolPanel } from './enrol-panel'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Profile · Q Wealth CRM' }
 
@@ -37,8 +38,8 @@ export default async function ProfilePage() {
           <div className="flex items-center justify-between gap-4 py-2">
             <dt className="text-sm text-neutral-500">Name</dt>
             <dd className="flex items-center gap-2 text-sm font-medium text-neutral-900">
-              <Avatar staffId={staff.id} name={staff.full_name} avatarPath={staff.avatar_path} size="sm" />
-              {staff.full_name}
+              <Avatar staffId={staff.id} firstName={staff.first_name} lastName={staff.last_name} avatarPath={staff.avatar_path} size="sm" />
+              {fullName(staff)}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-4 py-2">

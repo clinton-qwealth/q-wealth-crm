@@ -63,7 +63,14 @@ describe('GroupMembers', () => {
 describe('InitialsTile', () => {
   const text = (name: string) => render(<InitialsTile name={name} />).container.textContent
   test('two initials from a two-word name', () => expect(text('Janet Testsmith')).toBe('JT'))
-  test('at most two, from the first two words', () => expect(text('Testsmith Family Trust')).toBe('TF'))
+  /* Changed 19 Sep 2026, with the staff name split. This used to take the first
+     letter of the first TWO words, so a name with a particle — "Mary-Jane van
+     der Berg" — gave MV. First and LAST is what a reader expects, and it is the
+     same rule the staff Avatar now gets from the two columns directly. */
+  test('the FIRST and LAST word, not the first two', () => {
+    expect(text('Testsmith Family Trust')).toBe('TT')
+    expect(text('Mary-Jane van der Berg')).toBe('MB')
+  })
   test('one initial from one word', () => expect(text('Acme')).toBe('A'))
   test('upper-cased', () => expect(text('rob testsmith')).toBe('RT'))
   test('a placeholder rather than nothing for an empty name', () => expect(text('  ')).toBe('·'))

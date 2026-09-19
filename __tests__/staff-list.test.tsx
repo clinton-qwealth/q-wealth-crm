@@ -26,8 +26,8 @@ const PROFILES: AccessProfileChoice[] = [
   { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true, verify_identity: false },
   { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false, verify_identity: true },
 ]
-const ME: StaffRow = { id: 's1', full_name: 'Sarah Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', full_name: 'Reece Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pb', name: 'Adviser' } }
+const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pa', name: 'Admin' } }
+const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pb', name: 'Adviser' } }
 
 const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
@@ -73,14 +73,21 @@ describe('the staff drawer', () => {
     expect(drawer(container).querySelectorAll('input[type="file"]')).toHaveLength(1)
   })
 
-  test('editing Details offers the name and the email, about THIS person, with the sign-in sentence', () => {
+  test('editing Details offers both name boxes and the email, about THIS person, with the sign-in sentence', () => {
     const { container } = list()
     open('Reece Testlee')
     const d = drawer(container)
     edit(d, 'details')
     const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
-    expect(Array.from(form.querySelectorAll('input')).map((i) => i.getAttribute('name'))).toEqual(['staff_id', 'full_name', 'email'])
+    expect(Array.from(form.querySelectorAll('input')).map((i) => i.getAttribute('name'))).toEqual([
+      'staff_id',
+      'first_name',
+      'last_name',
+      'email',
+    ])
     expect(form.querySelector<HTMLInputElement>('input[name="staff_id"]')!.value).toBe('s2')
+    expect(form.querySelector<HTMLInputElement>('input[name="first_name"]')!.value).toBe('Reece')
+    expect(form.querySelector<HTMLInputElement>('input[name="last_name"]')!.value).toBe('Testlee')
     expect(form.querySelector('[data-slot="email-note"]')!.textContent).toContain('not their sign-in email')
   })
 
@@ -139,7 +146,7 @@ describe('the staff drawer', () => {
  * The approval queue, since 19 September. A pending person is in the queue
  * and not in the list; Approve waits for a profile; Decline asks once.
  */
-const PENDING: StaffRow = { id: 's9', full_name: 'Nina New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', profile: null }
+const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', profile: null }
 
 describe('awaiting approval', () => {
   test('is absent when nobody is waiting', () => {

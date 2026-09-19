@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { initialsOfString } from '@/lib/staff-name'
 import {
   ArchiveIcon,
   BankIcon,
@@ -878,13 +879,17 @@ export function GroupTile() {
   )
 }
 
+/**
+ * Initials for a name that only exists as ONE string.
+ *
+ * Unlike `Avatar`, this is not staff-only: the members list draws a client's
+ * `display_name` with it, and a party has no first/last columns to read. So it
+ * keeps splitting a string — but takes the **first and last** token rather than
+ * the first two, which is the correction that came out of the staff name split
+ * on 19 September 2026. "Mary-Jane van der Berg" gives MB, not MV.
+ */
 export function InitialsTile({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join('')
+  const initials = initialsOfString(name)
   return (
     <span
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[11px] font-semibold tracking-wide text-neutral-600 ring-1 ring-neutral-200/70"

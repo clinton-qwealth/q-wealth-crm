@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { staffAvatarUrl } from '@/lib/avatar'
+import { initialsOf } from '@/lib/staff-name'
 
 /**
  * A staff member's face, or their initials.
@@ -26,26 +27,21 @@ const SIZE = {
 
 export type AvatarSize = keyof typeof SIZE
 
-export function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]!.toUpperCase())
-      .join('') || '·'
-  )
-}
+/* The initials rule moved to lib/staff-name on 19 Sep 2026, when a staff name
+   became two columns. It takes the parts now rather than splitting a string,
+   so "Mary-Jane van der Berg" no longer gives MV. */
 
 export function Avatar({
   staffId,
-  name,
+  firstName,
+  lastName,
   avatarPath,
   size = 'md',
   className = '',
 }: {
   staffId: string
-  name: string
+  firstName: string
+  lastName: string
   avatarPath: string | null
   size?: AvatarSize
   className?: string
@@ -75,7 +71,7 @@ export function Avatar({
       data-slot="avatar-initials"
       className={`${box} flex items-center justify-center bg-neutral-100 font-semibold tracking-wide text-neutral-600`}
     >
-      {initialsOf(name)}
+      {initialsOf({ first_name: firstName, last_name: lastName })}
     </span>
   )
 }

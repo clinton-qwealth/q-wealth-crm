@@ -30,7 +30,7 @@ describe('/login', () => {
   })
 
   test('sends a signed-in non-staff person to the request page, carrying next', async () => {
-    registration = { signedIn: true, email: 'n@qwealth.com.au', suggestedName: null, row: null }
+    registration = { signedIn: true, email: 'n@qwealth.com.au', suggested: { first_name: '', last_name: '' }, row: null }
     await expect(page()).rejects.toThrow('redirect:/request-access')
     await expect(page('/oauth/consent?authorization_id=a')).rejects.toThrow(
       'redirect:/request-access?next=%2Foauth%2Fconsent%3Fauthorization_id%3Da',

@@ -84,7 +84,7 @@ const STATUSES = new Set(['active', 'inactive'])
  * Save a staff member's details from the Staff tab's forms.
  *
  * Patch-shaped, like `saveAccountDetails`: KEY PRESENCE is the meaning, so a
- * form carrying only a name leaves everything else alone. Only the five keys
+ * form carrying only a name leaves everything else alone. Only the six keys
  * the database function knows are ever forwarded — anything else on the form
  * is ignored here rather than refused there. Email is trimmed and lowercased
  * before it travels. Every rule lives in the database and its sentences pass
@@ -96,10 +96,15 @@ export async function saveStaffDetails(_prev: StaffDetailState, formData: FormDa
   if (!staffId) return { error: 'No staff member selected.' }
 
   const patch: Record<string, unknown> = {}
-  if (formData.has('full_name')) {
-    const name = String(formData.get('full_name')).trim()
-    if (!name) return { error: 'Give the staff member a name.' }
-    patch.full_name = name
+  if (formData.has('first_name')) {
+    const first = String(formData.get('first_name')).trim()
+    if (!first) return { error: 'Enter a first name.' }
+    patch.first_name = first
+  }
+  if (formData.has('last_name')) {
+    const last = String(formData.get('last_name')).trim()
+    if (!last) return { error: 'Enter a last name.' }
+    patch.last_name = last
   }
   if (formData.has('email')) {
     const email = String(formData.get('email')).trim().toLowerCase()

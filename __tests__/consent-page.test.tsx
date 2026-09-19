@@ -47,10 +47,11 @@ beforeEach(() => {
 
 describe('the consent screen for someone who is not staff', () => {
   test('no row: offers the request form, prefilled, returning here afterwards', async () => {
-    registration = { signedIn: true, email: 'nina@qwealth.com.au', suggestedName: 'Nina New', row: null }
+    registration = { signedIn: true, email: 'nina@qwealth.com.au', suggested: { first_name: 'Nina', last_name: 'New' }, row: null }
     const { container, getByRole } = await page()
     expect(getByRole('heading', { level: 1 }).textContent).toBe('Request access to Q Wealth CRM')
-    expect((container.querySelector('input[name="full_name"]') as HTMLInputElement).value).toBe('Nina New')
+    expect((container.querySelector('input[name="first_name"]') as HTMLInputElement).value).toBe('Nina')
+    expect((container.querySelector('input[name="last_name"]') as HTMLInputElement).value).toBe('New')
     expect((container.querySelector('input[name="next"]') as HTMLInputElement).value).toBe(
       '/oauth/consent?authorization_id=auth-1',
     )
@@ -63,8 +64,8 @@ describe('the consent screen for someone who is not staff', () => {
     registration = {
       signedIn: true,
       email: 'nina@qwealth.com.au',
-      suggestedName: null,
-      row: { id: 's9', full_name: 'Nina New', email: 'nina@qwealth.com.au', status: 'pending' },
+      suggested: { first_name: '', last_name: '' },
+      row: { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending' },
     }
     const { container, getByRole } = await page()
     expect(getByRole('heading', { level: 1 }).textContent).toBe('Awaiting approval')
@@ -77,8 +78,8 @@ describe('the consent screen for someone who is not staff', () => {
     registration = {
       signedIn: true,
       email: 'nina@qwealth.com.au',
-      suggestedName: null,
-      row: { id: 's9', full_name: 'Nina New', email: 'nina@qwealth.com.au', status: 'inactive' },
+      suggested: { first_name: '', last_name: '' },
+      row: { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'inactive' },
     }
     const { container, getByRole } = await page()
     expect(getByRole('heading', { level: 1 }).textContent).toBe('Not a Q Wealth staff account')

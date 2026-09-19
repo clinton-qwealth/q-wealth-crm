@@ -18,13 +18,13 @@ const items = () => screen.getAllByRole('menuitem').map((m) => m.textContent)
 
 describe('the account menu', () => {
   test('offers Profile, Preferences and Sign out to everyone', () => {
-    render(<ProfileMenu name="Sarah Chen" email="s@example.com" />)
+    render(<ProfileMenu firstName="Sarah" lastName="Chen" email="s@example.com" />)
     open()
     expect(items()).toEqual(['Profile', 'Preferences', 'Sign out'])
   })
 
   test('and Administration, after Preferences and before Sign out, to an administrator', () => {
-    render(<ProfileMenu name="Sarah Chen" email="s@example.com" isAdmin />)
+    render(<ProfileMenu firstName="Sarah" lastName="Chen" email="s@example.com" isAdmin />)
     open()
     expect(items()).toEqual(['Profile', 'Preferences', 'Administration', 'Sign out'])
     expect(screen.getByRole('menuitem', { name: 'Administration' }).getAttribute('href')).toBe('/admin')
@@ -33,7 +33,7 @@ describe('the account menu', () => {
   /* The Sign out button's place in the arrow-key list is the links' length,
      which changed; ArrowDown from the last link must still reach it. */
   test('arrow keys still cycle through to Sign out with the extra item', () => {
-    render(<ProfileMenu name="Sarah Chen" isAdmin />)
+    render(<ProfileMenu firstName="Sarah" lastName="Chen" isAdmin />)
     open()
     const admin = screen.getByRole('menuitem', { name: 'Administration' })
     act(() => {

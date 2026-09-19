@@ -5,6 +5,7 @@ import { RequestAccessForm } from '@/components/request-access-form'
 import { getMfaState } from '@/lib/mfa'
 import { ConsentForm } from './consent-form'
 import { ConsentShell } from './consent-shell'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Authorise access · Q Wealth CRM' }
 
@@ -73,7 +74,7 @@ export default async function ConsentPage({
             approve you with an access profile.
           </p>
           <RequestAccessForm
-            suggestedName={registration.signedIn ? registration.suggestedName : null}
+            suggested={registration.signedIn ? registration.suggested : null}
             next={returnTo}
           />
         </ConsentShell>
@@ -84,7 +85,7 @@ export default async function ConsentPage({
         <ConsentShell title="Awaiting approval">
           <p>
             Your request to join Q Wealth CRM as{' '}
-            <span className="font-medium">{row.full_name}</span> is with the administrators.
+            <span className="font-medium">{fullName(row)}</span> is with the administrators.
             Once approved, sign in to the CRM, set up two-factor authentication, then start this
             connection again.
           </p>
@@ -160,7 +161,7 @@ export default async function ConsentPage({
       clientUri={data.client?.uri ?? null}
       redirectUri={data.redirect_uri}
       scope={data.scope ?? ''}
-      staffName={staff.full_name}
+      staffName={fullName(staff)}
       staffEmail={staff.email}
       profileName={staff.access_profiles.name}
     />

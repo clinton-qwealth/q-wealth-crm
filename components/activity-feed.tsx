@@ -14,6 +14,7 @@ import {
 import {
   POST_MEDIA_BUCKET,
   REACTIONS,
+  mentionName,
   postDocText,
   threadPosts,
   toggleReaction,
@@ -254,7 +255,11 @@ export function ActivityFeed({
   async function react(postId: string, key: ReactionKey) {
     const before = posts.find((p) => p.id === postId)?.reactions
     if (!before) return
-    const me = { staff_id: viewer.id, full_name: viewer.name }
+    /* Built here, not read from a row — so it uses the key the view will settle
+       on, and `mentionName()` reads it the same way as the real thing. Emitting
+       the old key here would render blank the moment M3 lands, with nothing but
+       a missing tooltip to say why. */
+    const me = { staff_id: viewer.id, name: viewer.name }
     setError(null)
     setPosts((ps) => ps.map((p) => (p.id === postId ? { ...p, reactions: toggleReaction(p.reactions, key, me) } : p)))
     let result: Awaited<ReturnType<typeof togglePostReaction>>
@@ -559,7 +564,7 @@ function Reactions({
             type="button"
             aria-pressed={mine}
             aria-label={`${def.label}: ${r.by.length}`}
-            title={r.by.map((b) => b.full_name).join(', ')}
+            title={r.by.map((b) => mentionName(b)).join(', ')}
             onClick={() => onToggle(r.reaction)}
             className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/30 ${
               mine

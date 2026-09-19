@@ -20,7 +20,10 @@ const app = new Hono().basePath('/crm-mcp')
 
 type Staff = {
   id: string
-  full_name: string
+  // Two columns since 19 Sep 2026; `whoami` still returns one composed `name`,
+  // so the contract to Claude is unchanged.
+  first_name: string
+  last_name: string
   email: string
   status: string
   access_profiles: {
@@ -148,7 +151,7 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<{ staff
   const { data, error } = await db
     .from('staff_users')
     .select(
-      'id, full_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
+      'id, first_name, last_name, email, status, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
     .eq('auth_user_id', authUserId)
     .maybeSingle()
@@ -170,7 +173,8 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<{ staff
   return {
     staff: {
       id: row.id as string,
-      full_name: row.full_name as string,
+      first_name: row.first_name as string,
+      last_name: row.last_name as string,
       email: row.email as string,
       status: row.status as string,
       access_profiles: profile,
@@ -180,7 +184,7 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<{ staff
 }
 
 function buildServer(db: SupabaseClient, staff: Staff) {
-  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.1' })
+  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.2' })
 
   server.registerTool(
     'whoami',
@@ -192,7 +196,7 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     },
     async () =>
       ok({
-        staff: { name: staff.full_name, email: staff.email },
+        staff: { name: [staff.first_name, staff.last_name].filter(Boolean).join(' '), email: staff.email },
         profile: staff.access_profiles.name,
         permissions: staff.access_profiles,
         notes:

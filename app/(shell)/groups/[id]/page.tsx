@@ -22,6 +22,7 @@ import { getGroupNotes } from '@/lib/notes'
 import { FileNotes } from '@/components/file-notes'
 import { WorkflowSection } from '@/components/workflow-section'
 import { Tabs } from '@/components/tabs'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
 
@@ -172,7 +173,7 @@ async function getGroupContacts(groupId: string) {
 
   const { data: group } = await supabase
     .from('client_groups')
-    .select('primary_contact_party_id, owner_staff_id, staff_users(full_name)')
+    .select('primary_contact_party_id, owner_staff_id, staff_users(first_name, last_name)')
     .eq('id', groupId)
     .maybeSingle()
 
@@ -180,10 +181,10 @@ async function getGroupContacts(groupId: string) {
   // in case relationship detection changes.
   const rawOwner = (group as Record<string, unknown> | null)?.staff_users
   const owner = (Array.isArray(rawOwner) ? rawOwner[0] : rawOwner) as
-    | { full_name?: string }
+    | { first_name?: string; last_name?: string }
     | null
     | undefined
-  const adviser = owner?.full_name ?? null
+  const adviser = owner ? fullName({ first_name: owner.first_name ?? '', last_name: owner.last_name ?? '' }) || null : null
 
   const partyId = group?.primary_contact_party_id
   if (!partyId) return { phone: null, adviser }
@@ -611,7 +612,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                                says no here — sent for one shape across feeds. */
                             viewer={{
                               id: staff.id,
-                              name: staff.full_name,
+                              name: fullName(staff),
                               canRemoveAnyImage: staff.access_profiles.manage_staff,
                             }}
                           />
@@ -652,7 +653,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                           staff={staffChoices}
                           viewer={{
                             id: staff.id,
-                            name: staff.full_name,
+                            name: fullName(staff),
                             canRemoveAnyImage: staff.access_profiles.manage_staff,
                           }}
                         />

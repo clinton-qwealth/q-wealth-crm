@@ -4,6 +4,7 @@ import { RequestAccessForm, SignUpForm } from '@/components/request-access-form'
 import { signOut } from '@/app/actions'
 import { safeNext } from '@/lib/safe-next'
 import { getRegistration } from '@/lib/staff'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Request access · Q Wealth CRM' }
 
@@ -47,7 +48,7 @@ export default async function RequestAccessPage({
         description={`You are signed in as ${registration.email ?? 'a new account'}. Tell us your name and an administrator will approve your access.`}
         footer="Access requests are limited to Q Wealth staff email addresses."
       >
-        <RequestAccessForm suggestedName={registration.suggestedName} next={next} />
+        <RequestAccessForm suggested={registration.suggested} next={next} />
       </AuthShell>
     )
   }
@@ -58,7 +59,7 @@ export default async function RequestAccessPage({
       title={waiting ? 'Awaiting approval' : 'This account is not active'}
       description={
         waiting
-          ? `Your request to join as ${row.full_name} is with the administrators. You will be able to sign in once it is approved.`
+          ? `Your request to join as ${fullName(row)} is with the administrators. You will be able to sign in once it is approved.`
           : 'This account is not an active Q Wealth staff account. Contact your administrator.'
       }
     >

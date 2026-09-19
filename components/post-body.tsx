@@ -6,6 +6,7 @@ import {
   isEmailColour,
   isEmailFont,
   isEntityKind,
+  mentionName,
   postMediaUrl,
   type CalloutTone,
   type PostDoc,
@@ -52,7 +53,7 @@ export function PostBody({
   entities?: PostEntity[]
 }) {
   const ctx: Context = {
-    names: new Map(mentioned.map((m) => [m.staff_id, m.full_name])),
+    names: new Map(mentioned.map((m) => [m.staff_id, mentionName(m)])),
     media: new Map(media.map((m) => [m.id, m])),
     /* Keyed by kind AND id: the three kinds are separate tables, so the same
        uuid appearing as both a group and a workflow is not impossible. */

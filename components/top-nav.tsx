@@ -16,13 +16,15 @@ import { TopNavLinks } from './top-nav-links'
  * Help icon and the bar itself did not.
  */
 export function TopNav({
-  staffName,
+  staffFirstName,
+  staffLastName,
   staffEmail,
   isAdmin = false,
   staffId,
   avatarPath = null,
 }: {
-  staffName?: string
+  staffFirstName?: string
+  staffLastName?: string
   staffEmail?: string
   isAdmin?: boolean
   staffId?: string
@@ -57,7 +59,7 @@ export function TopNav({
             <HelpIcon className="h-[18px] w-[18px]" />
           </Link>
 
-          <ProfileMenu name={staffName} email={staffEmail} isAdmin={isAdmin} staffId={staffId} avatarPath={avatarPath} />
+          <ProfileMenu firstName={staffFirstName} lastName={staffLastName} email={staffEmail} isAdmin={isAdmin} staffId={staffId} avatarPath={avatarPath} />
         </div>
       </div>
     </header>

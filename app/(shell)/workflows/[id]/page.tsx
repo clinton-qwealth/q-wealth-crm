@@ -11,6 +11,7 @@ import {
 } from '@/lib/workflows'
 import { getWorkflowNotes } from '@/lib/notes'
 import { WorkflowWorkspace } from '@/components/workflow-workspace'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Workflow · Q Wealth CRM' }
 
@@ -66,7 +67,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
          control only where it would succeed. */
       viewer={{
         id: staff.id,
-        name: staff.full_name,
+        name: fullName(staff),
         /* The address an email is sent FROM. Their own profile email, never
            typed: an email that could claim to come from a colleague is what
            the rest of this app refuses by construction. */

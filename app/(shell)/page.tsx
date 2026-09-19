@@ -47,7 +47,7 @@ export default async function Home() {
     <>
       <PageHeading
         eyebrow="Q Intelligence"
-        title={`Good to see you, ${staff.full_name.split(' ')[0]}`}
+        title={`Good to see you, ${staff.first_name}`}
         description="A good day to make progress — everything you need is right here."
       />
 

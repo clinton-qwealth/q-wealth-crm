@@ -14,7 +14,9 @@ export type AccessProfile = {
 
 export type Staff = {
   id: string
-  full_name: string
+  /** Split out of `full_name` on 19 Sep 2026. Compose with `fullName()` from lib/staff-name. */
+  first_name: string
+  last_name: string
   email: string
   status: string
   /** Object path of their photo in the staff-avatars bucket, or null. See lib/avatar.ts. */
@@ -73,7 +75,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, full_name, email, status, avatar_path, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
+      'id, first_name, last_name, email, status, avatar_path, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
     )
     .eq('auth_user_id', sub)
     .maybeSingle()
@@ -96,7 +98,8 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
 
   return {
     id: row.id as string,
-    full_name: row.full_name as string,
+    first_name: row.first_name as string,
+    last_name: row.last_name as string,
     email: row.email as string,
     status: row.status as string,
     avatar_path: (row.avatar_path as string | null) ?? null,
@@ -124,31 +127,61 @@ export type Registration =
   | {
       signedIn: true
       email: string | null
-      suggestedName: string | null
-      row: { id: string; full_name: string; email: string; status: string } | null
+      /** Prefill for the request form. Either half may be empty. */
+      suggested: { first_name: string; last_name: string }
+      row: { id: string; first_name: string; last_name: string; email: string; status: string } | null
     }
+
+/**
+ * Read a suggested name out of the auth account's own metadata.
+ *
+ * **This is the one place `full_name` legitimately survives the split.**
+ * `user_metadata` belongs to Supabase Auth, not to us: accounts created before
+ * 19 September 2026 carry a `full_name` key we cannot rewrite, and an OAuth
+ * provider may supply `given_name` / `family_name` of its own. So all three
+ * shapes are accepted, newest first, and the whole thing is a hint anyway — the
+ * database takes what the person actually types.
+ */
+function suggestedFrom(meta: Record<string, unknown> | undefined): { first_name: string; last_name: string } {
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  const first = str(meta?.first_name) || str(meta?.given_name)
+  const last = str(meta?.last_name) || str(meta?.family_name)
+  if (first || last) return { first_name: first, last_name: last }
+
+  // The pre-split shape, and whatever a provider called it.
+  const whole = str(meta?.full_name) || str(meta?.name)
+  if (!whole) return { first_name: '', last_name: '' }
+  const words = whole.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return { first_name: whole, last_name: '' }
+  return { first_name: words.slice(0, -1).join(' '), last_name: words[words.length - 1]! }
+}
 
 export const getRegistration = cache(async (): Promise<Registration> => {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data: verified } = await supabase.auth.getClaims()
   const claims = verified?.claims as
-    | { sub?: string; email?: string; user_metadata?: { full_name?: unknown } }
+    | { sub?: string; email?: string; user_metadata?: Record<string, unknown> }
     | undefined
   if (!claims?.sub) return { signedIn: false }
 
   const { data } = await supabase
     .from('staff_users')
-    .select('id, full_name, email, status')
+    .select('id, first_name, last_name, email, status')
     .eq('auth_user_id', claims.sub)
     .maybeSingle()
 
-  const suggested = claims.user_metadata?.full_name
   return {
     signedIn: true,
     email: claims.email ?? null,
-    suggestedName: typeof suggested === 'string' && suggested.trim() ? suggested.trim() : null,
+    suggested: suggestedFrom(claims.user_metadata),
     row: data
-      ? { id: data.id as string, full_name: data.full_name as string, email: data.email as string, status: data.status as string }
+      ? {
+          id: data.id as string,
+          first_name: data.first_name as string,
+          last_name: data.last_name as string,
+          email: data.email as string,
+          status: data.status as string,
+        }
       : null,
   }
 })

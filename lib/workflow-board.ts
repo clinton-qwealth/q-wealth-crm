@@ -539,7 +539,22 @@ export type PostNode = {
   content?: PostNode[]
 }
 export type PostDoc = { type: 'doc'; content?: PostNode[] }
-export type PostMention = { staff_id: string; full_name: string }
+/**
+ * Somebody named in a post, or credited with a reaction.
+ *
+ * **Both keys are optional, and that is deliberate for the duration of the name
+ * split.** `workflow_posts_summary` emits `full_name` and `name` together while
+ * the two representations coexist (19 Sep 2026 → M3). A reader that insisted on
+ * either one would break in one direction or the other: on `full_name` when the
+ * key is finally dropped, on `name` if the app is ever rolled back to a build
+ * that predates it. Read through `mentionName()` and neither can happen.
+ */
+export type PostMention = { staff_id: string; full_name?: string; name?: string }
+
+/** The display name for a mention or a reaction, whichever key the row carries. */
+export function mentionName(m: Pick<PostMention, 'full_name' | 'name'>): string {
+  return (m.name ?? m.full_name ?? '').trim()
+}
 
 /* ---- the things a post can point at ----------------------------------- */
 

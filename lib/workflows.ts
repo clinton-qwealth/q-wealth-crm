@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { fullName } from '@/lib/staff-name'
 import type {
   WorkflowPost, BoardCard, EntityChoice, TaskAction, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
@@ -65,10 +66,16 @@ export async function getStaffChoices(): Promise<{ id: string; name: string }[]>
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data } = await supabase
     .from('staff_directory')
-    .select('id, full_name, status')
+    .select('id, first_name, last_name, status')
     .eq('status', 'active')
-    .order('full_name')
-  return (data ?? []).map((s) => ({ id: s.id as string, name: s.full_name as string }))
+    // Surname first, so a picker reads as a directory. Ordered by the database
+    // rather than the component, which would only sort the rows it was handed.
+    .order('last_name')
+    .order('first_name')
+  return (data ?? []).map((s) => ({
+    id: s.id as string,
+    name: fullName({ first_name: s.first_name as string, last_name: s.last_name as string }),
+  }))
 }
 
 /**

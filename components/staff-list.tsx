@@ -16,6 +16,7 @@ import { DataRow } from './data-section'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
 import { Pill, SHEET } from './ui'
+import { fullName } from '@/lib/staff-name'
 import { formatNoteDateTime } from '@/lib/note-date'
 
 /**
@@ -75,8 +76,8 @@ export function StaffList({
           {members.map((s) => (
             <DataRow
               key={s.id}
-              leading={<Avatar staffId={s.id} name={s.full_name} avatarPath={s.avatar_path} />}
-              primary={s.full_name}
+              leading={<Avatar staffId={s.id} firstName={s.first_name} lastName={s.last_name} avatarPath={s.avatar_path} />}
+              primary={fullName(s)}
               secondary={s.email}
               meta={
                 <span className="flex items-center gap-1.5">
@@ -84,7 +85,7 @@ export function StaffList({
                   <Pill on={s.status === 'active'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill>
                 </span>
               }
-              trigger={{ label: `Open ${s.full_name}`, onClick: () => setSelectedId(s.id) }}
+              trigger={{ label: `Open ${fullName(s)}`, onClick: () => setSelectedId(s.id) }}
             />
           ))}
         </ul>
@@ -127,7 +128,7 @@ function StaffPanel({
       <DrawerHeader
         id="staff-drawer-title"
         eyebrow="Staff"
-        title={p.full_name}
+        title={fullName(p)}
         pills={
           <>
             <Pill tone="brand">{p.profile?.name ?? 'No profile'}</Pill>
@@ -144,14 +145,18 @@ function StaffPanel({
           identity={identity}
           view={
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
-              <Field label="Name" value={p.full_name} />
+              <Field label="First name" value={p.first_name} />
+              <Field label="Last name" value={p.last_name} />
               <Field label="Email" value={p.email} />
             </dl>
           }
           edit={
             <div className="flex flex-col gap-3">
-              <EditField label="Name">
-                <input name="full_name" defaultValue={p.full_name} required className={FIELD_INPUT} />
+              <EditField label="First name">
+                <input name="first_name" defaultValue={p.first_name} required className={FIELD_INPUT} />
+              </EditField>
+              <EditField label="Last name">
+                <input name="last_name" defaultValue={p.last_name} required className={FIELD_INPUT} />
               </EditField>
               <EditField label="Email">
                 <input name="email" type="email" defaultValue={p.email} required className={FIELD_INPUT} />
@@ -270,7 +275,7 @@ function PhotoBox({ person: p }: { person: StaffRow }) {
       title="Photo"
       view={
         <div className="flex items-center gap-4">
-          <Avatar staffId={p.id} name={p.full_name} avatarPath={p.avatar_path} size="lg" />
+          <Avatar staffId={p.id} firstName={p.first_name} lastName={p.last_name} avatarPath={p.avatar_path} size="lg" />
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap gap-2">
               <label className="cursor-pointer rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-800 outline-none transition-colors hover:bg-neutral-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/30">
@@ -367,9 +372,9 @@ function RequestRow({ request: r, profiles }: { request: StaffRow; profiles: Acc
   return (
     <li data-slot="access-request" className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
-        <Avatar staffId={r.id} name={r.full_name} avatarPath={null} />
+        <Avatar staffId={r.id} firstName={r.first_name} lastName={r.last_name} avatarPath={null} />
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-neutral-900">{r.full_name}</div>
+          <div className="truncate text-sm font-medium text-neutral-900">{fullName(r)}</div>
           <div className="truncate text-xs text-neutral-500">
             {r.email} · asked {formatNoteDateTime(r.created_at)}
           </div>
@@ -382,7 +387,7 @@ function RequestRow({ request: r, profiles }: { request: StaffRow; profiles: Acc
       </div>
       {confirming ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
-          <span className="text-neutral-700">Decline {r.full_name}?</span>
+          <span className="text-neutral-700">Decline {fullName(r)}?</span>
           <button
             type="button"
             onClick={decline}
@@ -403,7 +408,7 @@ function RequestRow({ request: r, profiles }: { request: StaffRow; profiles: Acc
       ) : (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <select
-            aria-label={`Access profile for ${r.full_name}`}
+            aria-label={`Access profile for ${fullName(r)}`}
             value={profileId}
             onChange={(e) => setProfileId(e.target.value)}
             disabled={busy}

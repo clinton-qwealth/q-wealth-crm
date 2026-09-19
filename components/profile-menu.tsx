@@ -4,17 +4,12 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { signOut } from '@/app/actions'
 import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM } from '@/lib/nav'
+import { fullName, initialsOf } from '@/lib/staff-name'
 import { Avatar } from './avatar'
 import { UserIcon } from './icons'
 
 const ITEM_CLASS =
   'block w-full px-3 py-1.5 text-left text-sm outline-none transition-colors focus-visible:bg-brand-50 focus-visible:text-brand-700'
-
-function initialsOf(name?: string) {
-  if (!name) return null
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0]?.toUpperCase()).join('') || null
-}
 
 /**
  * Avatar button with a dropdown.
@@ -25,13 +20,15 @@ function initialsOf(name?: string) {
  * link, so the focus list is typed as HTMLElement rather than anchors.
  */
 export function ProfileMenu({
-  name,
+  firstName,
+  lastName,
   email,
   isAdmin = false,
   staffId,
   avatarPath = null,
 }: {
-  name?: string
+  firstName?: string
+  lastName?: string
   email?: string
   /** One fact crosses the client boundary, not the permission matrix. */
   isAdmin?: boolean
@@ -44,7 +41,10 @@ export function ProfileMenu({
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const itemRefs = useRef<(HTMLElement | null)[]>([])
-  const initials = initialsOf(name)
+  /* One rule, shared with the Avatar tile — this component used to carry a
+     private copy of it that took the first letter of the first TWO words. */
+  const name = firstName || lastName ? fullName({ first_name: firstName ?? '', last_name: lastName ?? '' }) : undefined
+  const initials = name ? initialsOf({ first_name: firstName ?? '', last_name: lastName ?? '' }) : null
 
   useEffect(() => {
     if (!open) return
@@ -99,7 +99,8 @@ export function ProfileMenu({
         {staffId && avatarPath && name ? (
           <Avatar
             staffId={staffId}
-            name={name}
+            firstName={firstName ?? ''}
+            lastName={lastName ?? ''}
             avatarPath={avatarPath}
             size="sm"
             className={open ? 'ring-brand-300' : 'hover:ring-brand-200'}

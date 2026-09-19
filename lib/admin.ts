@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { fullName } from '@/lib/staff-name'
 import type { Staff } from '@/lib/staff'
 import type { AuditActor, AuditCursor, AuditEntry, AuditFilters } from '@/lib/audit'
 
@@ -74,15 +75,23 @@ export async function getAuditActors(): Promise<AuditActor[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('staff_directory')
-    .select('id, full_name, status')
-    .order('full_name')
+    .select('id, first_name, last_name, status')
+    // Surname first, as a directory reads. The ORDER IS THE DATABASE'S, not the
+    // component's: sorting here would sort one page of rows rather than the set.
+    .order('last_name')
+    .order('first_name')
   if (error) throw new Error(`The staff directory could not be read: ${error.message}`)
-  return (data ?? []).map((s) => ({ id: s.id as string, name: s.full_name as string, status: s.status as string }))
+  return (data ?? []).map((s) => ({
+    id: s.id as string,
+    name: fullName({ first_name: s.first_name as string, last_name: s.last_name as string }),
+    status: s.status as string,
+  }))
 }
 
 export type StaffRow = {
   id: string
-  full_name: string
+  first_name: string
+  last_name: string
   email: string
   status: string
   avatar_path: string | null
@@ -115,8 +124,9 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('staff_users')
-    .select('id, full_name, email, status, avatar_path, created_at, staff_access_assignments(profile_id, access_profiles(id, name))')
-    .order('full_name')
+    .select('id, first_name, last_name, email, status, avatar_path, created_at, staff_access_assignments(profile_id, access_profiles(id, name))')
+    .order('last_name')
+    .order('first_name')
   if (error) throw new Error(`The staff list could not be read: ${error.message}`)
   return (data ?? []).map((r) => {
     const row = r as Record<string, unknown>
@@ -129,7 +139,8 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
     const profile = (Array.isArray(ap) ? ap[0] : ap) ?? null
     return {
       id: row.id as string,
-      full_name: row.full_name as string,
+      first_name: row.first_name as string,
+      last_name: row.last_name as string,
       email: row.email as string,
       status: row.status as string,
       avatar_path: (row.avatar_path as string | null) ?? null,

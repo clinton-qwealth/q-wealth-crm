@@ -71,7 +71,7 @@ const PROFILE = {
 const signedIn: Claims = { data: { claims: { sub: 'user-1', aal: 'aal2' } }, error: null }
 const row = (o: Record<string, unknown> = {}) => ({
   id: 's1',
-  full_name: 'A Adviser',
+  first_name: 'A', last_name: 'Adviser',
   email: 'a@example.com',
   status: 'active',
   staff_access_assignments: { access_profiles: PROFILE },
@@ -106,7 +106,7 @@ describe('getCurrentStaff', () => {
     expect(getUser).not.toHaveBeenCalled()
     expect(staff).toEqual({
       id: 's1',
-      full_name: 'A Adviser',
+      first_name: 'A', last_name: 'Adviser',
       email: 'a@example.com',
       status: 'active',
       avatar_path: null,
@@ -184,7 +184,8 @@ describe('what getCurrentStaff asks for', () => {
     await getCurrentStaff()
     expect(selects).toHaveLength(1)
     const cols = selects[0]
-    for (const c of ['id', 'full_name', 'email', 'status', 'avatar_path']) expect(cols).toContain(c)
+    for (const c of ['id', 'first_name', 'last_name', 'email', 'status', 'avatar_path']) expect(cols).toContain(c)
+    expect(cols, 'the split is done: nothing still asks for full_name').not.toContain('full_name')
     for (const f of ['view_all_groups', 'view_sensitive', 'manage_groups', 'manage_staff', 'file_unmatched_notes', 'verify_identity']) {
       expect(cols, `the profile embed names ${f}`).toContain(f)
     }
@@ -203,21 +204,43 @@ describe('getRegistration', () => {
     expect(queries).toEqual([])
   })
 
-  test('signed in with no row: the email and the sign-up name, for the request form', async () => {
-    CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'new@qwealth.com.au', user_metadata: { full_name: '  Nina New ' } } }, error: null }
+  test('signed in with no row: the email and the parts, for the request form', async () => {
+    CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'new@qwealth.com.au', user_metadata: { first_name: ' Nina ', last_name: 'New ' } } }, error: null }
     ROW = null
     const r = await getRegistration()
-    expect(r).toEqual({ signedIn: true, email: 'new@qwealth.com.au', suggestedName: 'Nina New', row: null })
+    expect(r).toEqual({
+      signedIn: true,
+      email: 'new@qwealth.com.au',
+      suggested: { first_name: 'Nina', last_name: 'New' },
+      row: null,
+    })
     expect(eqCalls).toEqual([['auth_user_id', 'user-1']])
     expect(selects[0]).not.toContain('access_profiles')
   })
 
-  test('a pending row comes back as pending, and a blank metadata name is null', async () => {
+  /* user_metadata BELONGS TO SUPABASE AUTH, not to us. Accounts created before
+     19 Sep 2026 carry a `full_name` key we cannot rewrite, and a provider may
+     send given_name/family_name. All three shapes have to keep working — this is
+     the one place the old key legitimately survives. */
+  test('accepts the pre-split metadata key, and a provider\'s own', async () => {
+    const read = async (meta: Record<string, unknown>) => {
+      CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'n@qwealth.com.au', user_metadata: meta } }, error: null }
+      ROW = null
+      const r = await getRegistration()
+      return r.signedIn ? r.suggested : null
+    }
+    expect(await read({ full_name: '  Nina New ' })).toEqual({ first_name: 'Nina', last_name: 'New' })
+    expect(await read({ given_name: 'Nina', family_name: 'New' })).toEqual({ first_name: 'Nina', last_name: 'New' })
+    expect(await read({ full_name: 'Mary Jane van Berg' })).toEqual({ first_name: 'Mary Jane van', last_name: 'Berg' })
+    expect(await read({})).toEqual({ first_name: '', last_name: '' })
+  })
+
+  test('a pending row comes back as pending, and a blank metadata name is empty', async () => {
     CLAIMS = { data: { claims: { sub: 'user-1', aal: 'aal1', email: 'new@qwealth.com.au', user_metadata: { full_name: '   ' } } }, error: null }
-    ROW = { id: 's9', full_name: 'Nina New', email: 'new@qwealth.com.au', status: 'pending' }
+    ROW = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'new@qwealth.com.au', status: 'pending' }
     const r = await getRegistration()
-    expect(r.signedIn && r.row).toEqual({ id: 's9', full_name: 'Nina New', email: 'new@qwealth.com.au', status: 'pending' })
-    expect(r.signedIn && r.suggestedName).toBeNull()
+    expect(r.signedIn && r.row).toEqual({ id: 's9', first_name: 'Nina', last_name: 'New', email: 'new@qwealth.com.au', status: 'pending' })
+    expect(r.signedIn && r.suggested).toEqual({ first_name: '', last_name: '' })
   })
 
   test('a pending row is still NOT staff to getCurrentStaff', async () => {

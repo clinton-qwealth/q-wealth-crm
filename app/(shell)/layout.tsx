@@ -51,7 +51,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
        carries its own fallback colour, so nothing is lost. */
     <div className="flex min-h-dvh flex-col">
       <TopNav
-        staffName={staff.full_name}
+        staffFirstName={staff.first_name}
+        staffLastName={staff.last_name}
         staffEmail={staff.email}
         isAdmin={isAdmin(staff)}
         staffId={staff.id}
