@@ -71,6 +71,31 @@ describe('signUpForAccess', () => {
     expect(r && 'message' in r ? r.message : '').toContain('nina@qwealth.com.au')
   })
 
+  /* The confirmation link creates the request itself since 20 Sep 2026, so the
+     message must stop telling people to come back and ask. It still has to name
+     the address — that is the only thing on screen saying WHERE to look. */
+  test('the message names the address and no longer sends them back here to ask', async () => {
+    const r = await signUpForAccess(
+      null,
+      form({ first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', password: 'a-long-enough-password' }),
+    )
+    const message = r && 'message' in r ? r.message : ''
+    expect(message).toContain('nina@qwealth.com.au')
+    expect(message).not.toMatch(/come back/i)
+  })
+
+  /* `request_staff_access()` refuses a name over 60 characters. Without a guard
+     here the account is created happily and the request fails afterwards, by
+     which point the person cannot see which box was at fault. */
+  test('a name longer than the database allows never reaches Auth', async () => {
+    const long = 'N'.repeat(61)
+    for (const fields of [{ first_name: long, last_name: 'New' }, { first_name: 'Nina', last_name: long }]) {
+      const r = await signUpForAccess(null, form({ ...fields, email: 'n@qwealth.com.au', password: 'a-long-enough-password' }))
+      expect(r).toEqual({ error: 'Use 60 characters or fewer for each part of your name.' })
+    }
+    expect(log).toEqual([])
+  })
+
   test('a short password never reaches Auth', async () => {
     const r = await signUpForAccess(null, form({ first_name: 'N', last_name: 'N', email: 'n@qwealth.com.au', password: 'short' }))
     expect(r).toEqual({ error: 'Use a password of at least 12 characters.' })

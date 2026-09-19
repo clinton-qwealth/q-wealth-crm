@@ -33,6 +33,14 @@ describe('/request-access', () => {
     expect(getByRole('button', { name: 'Create account' })).toBeTruthy()
   })
 
+  /**
+   * **This is the fallback path now, not the normal one.** Since 20 Sep 2026 the
+   * confirmation link creates the pending request itself, so most people never
+   * see this form — they land on "Awaiting approval" instead. It still has to
+   * work, and is still the only path on the OAuth consent screen, for anyone
+   * whose account carries no usable name and for a request the database refused.
+   * Do not delete it as dead.
+   */
   test('signed in, no row: the request form, prefilled, carrying next', async () => {
     registration = { signedIn: true, email: 'nina@qwealth.com.au', suggested: { first_name: 'Nina', last_name: 'New' }, row: null }
     const { container, getByRole } = await page('/oauth/consent?authorization_id=a')

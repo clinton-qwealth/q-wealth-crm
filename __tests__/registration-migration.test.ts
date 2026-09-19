@@ -22,6 +22,21 @@ const fn = (name: string) => {
   return sql.slice(start, end)
 }
 
+/**
+ * Not this migration's own text, but the constraint its idempotence rests on.
+ *
+ * `request_staff_access()` reads then inserts with no lock, and since 20 Sep 2026
+ * it is called from `/auth/confirm` — a GET a browser may repeat. Two concurrent
+ * confirmations would both find no row and both insert; `auth_user_id uuid unique`
+ * is the only thing that turns that into one row and a clean refusal rather than
+ * two pending rows and a `maybeSingle()` that errors for that person forever.
+ */
+describe('the constraint the request function leans on', () => {
+  test('a staff row is unique per auth account', () => {
+    expect(migrationSource('create_staff_users')).toMatch(/auth_user_id\s+uuid\s+unique/)
+  })
+})
+
 describe('the registration migration', () => {
   test('the enum value stands alone in its own file', () => {
     expect(enumSql).toMatch(/alter type public\.staff_status add value if not exists 'pending' before 'active'/)

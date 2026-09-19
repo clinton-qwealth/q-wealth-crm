@@ -141,8 +141,14 @@ export type Registration =
  * provider may supply `given_name` / `family_name` of its own. So all three
  * shapes are accepted, newest first, and the whole thing is a hint anyway — the
  * database takes what the person actually types.
+ *
+ * **Exported because `/auth/confirm` reads the same metadata.** Since 20 Sep 2026
+ * the confirmation link creates the pending request itself, which means the route
+ * and this prefill are two readers of one blob. Re-reading `first_name` directly
+ * over there would silently miss the `given_name` and `full_name` shapes below,
+ * and the two would then disagree about the same account.
  */
-function suggestedFrom(meta: Record<string, unknown> | undefined): { first_name: string; last_name: string } {
+export function suggestedName(meta: Record<string, unknown> | undefined): { first_name: string; last_name: string } {
   const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
   const first = str(meta?.first_name) || str(meta?.given_name)
   const last = str(meta?.last_name) || str(meta?.family_name)
@@ -173,7 +179,7 @@ export const getRegistration = cache(async (): Promise<Registration> => {
   return {
     signedIn: true,
     email: claims.email ?? null,
-    suggested: suggestedFrom(claims.user_metadata),
+    suggested: suggestedName(claims.user_metadata),
     row: data
       ? {
           id: data.id as string,

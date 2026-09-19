@@ -30,7 +30,7 @@ export default async function RequestAccessPage({
     return (
       <AuthShell
         title="Request access"
-        description="Create an account with your Q Wealth email address. You will confirm it, then ask an administrator to let you in."
+        description="Create an account with your Q Wealth email address. Confirming it sends your request to an administrator."
         footer="Already have an account? Sign in, and you will be brought back here."
       >
         <SignUpForm />

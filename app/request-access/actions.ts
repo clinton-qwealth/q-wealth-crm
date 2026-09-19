@@ -24,13 +24,21 @@ export async function signUpForAccess(_prev: RequestState, formData: FormData): 
   if (!email || !password || !firstName || !lastName) {
     return { error: 'Enter your first and last name, your Q Wealth email address and a password.' }
   }
+  /* 60 each, because that is what `request_staff_access()` enforces. Without
+     this the account is created happily and the request fails afterwards, at a
+     point where the person can no longer see which box was at fault. */
+  if (firstName.length > 60 || lastName.length > 60) {
+    return { error: 'Use 60 characters or fewer for each part of your name.' }
+  }
   if (password.length < 12) return { error: 'Use a password of at least 12 characters.' }
 
   const supabase = await createSupabaseServerClient()
-  /* The parts go into Supabase Auth's own user_metadata, which is where the
-     request form reads its prefill from. `getRegistration()` still accepts the
-     pre-split `full_name` key there, because accounts created before 19 Sep
-     2026 carry it and that metadata is not ours to rewrite. */
+  /* The parts go into Supabase Auth's own user_metadata, which is where BOTH
+     the request form's prefill and `/auth/confirm` read the name from — the
+     confirmation link creates the pending request itself since 20 Sep 2026.
+     `suggestedName()` still accepts the pre-split `full_name` key there, because
+     accounts created before 19 Sep carry it and that metadata is not ours to
+     rewrite. */
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -38,7 +46,10 @@ export async function signUpForAccess(_prev: RequestState, formData: FormData): 
   })
   if (error) return { error: error.message }
 
-  return { ok: true, message: `Check ${email} for a confirmation link, then come back here to ask for access.` }
+  return {
+    ok: true,
+    message: `Check ${email} for a confirmation link. Following it confirms your address and sends your request to an administrator — there is nothing else for you to fill in.`,
+  }
 }
 
 /**

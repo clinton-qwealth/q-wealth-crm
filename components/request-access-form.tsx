@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState } from 'react'
 import { requestStaffAccess, signUpForAccess } from '@/app/request-access/actions'
 
@@ -25,13 +26,29 @@ const LABEL = 'text-xs font-semibold uppercase tracking-wider text-neutral-500'
 function NameFields({ first = '', last = '' }: { first?: string; last?: string }) {
   return (
     <div className="grid grid-cols-2 gap-3">
+      {/* 60 each, matching the limit `request_staff_access()` enforces, so the
+          database cannot be made to refuse a name this form accepted. */}
       <label className="flex flex-col gap-1">
         <span className={LABEL}>First name</span>
-        <input name="first_name" required defaultValue={first} autoComplete="given-name" className={FIELD} />
+        <input
+          name="first_name"
+          required
+          maxLength={60}
+          defaultValue={first}
+          autoComplete="given-name"
+          className={FIELD}
+        />
       </label>
       <label className="flex flex-col gap-1">
         <span className={LABEL}>Last name</span>
-        <input name="last_name" required defaultValue={last} autoComplete="family-name" className={FIELD} />
+        <input
+          name="last_name"
+          required
+          maxLength={60}
+          defaultValue={last}
+          autoComplete="family-name"
+          className={FIELD}
+        />
       </label>
     </div>
   )
@@ -44,9 +61,26 @@ export function SignUpForm() {
   const [state, action, pending] = useActionState(signUpForAccess, null)
   if (state && 'ok' in state) {
     return (
-      <p role="status" className="text-sm leading-relaxed text-neutral-700">
-        {state.message}
-      </p>
+      <div className="flex flex-col gap-3">
+        <p role="status" className="text-sm leading-relaxed text-neutral-700">
+          {state.message}
+        </p>
+        {/* Static, and it has to be. Signing up with an address that already has
+            an account returns this same cheerful message and sends no email —
+            deliberately, so the screen never reveals who has an account. That
+            person's only way forward is to sign in, and without this line the
+            new copy leaves them with no next step at all. */}
+        <p className="text-xs leading-relaxed text-neutral-500">
+          No email? If you already have an account,{' '}
+          <Link
+            href="/login"
+            className="font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+          >
+            sign in
+          </Link>{' '}
+          instead.
+        </p>
+      </div>
     )
   }
   return (

@@ -65,6 +65,30 @@ test.describe('unauthenticated access', () => {
     await expect(page.getByRole('heading', { name: 'Request access' })).toHaveCSS('text-align', 'center')
   })
 
+  /**
+   * A confirmation link that has already been used.
+   *
+   * This is the case that made joining read as four steps: the token is
+   * single-use, the route is a GET a browser may repeat, and an anonymous
+   * repeat has to say so rather than presenting a bare sign-in form. Somebody
+   * who still holds a session is sent onward instead — that half is unit-tested,
+   * since it needs a session this suite has no fixture for.
+   *
+   * The only test here that calls Supabase Auth for real. It needs no fixture:
+   * a nonsense token is refused the same way an expired one is.
+   */
+  test('a spent confirmation link explains itself instead of just asking for a password', async ({ page }) => {
+    await page.goto('/auth/confirm?token_hash=not-a-real-token&type=signup')
+    await expect(page).toHaveURL(/\/login\?error=confirm$/)
+    /* By its own slot, not by role: Next renders a permanently empty
+       `role="alert"` route announcer on every page, so a role query matches two
+       elements and fails strict mode without saying anything about our notice. */
+    const alert = page.locator('[data-slot="arrival-notice"]')
+    await expect(alert).toContainText(/expired or has already been used/i)
+    await expect(alert).toHaveAttribute('role', 'alert')
+    await expect(page.getByLabel(/password/i), 'the form is still there to use').toBeVisible()
+  })
+
   test('the login page itself is reachable', async ({ page }) => {
     await page.goto('/login')
     await expect(page.getByLabel(/email/i)).toBeVisible()
