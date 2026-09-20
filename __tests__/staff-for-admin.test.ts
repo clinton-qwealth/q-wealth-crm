@@ -21,7 +21,11 @@ vi.mock('@/lib/supabase/server', () => ({
     from: (table: string) => {
       log.push(`from:${table}`)
       const chain: Record<string, unknown> = {}
-      for (const m of ['select', 'order']) chain[m] = () => chain
+      chain.select = (cols: string) => {
+        log.push(`select:${cols}`)
+        return chain
+      }
+      chain.order = () => chain
       chain.then = (res: (v: unknown) => unknown) =>
         Promise.resolve(
           staffError ? { data: null, error: { message: staffError } } : { data: staffRows, error: null },
@@ -47,8 +51,10 @@ const person = (o: Record<string, unknown> = {}) => ({
   avatar_path: null,
   created_at: '2026-09-01T00:00:00+00:00',
   verify_identity: false,
+  limited_to_user_groups: false,
   staff_private_details: null,
   staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Adviser' } },
+  user_group_members: [],
   ...o,
 })
 
@@ -104,5 +110,41 @@ describe('getStaffForAdmin', () => {
   test('the staff read’s own failure is still the one that is reported', async () => {
     staffError = 'permission denied'
     await expect(getStaffForAdmin()).rejects.toThrow(/permission denied/)
+  })
+
+  /**
+   * User groups, 20 Sep 2026. The toggle is read strictly — a row the select
+   * did not carry must read false, never true — and the memberships arrive as
+   * an embed of embeds that has to be flattened, tolerated in both shapes, and
+   * sorted here because PostgREST does not order a to-many embed by name.
+   */
+  test('the limit toggle is true only when the row says true', async () => {
+    staffRows = [person({ limited_to_user_groups: true }), person({ id: 's2' }), person({ id: 's3', limited_to_user_groups: undefined })]
+    const rows = await getStaffForAdmin()
+    expect(rows.map((r) => r.limited_to_user_groups)).toEqual([true, false, false])
+  })
+
+  test('the user groups are flattened from the membership embed, tolerated in both shapes, sorted by name, nulls dropped', async () => {
+    staffRows = [
+      person({
+        user_group_members: [
+          { user_groups: { id: 'ug2', name: 'South', status: 'active' } },
+          { user_groups: [{ id: 'ug1', name: 'North', status: 'archived' }] },
+          { user_groups: null },
+        ],
+      }),
+    ]
+    const [row] = await getStaffForAdmin()
+    expect(row!.user_groups).toEqual([
+      { id: 'ug1', name: 'North', status: 'archived' },
+      { id: 'ug2', name: 'South', status: 'active' },
+    ])
+  })
+
+  test('the select asks for the toggle and the membership embed by name', async () => {
+    await getStaffForAdmin()
+    const select = log.find((l) => l.startsWith('select:'))!
+    expect(select).toMatch(/\blimited_to_user_groups\b/)
+    expect(select).toMatch(/user_group_members\(user_groups\(id, name, status\)\)/)
   })
 })

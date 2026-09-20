@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import type { UserGroupChoice } from '@/lib/user-groups'
 
 /**
  * One client group as the index lists it.
@@ -47,4 +48,30 @@ export async function getVisibleGroups(): Promise<GroupListItem[]> {
     throw new Error(`The client groups could not be read: ${error.message}`)
   }
   return (data ?? []) as GroupListItem[]
+}
+
+/**
+ * The user groups a household may be put in: active ones, by name.
+ *
+ * Readable by every active staff member (`staff_read_user_groups`), so the
+ * group page can offer the list to anyone allowed to edit the household.
+ * Archived groups are left out on purpose — the database refuses to newly
+ * assign one, so offering it would be offering a refusal.
+ *
+ * Lives here rather than in `lib/user-groups.ts`, which is pure vocabulary a
+ * client component imports; a Supabase import there pulls `next/headers` into
+ * the browser bundle.
+ *
+ * Throws on error, the house rule above: an empty picker that is really a
+ * failed read would tell an adviser there are no territories.
+ */
+export async function getActiveUserGroups(): Promise<UserGroupChoice[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('user_groups')
+    .select('id, name, status')
+    .eq('status', 'active')
+    .order('name')
+  if (error) throw new Error(`The user groups could not be read: ${error.message}`)
+  return (data ?? []) as UserGroupChoice[]
 }

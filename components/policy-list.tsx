@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ActivityFeed } from './activity-feed'
+import { CheckboxSet } from './checkbox-set'
 import { DeleteRecordDialog } from './delete-record-dialog'
 import { Drawer, DrawerBody, DrawerFooter, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox } from './field-box'
@@ -547,8 +548,9 @@ function PolicyPanel({
   )
 }
 
-/** One role's checkbox list, with the sentinel that gives an emptied list a
- *  meaning distinct from a control that was never shown. */
+/** One role's checkbox list. The markup moved to `CheckboxSet` on 20 Sep 2026,
+ *  when the user drawer became the third place to want it; this keeps the
+ *  policy drawer's own vocabulary (members, `party_id`) at the call sites. */
 function PartyPicker({
   legend,
   field,
@@ -563,30 +565,13 @@ function PartyPicker({
   chosen: { party_id: string }[]
 }) {
   return (
-    <fieldset>
-      <input type="hidden" name={sentinel} value="1" />
-      <legend className="mb-1 text-xs text-neutral-500">{legend}</legend>
-      {members.length === 0 ? (
-        <p className="text-xs text-neutral-500">This group has no members to name.</p>
-      ) : (
-        <div className="flex flex-col gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-2">
-          {members.map((m) => (
-            <label
-              key={m.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm text-neutral-800 hover:bg-white"
-            >
-              <input
-                type="checkbox"
-                name={field}
-                value={m.id}
-                defaultChecked={chosen.some((c) => c.party_id === m.id)}
-                className="h-3.5 w-3.5 accent-[var(--brand-500)]"
-              />
-              {m.name}
-            </label>
-          ))}
-        </div>
-      )}
-    </fieldset>
+    <CheckboxSet
+      legend={legend}
+      field={field}
+      sentinel={sentinel}
+      options={members}
+      chosen={chosen.map((c) => c.party_id)}
+      emptyText="This group has no members to name."
+    />
   )
 }

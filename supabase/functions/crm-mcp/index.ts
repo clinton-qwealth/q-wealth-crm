@@ -359,7 +359,7 @@ function buildServer(db: SupabaseClient, staff: Staff) {
     {
       title: 'List my client groups',
       description:
-        'All client groups visible to you. For advisers this is your book (owned + assigned); Services/Management/Admin see all groups.',
+        'All client groups visible to you: the ones you own, the ones in your user groups (territories), the ones shared with you, and — unless your record is limited to your user groups — every group your access profile lets you see. Each row names its user_group_name, or null for a group in no territory.',
       inputSchema: {},
     },
     async () => {

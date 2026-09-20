@@ -83,8 +83,10 @@ export const TABLE_LABEL: Record<string, string> = {
   staff_users: 'Staff member',
   access_profiles: 'Access profile',
   staff_private_details: 'Staff private details',
-  teams: 'Team',
-  team_members: 'Team membership',
+  /* Renamed from teams / team_members on 20 Sep 2026, when the empty July
+     tables became territories. The census follows `alter table … rename to`. */
+  user_groups: 'User group',
+  user_group_members: 'User group membership',
   client_group_access: 'Group access grant',
   notes: 'File note',
   note_subjects: 'Note subject',

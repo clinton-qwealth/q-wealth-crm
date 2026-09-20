@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { freshTotp } from './totp'
+import { signIn } from './sign-in'
 
 /**
  * The other half of the boundary: an authenticated staff member does get in, and
@@ -27,20 +27,8 @@ test.describe('authenticated staff access', () => {
   )
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/login')
-    await page.getByLabel(/email/i).fill(email!)
-    await page.getByLabel(/password/i).fill(password!)
-    await page.getByRole('button', { name: /sign in/i }).click()
-
-    // A password grant is aal1. With a factor enrolled, every route demands
-    // step-up, so the suite has to complete it exactly as a person would.
-    await page.waitForURL(/\/(mfa|$|groups|profile)/)
-    if (new URL(page.url()).pathname === '/mfa') {
-      await page.getByLabel(/authentication code/i).fill(await freshTotp(totpSecret!))
-      await page.getByRole('button', { name: /verify/i }).click()
-      await expect(page).not.toHaveURL(/\/mfa/)
-    }
-    await expect(page).not.toHaveURL(/\/login/)
+    // Password, then the second factor — see e2e/sign-in.ts.
+    await signIn(page, { email: email!, password: password!, totpSecret: totpSecret! })
   })
 
   test('a staff member reaches the home page', async ({ page }) => {
@@ -169,6 +157,24 @@ test.describe('authenticated staff access', () => {
        behaviour and it only works because the trigger still exists — one
        dialog for the list, rows keyed by id, so nothing is remounted. */
     await expect(row).toBeFocused()
+  })
+
+  /**
+   * The Administration page's tabs, 20 Sep 2026: Users, User groups, Audit
+   * trail, in that order. Read-only — nothing here writes to the shared
+   * database — and skipped when the fixture account is not an administrator,
+   * because a non-administrator is told the page does not exist.
+   */
+  test('the administration page lists Users, User groups and the audit trail in that order', async ({ page }) => {
+    const response = await page.goto('/admin')
+    test.skip(response?.status() === 404, 'The fixture account is not an administrator.')
+    await expect(page.getByRole('tablist', { name: 'Administration' })).toBeVisible()
+    await expect(page.getByRole('tab')).toHaveText(['Users', 'User groups', 'Audit trail'])
+    await page.getByRole('tab', { name: 'User groups' }).click()
+    /* Either state is legitimate on a live database; what is not is neither. */
+    await expect(
+      page.getByText('No user groups yet').or(page.getByRole('heading', { level: 3, name: 'User groups' })),
+    ).toBeVisible()
   })
 
   /**

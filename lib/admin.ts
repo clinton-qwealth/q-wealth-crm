@@ -114,6 +114,14 @@ export type StaffRow = {
   /** Holds a session they have not given up. The Staff tab says "Signed in". */
   signed_in: boolean
   profile: { id: string; name: string } | null
+  /**
+   * Sees only households in their own user groups (plus unassigned ones, plus
+   * anything owned or granted). Per person since 20 Sep 2026 — membership
+   * grants, this restricts. See `lib/user-groups.ts`.
+   */
+  limited_to_user_groups: boolean
+  /** The user groups (territories) this person belongs to, by name. */
+  user_groups: { id: string; name: string; status: string }[]
 }
 
 export type AccessProfileChoice = {
@@ -144,7 +152,7 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const [{ data, error }, { data: seen }] = await Promise.all([
     supabase
       .from('staff_users')
-      .select('id, first_name, last_name, title, email, status, avatar_path, created_at, verify_identity, staff_private_details(date_of_birth), staff_access_assignments(profile_id, access_profiles(id, name))')
+      .select('id, first_name, last_name, title, email, status, avatar_path, created_at, verify_identity, limited_to_user_groups, staff_private_details(date_of_birth), staff_access_assignments(profile_id, access_profiles(id, name)), user_group_members(user_groups(id, name, status))')
       .order('last_name')
       .order('first_name'),
     supabase.rpc('staff_last_seen'),
@@ -182,6 +190,80 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
       last_seen_at: activity.get(row.id as string)?.last_seen_at ?? null,
       signed_in: activity.get(row.id as string)?.has_live_session === true,
       profile: profile ? { id: profile.id, name: profile.name } : null,
+      limited_to_user_groups: row.limited_to_user_groups === true,
+      user_groups: embeddedUserGroups(row.user_group_members),
+    }
+  })
+}
+
+/**
+ * The user groups embedded on a person's row, flattened and named.
+ *
+ * `user_group_members(user_groups(id, name, status))` arrives as a list of
+ * membership rows each carrying one group — an object, or an array should
+ * relationship detection ever change. Sorted HERE, by name, which is the one
+ * place the "ordering belongs in the query" rule cannot reach: PostgREST does
+ * not order a to-many embed by the embedded table's column.
+ */
+function embeddedUserGroups(raw: unknown): { id: string; name: string; status: string }[] {
+  if (!Array.isArray(raw)) return []
+  const groups: { id: string; name: string; status: string }[] = []
+  for (const m of raw as { user_groups?: unknown }[]) {
+    const g = m?.user_groups
+    const one = (Array.isArray(g) ? g[0] : g) as { id?: string; name?: string; status?: string } | null | undefined
+    if (one?.id && typeof one.name === 'string') groups.push({ id: one.id, name: one.name, status: one.status ?? 'active' })
+  }
+  return groups.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** One user group (territory) as the User groups tab lists it. */
+export type UserGroupRow = {
+  id: string
+  name: string
+  status: string
+  created_at: string
+  /** Everyone the table says, whatever their status — the picker offers active people only. */
+  members: { id: string; name: string }[]
+  /** Households assigned to this group, as the administrator can see them. */
+  household_count: number
+}
+
+/**
+ * Every user group, with its members and how many households it holds, for
+ * the User groups tab. Archived groups are listed on purpose — they can be
+ * reactivated from here, and their members are still theirs.
+ *
+ * ONE read. The members come as an embed through `user_group_members`, the
+ * household count as an embed of ids from `client_groups` — not an aggregate,
+ * which PostgREST does not serve here — so the tab joins the page's single
+ * wave rather than adding one. Throws on error, like every reader here.
+ */
+export async function getUserGroupsForAdmin(): Promise<UserGroupRow[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('user_groups')
+    .select('id, name, status, created_at, user_group_members(staff_users(id, first_name, last_name)), client_groups(id)')
+    .order('name')
+  if (error) throw new Error(`The user groups could not be read: ${error.message}`)
+  return (data ?? []).map((r) => {
+    const row = r as Record<string, unknown>
+    const memberRows = Array.isArray(row.user_group_members) ? (row.user_group_members as { staff_users?: unknown }[]) : []
+    const members = memberRows
+      .map((m) => {
+        const s = m?.staff_users
+        const one = (Array.isArray(s) ? s[0] : s) as { id?: string; first_name?: string; last_name?: string } | null | undefined
+        return one?.id ? { id: one.id, name: fullName({ first_name: one.first_name ?? '', last_name: one.last_name ?? '' }) } : null
+      })
+      .filter((m): m is { id: string; name: string } => m !== null)
+      .sort((a, b) => a.name.localeCompare(b.name))
+    const households = Array.isArray(row.client_groups) ? row.client_groups.length : 0
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      status: row.status as string,
+      created_at: row.created_at as string,
+      members,
+      household_count: households,
     }
   })
 }

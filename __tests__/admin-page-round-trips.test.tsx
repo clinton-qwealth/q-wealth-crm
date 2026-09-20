@@ -28,8 +28,11 @@ function stubClient() {
     })),
     staff_directory: [{ id: 's1', full_name: 'A Adviser', status: 'active' }],
     /* The Staff tab's two reads, on the same wave since Phase 2. */
-    staff_users: [{ id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, staff_private_details: null, staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Admin' } } }],
+    staff_users: [{ id: 's1', first_name: 'A', last_name: 'Adviser', email: 'a@example.com', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, limited_to_user_groups: false, title: null, staff_private_details: null, staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Admin' } }, user_group_members: [] }],
     access_profiles: [{ id: 'p1', name: 'Admin', description: null, view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true }],
+    /* The User groups tab's one read, 20 Sep 2026 — members and households
+       both arrive as embeds, so it joins the wave rather than adding one. */
+    user_groups: [{ id: 'ug1', name: 'North', status: 'active', created_at: '2026-09-20T00:00:00+00:00', user_group_members: [{ staff_users: { id: 's1', first_name: 'A', last_name: 'Adviser' } }], client_groups: [{ id: 'g1' }, { id: 'g2' }] }],
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }
@@ -89,9 +92,12 @@ describe('/admin round-trip depth', () => {
     /* In the SAME wave, not after it — the depth assertion above is what says
        so, and this says the call happened at all. */
     expect(calls).toContain('staff_last_seen')
+    /* The User groups tab, 20 Sep 2026: one read, on the first wave. */
+    expect(calls).toContain('user_groups')
+    expect(calls, 'members and households come as embeds, not their own reads').not.toContain('user_group_members')
     /* The view, not the table beneath it. */
     expect(calls).not.toContain('audit_log')
-    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles']) {
+    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles', 'user_groups']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 /**
  * The Administration page's shape, asked for on 20 September 2026: three
- * columns like the group page, the working area in the middle, and **Staff as
- * the first tab** with the audit trail second.
+ * columns like the group page, the working area in the middle, and **Users as
+ * the first tab**, User groups second, the audit trail last.
  *
  * Both are the kind of change that looks like nothing in a diff and is noticed
  * only by whoever opens the page expecting the old arrangement — so both are
@@ -27,11 +27,13 @@ vi.mock('@/lib/admin', () => ({
   getAuditActors: async () => [],
   getStaffForAdmin: async () => [],
   getAccessProfiles: async () => [],
+  getUserGroupsForAdmin: async () => [],
 }))
 /* The two panels are stubbed: this file is about where they sit, not what they
    render, and both drag in the whole drawer and feed machinery otherwise. */
 vi.mock('@/components/audit-trail', () => ({ AuditTrail: () => <div data-slot="audit-panel" /> }))
 vi.mock('@/components/staff-list', () => ({ StaffList: () => <div data-slot="staff-panel" /> }))
+vi.mock('@/components/user-group-list', () => ({ UserGroupList: () => <div data-slot="user-groups-panel" /> }))
 
 const { default: AdminPage } = await import('@/app/(shell)/admin/page')
 const page = async () => render(await AdminPage())
@@ -41,9 +43,11 @@ beforeEach(() => {
 })
 
 describe('the Administration page', () => {
-  test('Users is the first tab and the audit trail the second', async () => {
+  /* User groups between them since the evening of 20 September: another
+     thing to use, so it sits with Users rather than after the trail. */
+  test('Users is the first tab, User groups the second, the audit trail last', async () => {
     const { getAllByRole } = await page()
-    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Users', 'Audit trail'])
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Users', 'User groups', 'Audit trail'])
   })
 
   test('the first tab is the one selected, so Users is what opens', async () => {

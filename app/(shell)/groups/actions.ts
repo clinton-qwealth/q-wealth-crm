@@ -594,6 +594,37 @@ export async function setPrimaryContact(
 }
 
 /**
+ * Put a household in a user group (territory), or take it out with `null`.
+ *
+ * One database function, `set_client_group_user_group`, governed by the same
+ * policy that lets somebody edit the household at all — this adds no reach.
+ * The refusals are its sentences, unrewritten: an archived group, a household
+ * the caller may not change. The shape checks are the front-door rule.
+ *
+ * Three revalidations: the household's own page (the pill), the groups index
+ * (whose rows the territory may now hide from a limited colleague), and the
+ * admin page (the User groups tab counts households).
+ */
+export async function setGroupUserGroup(groupId: string, userGroupId: string | null): Promise<RecordDetailState> {
+  if (!UUID_SHAPE.test(groupId)) return { error: 'No group selected.' }
+  if (userGroupId !== null && !UUID_SHAPE.test(userGroupId)) return { error: 'Choose a user group.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_client_group_user_group', {
+    p_group_id: groupId,
+    p_user_group_id: userGroupId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath(GROUP_PAGE, 'page')
+  revalidatePath('/groups')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
  * Record a staff opt-in or opt-out for one communication channel.
  *
  * **A channel the client unsubscribed from themselves is refused**, by the

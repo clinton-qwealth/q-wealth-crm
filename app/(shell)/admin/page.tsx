@@ -3,8 +3,18 @@ import { AuditTrail } from '@/components/audit-trail'
 import { StaffList } from '@/components/staff-list'
 import { Tabs } from '@/components/tabs'
 import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
-import { AUDIT_PAGE_SIZE, getAccessProfiles, getAuditActors, getAuditEntries, getStaffForAdmin, isAdmin } from '@/lib/admin'
+import { UserGroupList } from '@/components/user-group-list'
+import {
+  AUDIT_PAGE_SIZE,
+  getAccessProfiles,
+  getAuditActors,
+  getAuditEntries,
+  getStaffForAdmin,
+  getUserGroupsForAdmin,
+  isAdmin,
+} from '@/lib/admin'
 import { getCurrentStaff } from '@/lib/staff'
+import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Administration · Q Wealth CRM' }
 
@@ -27,6 +37,12 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  * until later that day; the underlying table is still `staff_users`, and that
  * is deliberate — renaming a label is not renaming a schema.
  *
+ * **User groups sits between them**, from the evening of the same day: another
+ * thing to USE, so it goes with Users rather than after the trail. Territories
+ * — a person belongs to many, a household to one; membership grants sight and
+ * the toggle on a person restricts it. "User groups" rather than "groups"
+ * because a group is already a client household everywhere else here.
+ *
  * ## The gate comes before the wave
  *
  * `isAdmin` is `manage_staff`, the same flag `audit_log`'s own read policy
@@ -44,15 +60,18 @@ export default async function AdminPage() {
   if (!staff) redirect('/login')
   if (!isAdmin(staff)) notFound()
 
-  const [page, actors, staffRows, profiles] = await Promise.all([
+  const [page, actors, staffRows, profiles, userGroups] = await Promise.all([
     getAuditEntries({ limit: AUDIT_PAGE_SIZE }),
     getAuditActors(),
     getStaffForAdmin(),
     getAccessProfiles(),
+    getUserGroupsForAdmin(),
   ])
 
   /* Derived from the rows already in the wave, not a second count query. */
   const pending = staffRows.filter((s) => s.status === 'pending').length
+  /* The members picker offers active people only; derived from the same rows. */
+  const staffChoices = staffRows.filter((s) => s.status === 'active').map((s) => ({ id: s.id, name: fullName(s) }))
 
   return (
     <>
@@ -79,7 +98,19 @@ export default async function AdminPage() {
               {
                 id: 'staff',
                 label: pending > 0 ? `Users (${pending} awaiting approval)` : 'Users',
-                panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
+                panel: (
+                  <StaffList
+                    staff={staffRows}
+                    profiles={profiles}
+                    userGroups={userGroups.map((g) => ({ id: g.id, name: g.name, status: g.status }))}
+                    viewer={{ id: staff.id }}
+                  />
+                ),
+              },
+              {
+                id: 'user-groups',
+                label: 'User groups',
+                panel: <UserGroupList groups={userGroups} staff={staffChoices} />,
               },
               {
                 id: 'audit',

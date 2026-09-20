@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
+import type { UserGroupChoice } from '@/lib/user-groups'
 
 /**
  * The Staff tab and the drawer it opens.
@@ -26,10 +27,16 @@ const PROFILES: AccessProfileChoice[] = [
   { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true },
   { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false },
 ]
-const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, title: 'Dr', date_of_birth: '1980-06-01', last_seen_at: '2026-09-20T01:08:23+00:00', signed_in: true, profile: { id: 'pb', name: 'Adviser' } }
+/* Three territories: two active, one archived that Reece still holds. */
+const GROUPS: UserGroupChoice[] = [
+  { id: 'ug-north', name: 'North', status: 'active' },
+  { id: 'ug-south', name: 'South', status: 'active' },
+  { id: 'ug-old', name: 'Old territory', status: 'archived' },
+]
+const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: { id: 'pa', name: 'Admin' }, limited_to_user_groups: false, user_groups: [] }
+const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, title: 'Dr', date_of_birth: '1980-06-01', last_seen_at: '2026-09-20T01:08:23+00:00', signed_in: true, profile: { id: 'pb', name: 'Adviser' }, limited_to_user_groups: true, user_groups: [{ id: 'ug-north', name: 'North', status: 'active' }, { id: 'ug-old', name: 'Old territory', status: 'archived' }] }
 
-const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} userGroups={GROUPS} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
 const drawer = (c: HTMLElement) => c.querySelector('dialog')!
 const edit = (d: HTMLElement, box: string) => act(() => { fireEvent.click(within(d).getByRole('button', { name: `Edit ${box}` })) })
@@ -236,6 +243,86 @@ describe('the staff drawer', () => {
   })
 
   /**
+   * User groups — territories — 20 Sep 2026. Membership grants, the toggle
+   * restricts, and the Access box carries both. The submission shapes are what
+   * matter: the toggle in the hidden-false / checkbox-true pair, and the set
+   * behind its sentinel so an emptied list is not mistaken for an absent one.
+   */
+  test('the Access box says whether this person is limited, and names their user groups', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    expect(within(d).getByText('Limit to user groups').nextElementSibling?.textContent).toContain('Yes')
+    expect(within(d).getByText('User groups').nextElementSibling?.textContent).toBe('North, Old territory')
+  })
+
+  test('a person in no user group shows an em-dash and No, not a blank', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    const d = drawer(container)
+    expect(within(d).getByText('Limit to user groups').nextElementSibling?.textContent).toContain('No')
+    expect(within(d).getByText('User groups').nextElementSibling?.textContent).toContain('—')
+  })
+
+  test('editing Access offers the limit toggle in the two-input shape, with the rule under it', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    edit(d, 'access')
+    const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
+    const inputs = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="limited_to_user_groups"]'))
+    expect(inputs.map((i) => [i.type, i.value])).toEqual([
+      ['hidden', 'false'],
+      ['checkbox', 'true'],
+    ])
+    expect(inputs[1]!.checked, 'the checkbox mirrors the row').toBe(true)
+    expect(form.querySelector('[data-slot="limit-note"]')!.textContent).toContain('stay visible')
+  })
+
+  test('the user-group picker travels behind its sentinel, offers every active group, and keeps an archived one the person holds', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    edit(d, 'access')
+    const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
+    expect(form.querySelector('input[name="user_groups_present"]'), 'the sentinel').toBeTruthy()
+    const boxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="user_group_ids"]'))
+    expect(boxes.map((b) => [b.value, b.checked])).toEqual([
+      ['ug-north', true],
+      ['ug-south', false],
+      /* Archived, so not offered to anyone — but Reece HAS it, and an unrelated
+         save must not silently drop it. Named as archived. */
+      ['ug-old', true],
+    ])
+    expect(boxes[2]!.closest('label')!.textContent).toContain('(archived)')
+  })
+
+  test('somebody in no archived group is offered only the active ones', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    const d = drawer(container)
+    edit(d, 'access')
+    const boxes = Array.from(d.querySelectorAll<HTMLInputElement>('input[name="user_group_ids"]'))
+    expect(boxes.map((b) => b.value)).toEqual(['ug-north', 'ug-south'])
+  })
+
+  test('the drawer header carries a pill per user group; the row carries none', () => {
+    const { container } = list()
+    const row = container.querySelectorAll('li')[1]!
+    expect(row.textContent).not.toContain('North')
+    open('Reece Testlee')
+    let d = drawer(container)
+    /* Above the boxes: the heading's own container, not the Access box's dl. */
+    const headerOf = (dialog: HTMLElement) => dialog.querySelector('#staff-drawer-title')!.closest('header')!
+    expect(headerOf(d).textContent).toContain('North')
+    expect(headerOf(d).textContent).toContain('Old territory')
+    act(() => { fireEvent.click(within(d).getByRole('button', { name: 'Close panel' })) })
+    open('Sarah Chen')
+    d = drawer(container)
+    expect(headerOf(d).textContent).not.toContain('North')
+  })
+
+  /**
    * THE ONE THAT MATTERS. On the viewer's own row the status control is not
    * on the form: an absent control is an absent key in the patch, and the
    * database refuses the attempt regardless. The sentence says why.
@@ -277,7 +364,7 @@ describe('the staff drawer', () => {
  * The approval queue, since 19 September. A pending person is in the queue
  * and not in the list; Approve waits for a profile; Decline asks once.
  */
-const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: null }
+const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: null, limited_to_user_groups: false, user_groups: [] }
 
 describe('awaiting approval', () => {
   test('is absent when nobody is waiting', () => {
@@ -286,7 +373,7 @@ describe('awaiting approval', () => {
   })
 
   test('a pending person is in the queue, not in the staff list', () => {
-    const { container } = render(<ul><StaffList staff={[ME, PENDING, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    const { container } = render(<ul><StaffList staff={[ME, PENDING, THEM]} profiles={PROFILES} userGroups={GROUPS} viewer={{ id: 's1' }} /></ul>)
     const queue = container.querySelector('[data-slot="awaiting-approval"]')!
     expect(queue.textContent).toContain('Nina New')
     expect(queue.textContent).toContain('nina@qwealth.com.au')
@@ -296,7 +383,7 @@ describe('awaiting approval', () => {
 
   test('Approve is disabled until a profile is chosen, then sends both ids', async () => {
     const { approveStaffRegistration } = await import('@/app/(shell)/admin/actions')
-    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} userGroups={GROUPS} viewer={{ id: 's1' }} /></ul>)
     const approve = screen.getByRole('button', { name: 'Approve' }) as HTMLButtonElement
     expect(approve.disabled).toBe(true)
     const select = screen.getByRole('combobox', { name: 'Access profile for Nina New' }) as HTMLSelectElement
@@ -310,7 +397,7 @@ describe('awaiting approval', () => {
 
   test('Decline asks once, and Keep withdraws', async () => {
     const { declineStaffRegistration } = await import('@/app/(shell)/admin/actions')
-    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} userGroups={GROUPS} viewer={{ id: 's1' }} /></ul>)
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Decline' })) })
     expect(declineStaffRegistration).not.toHaveBeenCalled()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Keep' })) })
@@ -323,7 +410,7 @@ describe('awaiting approval', () => {
   test('the database’s refusal is shown beside the request', async () => {
     const { approveStaffRegistration } = await import('@/app/(shell)/admin/actions')
     vi.mocked(approveStaffRegistration).mockResolvedValueOnce({ error: 'This request has already been decided' })
-    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
+    render(<ul><StaffList staff={[ME, PENDING]} profiles={PROFILES} userGroups={GROUPS} viewer={{ id: 's1' }} /></ul>)
     await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: 'Access profile for Nina New' }), { target: { value: 'pa' } }) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })) })
     expect(screen.getByRole('alert').textContent).toBe('This request has already been decided')

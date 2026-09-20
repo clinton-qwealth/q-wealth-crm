@@ -28,7 +28,9 @@ function stubClient() {
   // ids, so nothing returns early and every wave is actually reached.
   const fixtures: Record<string, unknown[]> = {
     group_summary: [{ group_id: 'g1', name: 'Testsmith Household', group_type: 'household', status: 'active' }],
-    client_groups: [{ primary_contact_party_id: 'p1', owner_staff_id: 's1', staff_users: { full_name: 'A Adviser' } }],
+    client_groups: [{ primary_contact_party_id: 'p1', owner_staff_id: 's1', user_group_id: 'ug1', staff_users: { first_name: 'A', last_name: 'Adviser' }, user_groups: { id: 'ug1', name: 'North', status: 'active' } }],
+    /* The territory picker's options, 20 Sep 2026 — on the first wave. */
+    user_groups: [{ id: 'ug1', name: 'North', status: 'active' }],
     contact_points: [{ party_id: 'p1', kind: 'phone_mobile', value: '0412 555 901', is_preferred: true }],
     client_group_members: [
       { party_id: 'p1', member_role: 'primary', is_primary_group: true,
@@ -171,7 +173,7 @@ describe('/groups/[id] round-trip depth', () => {
        cannot see it — a loader chained to depth 2 sits under the member-detail
        floor of 2 and the total still reads 2. (Found by mutation: re-chaining
        the members read ahead of the other three passed the depth assertion.) */
-    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary', 'group_account_posts', 'group_policy_posts', 'staff_directory']) {
+    for (const first of ['party_roles', 'group_financial_accounts', 'group_insurance_policies', 'group_assets_liabilities', 'group_summary', 'group_notes_summary', 'group_account_posts', 'group_policy_posts', 'staff_directory', 'user_groups']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

@@ -109,23 +109,35 @@ describe('detail rows', () => {
  */
 describe('the audited tables and their labels agree', () => {
   const dir = resolve(process.cwd(), 'supabase/migrations')
-  const sql = readdirSync(dir)
+  /* IN ORDER. Sorted by filename, which is by timestamp, because a rename has
+     to be applied after the trigger it moves and before anything that follows. */
+  const files = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
-    .map((f) => readFileSync(resolve(dir, f), 'utf8'))
-    .join('\n')
+    .sort()
   const audited = new Set<string>()
-  /* Two shapes. The 26 Aug migration attaches sixteen tables from a VALUES
-     list inside a DO block — `('parties', 'id', '')` — and every later table
-     has its own `create trigger … on public.T … execute function
-     public.record_audit(…)` statement. Statements are split on `;` so a match
-     cannot straddle two of them. */
-  for (const m of sql.matchAll(/\(\s*'(\w+)',\s*'(?:id|party_id)',\s*'[^']*'\s*\)/g)) {
-    audited.add(m[1])
-  }
-  for (const stmt of sql.split(';')) {
-    if (!/create\s+trigger/i.test(stmt) || !/public\.record_audit\s*\(/i.test(stmt)) continue
-    const on = stmt.match(/\bon\s+public\.(\w+)/i)
-    if (on) audited.add(on[1])
+  for (const f of files) {
+    const sql = readFileSync(resolve(dir, f), 'utf8')
+    /* Three shapes. The 26 Aug migration attaches sixteen tables from a VALUES
+       list inside a DO block — `('parties', 'id', '')`; every later table has
+       its own `create trigger … on public.T … execute function
+       public.record_audit(…)` statement; and a table RENAMED with
+       `alter table public.X rename to Y` keeps its trigger, so the census moves
+       X to Y (teams became user_groups on 20 Sep 2026). Statements are split on
+       `;` so a match cannot straddle two of them. */
+    for (const m of sql.matchAll(/\(\s*'(\w+)',\s*'(?:id|party_id)',\s*'[^']*'\s*\)/g)) {
+      audited.add(m[1])
+    }
+    for (const stmt of sql.split(';')) {
+      const renamed = stmt.match(/alter\s+table\s+public\.(\w+)\s+rename\s+to\s+(\w+)/i)
+      if (renamed && audited.has(renamed[1])) {
+        audited.delete(renamed[1])
+        audited.add(renamed[2])
+        continue
+      }
+      if (!/create\s+trigger/i.test(stmt) || !/public\.record_audit\s*\(/i.test(stmt)) continue
+      const on = stmt.match(/\bon\s+public\.(\w+)/i)
+      if (on) audited.add(on[1])
+    }
   }
 
   test('the scan found the trail', () => {

@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { approveStaffRegistration, declineStaffRegistration, saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
+import type { UserGroupChoice } from '@/lib/user-groups'
 import {
   isStaffAvatarType,
   STAFF_AVATAR_BUCKET,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/avatar'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { Avatar } from './avatar'
+import { CheckboxSet } from './checkbox-set'
 import { DataRow } from './data-section'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
@@ -76,10 +78,13 @@ function SignedIn() {
 export function StaffList({
   staff,
   profiles,
+  userGroups,
   viewer,
 }: {
   staff: StaffRow[]
   profiles: AccessProfileChoice[]
+  /** Every user group, with its status; the picker offers the active ones. */
+  userGroups: UserGroupChoice[]
   viewer: Viewer
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -118,7 +123,13 @@ export function StaffList({
 
       <Drawer open={selectedId !== null} onClose={() => setSelectedId(null)} labelledBy="staff-drawer-title">
         {person ? (
-          <StaffPanel person={person} profiles={profiles} viewer={viewer} onClose={() => setSelectedId(null)} />
+          <StaffPanel
+            person={person}
+            profiles={profiles}
+            userGroups={userGroups}
+            viewer={viewer}
+            onClose={() => setSelectedId(null)}
+          />
         ) : (
           <>
             <DrawerHeader id="staff-drawer-title" title="Staff member" onClose={() => setSelectedId(null)} />
@@ -135,11 +146,13 @@ export function StaffList({
 function StaffPanel({
   person: p,
   profiles,
+  userGroups,
   viewer,
   onClose,
 }: {
   person: StaffRow
   profiles: AccessProfileChoice[]
+  userGroups: UserGroupChoice[]
   viewer: Viewer
   onClose: () => void
 }) {
@@ -147,6 +160,14 @@ function StaffPanel({
   const active = p.status === 'active'
   const identity = <input type="hidden" name="staff_id" value={p.id} />
   const current = profiles.find((x) => x.id === p.profile?.id)
+  /* What the picker offers: every ACTIVE group, plus any archived group this
+     person already holds, named as such. Without the second half an unrelated
+     save of the Access box would silently drop that membership — the set is
+     replaced with exactly what is ticked. */
+  const groupOptions = [
+    ...userGroups.filter((g) => g.status === 'active').map((g) => ({ id: g.id, name: g.name })),
+    ...p.user_groups.filter((g) => g.status !== 'active').map((g) => ({ id: g.id, name: `${g.name} (archived)` })),
+  ]
 
   return (
     <>
@@ -159,6 +180,13 @@ function StaffPanel({
           <>
             <Pill tone="brand">{p.profile?.name ?? 'No profile'}</Pill>
             <Pill on={active}>{active ? 'Active' : 'Inactive'}</Pill>
+            {/* Their territories, in the drawer only. The row's right-hand
+                column is the one that always beat the truncating name. */}
+            {p.user_groups.map((g) => (
+              <Pill key={g.id} tone="neutral">
+                {g.name}
+              </Pill>
+            ))}
           </>
         }
         onClose={onClose}
@@ -220,6 +248,12 @@ function StaffPanel({
               <Field label="Access profile" value={p.profile?.name ?? null} />
               <Field label="Status" value={active ? 'Active' : 'Inactive'} />
               <Field label="Verify identity" value={p.verify_identity ? 'Yes' : 'No'} />
+              <Field label="Limit to user groups" value={p.limited_to_user_groups ? 'Yes' : 'No'} />
+              <Field
+                label="User groups"
+                span
+                value={p.user_groups.length ? p.user_groups.map((g) => g.name).join(', ') : null}
+              />
               {/* An instant, so it renders in the reader's own timezone — unlike
                   the date of birth above, which is a calendar date and must not
                   go near a Date. `muted` carries the never case as a word. */}
@@ -287,6 +321,34 @@ function StaffPanel({
                   their second factor, and only reaches clients they can already see.
                 </p>
               </div>
+              {/* The territory toggle, 20 Sep 2026, in the same shape. Membership
+                  grants; this restricts — the rule is written under the box. */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-neutral-500">Limit to user groups</span>
+                <label className="flex items-start gap-2 text-sm text-neutral-900">
+                  <input type="hidden" name="limited_to_user_groups" value="false" />
+                  <input
+                    type="checkbox"
+                    name="limited_to_user_groups"
+                    value="true"
+                    defaultChecked={p.limited_to_user_groups}
+                    className="mt-0.5 accent-brand"
+                  />
+                  <span>Sees only households in their user groups</span>
+                </label>
+                <p data-slot="limit-note" className="text-xs leading-relaxed text-neutral-500">
+                  Applies to this person only, whatever their profile. Households with no user group stay
+                  visible. Membership grants; this restricts.
+                </p>
+              </div>
+              <CheckboxSet
+                legend="User groups"
+                field="user_group_ids"
+                sentinel="user_groups_present"
+                options={groupOptions}
+                chosen={p.user_groups.map((g) => g.id)}
+                emptyText="No active user groups yet — create one on the User groups tab."
+              />
             </div>
           }
         />

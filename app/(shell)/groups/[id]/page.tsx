@@ -22,7 +22,10 @@ import { getGroupNotes } from '@/lib/notes'
 import { FileNotes } from '@/components/file-notes'
 import { WorkflowSection } from '@/components/workflow-section'
 import { Tabs } from '@/components/tabs'
+import { UserGroupField } from '@/components/user-group-field'
 import { fullName } from '@/lib/staff-name'
+import type { UserGroupChoice } from '@/lib/user-groups'
+import { getActiveUserGroups } from '@/lib/groups'
 
 export const metadata = { title: 'Groups · Q Wealth CRM' }
 
@@ -173,7 +176,7 @@ async function getGroupContacts(groupId: string) {
 
   const { data: group } = await supabase
     .from('client_groups')
-    .select('primary_contact_party_id, owner_staff_id, staff_users(first_name, last_name)')
+    .select('primary_contact_party_id, owner_staff_id, user_group_id, staff_users(first_name, last_name), user_groups(id, name, status)')
     .eq('id', groupId)
     .maybeSingle()
 
@@ -186,8 +189,18 @@ async function getGroupContacts(groupId: string) {
     | undefined
   const adviser = owner ? fullName({ first_name: owner.first_name ?? '', last_name: owner.last_name ?? '' }) || null : null
 
+  /* The household's user group (territory), 20 Sep 2026 — the same to-one
+     shape, on the same read. Null when it is in none. */
+  const rawGroup = (group as Record<string, unknown> | null)?.user_groups
+  const ug = (Array.isArray(rawGroup) ? rawGroup[0] : rawGroup) as
+    | { id?: string; name?: string; status?: string }
+    | null
+    | undefined
+  const userGroup: UserGroupChoice | null =
+    ug?.id && typeof ug.name === 'string' ? { id: ug.id, name: ug.name, status: ug.status ?? 'active' } : null
+
   const partyId = group?.primary_contact_party_id
-  if (!partyId) return { phone: null, adviser }
+  if (!partyId) return { phone: null, adviser, userGroup }
 
   const { data: phones } = await supabase
     .from('contact_points')
@@ -195,7 +208,7 @@ async function getGroupContacts(groupId: string) {
     .eq('party_id', partyId)
     .in('kind', ['phone_mobile', 'phone_other'])
 
-  if (!phones?.length) return { phone: null, adviser }
+  if (!phones?.length) return { phone: null, adviser, userGroup }
 
   // The contact's own stated preference wins; a mobile is more likely to reach
   // someone than an office line.
@@ -205,7 +218,7 @@ async function getGroupContacts(groupId: string) {
     phones.find((p) => p.kind === 'phone_mobile') ??
     phones[0]
 
-  return { phone: (best?.value as string | null) ?? null, adviser }
+  return { phone: (best?.value as string | null) ?? null, adviser, userGroup }
 }
 
 /* `AccountRow` and `PolicyRow` moved to the list components on 16 September,
@@ -335,12 +348,15 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
      rolled-up name string the card used before — individuals only, since a
      trust or company in the group has no persons row and those keep rendering
      from `members`. */
-  const [group, { phone, adviser }, memberDetail, accountsData, notesData] = await Promise.all([
+  const [group, { phone, adviser, userGroup }, memberDetail, accountsData, notesData, userGroupChoices] = await Promise.all([
     getGroup(id),
     getGroupContacts(id),
     getGroupMemberDetail(id),
     getAccountsData(id),
     getGroupNotes(id),
+    /* The territory picker's options, 20 Sep 2026 — one more read on the wave
+       already running, so no depth; the round-trip test is exact at 2. */
+    getActiveUserGroups(),
   ])
   /* 404 rather than an empty shell. The page moved from `/groups?id=` to
      `/groups/[id]` on 10 September, and with the id in the path an unknown
@@ -525,6 +541,20 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
                     ) : (
                       <span className="text-sm text-neutral-400">—</span>
                     )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs leading-snug text-neutral-500">User group</dt>
+                  <dd className="mt-0.5 leading-snug">
+                    {/* The territory, 20 Sep 2026. Same kind of thing as the
+                        adviser — a reference, so a pill — and editable in
+                        place by whoever may edit the household. */}
+                    <UserGroupField
+                      groupId={group.group_id}
+                      current={userGroup}
+                      options={userGroupChoices}
+                      canEdit={staff.access_profiles.manage_groups}
+                    />
                   </dd>
                 </div>
               </dl>

@@ -105,6 +105,58 @@ describe('saveStaffDetails', () => {
   })
 
   /**
+   * The territory toggle, 20 Sep 2026 — the same three shapes as verify-identity.
+   */
+  test('the limit toggle travels as a real boolean, and only when it was on the form', async () => {
+    const both = new FormData()
+    both.set('staff_id', 's2')
+    both.append('limited_to_user_groups', 'false')
+    both.append('limited_to_user_groups', 'true')
+    await saveStaffDetails(null, both)
+    expect(patch()).toEqual({ limited_to_user_groups: true })
+
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', limited_to_user_groups: 'false' }))
+    expect(patch()).toEqual({ limited_to_user_groups: false })
+
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', title: 'Dr' }))
+    expect(patch(), 'absent from the form means absent from the patch').toEqual({ title: 'Dr' })
+  })
+
+  /**
+   * The person's user groups are a SET behind a sentinel. `getAll` returns `[]`
+   * both for a picker that was never shown and for one with every box unticked;
+   * the sentinel is what tells "leave them alone" from "remove them all".
+   */
+  test('user groups travel as a set: absent without the sentinel, empty with it alone, the ids when ticked', async () => {
+    await saveStaffDetails(null, form({ staff_id: 's2', title: 'Dr' }))
+    expect(patch()).not.toHaveProperty('user_group_ids')
+
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', user_groups_present: '1' }))
+    expect(patch()).toEqual({ user_group_ids: [] })
+
+    log.length = 0
+    const fd = new FormData()
+    fd.set('staff_id', 's2')
+    fd.set('user_groups_present', '1')
+    fd.append('user_group_ids', '11111111-1111-4111-8111-111111111111')
+    fd.append('user_group_ids', '22222222-2222-4222-8222-222222222222')
+    await saveStaffDetails(null, fd)
+    expect(patch()).toEqual({ user_group_ids: ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'] })
+  })
+
+  test('a user-group id that is not a uuid never reaches the database', async () => {
+    const fd = new FormData()
+    fd.set('staff_id', 's2')
+    fd.set('user_groups_present', '1')
+    fd.append('user_group_ids', 'north')
+    expect(await saveStaffDetails(null, fd)).toEqual({ error: 'Choose user groups from the list.' })
+    expect(log).toEqual([])
+  })
+
+  /**
    * Two optional facts, since 20 Sep 2026. Presence is still the instruction,
    * but a present BLANK clears rather than being refused — "remove my title" has
    * to be sayable — and it travels as null so the database sees one shape.
