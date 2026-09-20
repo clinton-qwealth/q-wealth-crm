@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { privateDateOfBirth } from '@/lib/staff-private'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export type AccessProfile = {
@@ -19,6 +20,14 @@ export type Staff = {
   status: string
   /** Object path of their photo in the staff-avatars bucket, or null. See lib/avatar.ts. */
   avatar_path: string | null
+  /** Salutation, optional, free text. Since 20 Sep 2026. */
+  title: string | null
+  /**
+   * `YYYY-MM-DD` or null. Lives in `staff_private_details`, which only the
+   * person and administrators may read — the base table is readable by every
+   * colleague. Render with `formatBirthDate()`; never through `new Date()`.
+   */
+  date_of_birth: string | null
   /**
    * May send a client an identity-verification code. **A property of the person,
    * not of their profile, since 20 Sep 2026** — an administrator opts each staff
@@ -80,7 +89,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, first_name, last_name, email, status, avatar_path, verify_identity, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
+      'id, first_name, last_name, title, email, status, avatar_path, verify_identity, staff_private_details(date_of_birth), staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
     .eq('auth_user_id', sub)
     .maybeSingle()
@@ -105,9 +114,11 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
     id: row.id as string,
     first_name: row.first_name as string,
     last_name: row.last_name as string,
+    title: (row.title as string | null) ?? null,
     email: row.email as string,
     status: row.status as string,
     avatar_path: (row.avatar_path as string | null) ?? null,
+    date_of_birth: privateDateOfBirth(row.staff_private_details),
     verify_identity: row.verify_identity === true,
     access_profiles: profile,
   }

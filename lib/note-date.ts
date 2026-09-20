@@ -63,6 +63,22 @@ export function formatNoteDate(iso: string) {
  * thing. The member panel's date of birth stays DD-MM-YYYY — an identity
  * document's format, read digit by digit rather than as prose.
  */
+/**
+ * A date of birth: `DD-MM-YYYY`, an identity document's format, read digit by
+ * digit rather than as prose. Splits the string and never constructs a Date —
+ * a calendar date has no timezone, and `new Date('1980-06-01')` is the previous
+ * evening anywhere west of Greenwich.
+ *
+ * Lived privately in the member panel until 20 Sep 2026, when staff gained a
+ * date of birth too; one rule, so a client's and a colleague's cannot render
+ * differently on adjacent screens. Null in, null out.
+ */
+export function formatBirthDate(iso?: string | null): string | null {
+  if (!iso) return null
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso
+}
+
 export function formatCalendarDate(iso: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
   if (!m) return iso

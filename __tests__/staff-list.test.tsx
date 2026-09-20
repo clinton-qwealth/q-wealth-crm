@@ -26,8 +26,8 @@ const PROFILES: AccessProfileChoice[] = [
   { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true },
   { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false },
 ]
-const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, profile: { id: 'pb', name: 'Adviser' } }
+const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, profile: { id: 'pa', name: 'Admin' } }
+const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, title: 'Dr', date_of_birth: '1980-06-01', profile: { id: 'pb', name: 'Adviser' } }
 
 const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
@@ -66,6 +66,20 @@ describe('the staff drawer', () => {
      picker, not a form — the picker submits nothing — so it is the one input
      allowed in the read state, and it is named here so a stray field cannot
      hide behind it. */
+  /* Photo first, since 20 Sep 2026: the face is how a person is recognised in a
+     list, and the box an administrator most often opens the drawer for. Pinned
+     because a reorder is exactly the kind of change that looks harmless in a
+     diff and is only noticed by whoever reaches for the wrong box. */
+  test('the boxes read Photo, Details, Access — the face first', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const titles = within(drawer(container))
+      .getAllByRole('heading')
+      .map((h) => h.textContent)
+      .filter((t) => ['Photo', 'Details', 'Access'].includes(t ?? ''))
+    expect(titles).toEqual(['Photo', 'Details', 'Access'])
+  })
+
   test('the read state contains no form control beyond the photo picker', () => {
     const { container } = list()
     open('Reece Testlee')
@@ -81,13 +95,22 @@ describe('the staff drawer', () => {
     const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
     expect(Array.from(form.querySelectorAll('input')).map((i) => i.getAttribute('name'))).toEqual([
       'staff_id',
+      'title',
       'first_name',
       'last_name',
+      'date_of_birth',
       'email',
     ])
     expect(form.querySelector<HTMLInputElement>('input[name="staff_id"]')!.value).toBe('s2')
     expect(form.querySelector<HTMLInputElement>('input[name="first_name"]')!.value).toBe('Reece')
     expect(form.querySelector<HTMLInputElement>('input[name="last_name"]')!.value).toBe('Testlee')
+    /* The two optional facts, since 20 Sep 2026. Neither is `required`: a blank
+       is how they are cleared. The date input carries the ISO value the
+       database holds, not the display form. */
+    const title = form.querySelector<HTMLInputElement>('input[name="title"]')!
+    const dob = form.querySelector<HTMLInputElement>('input[name="date_of_birth"]')!
+    expect([title.value, title.required]).toEqual(['Dr', false])
+    expect([dob.type, dob.value, dob.required]).toEqual(['date', '1980-06-01', false])
     expect(form.querySelector('[data-slot="email-note"]')!.textContent).toContain('not their sign-in email')
   })
 
@@ -102,6 +125,26 @@ describe('the staff drawer', () => {
     expect(profile.value).toBe('pb')
     expect(form.querySelector<HTMLSelectElement>('select[name="status"]')!.value).toBe('inactive')
     expect(form.querySelector('[data-slot="status-note"]')!.textContent).toContain('removes access immediately')
+  })
+
+  /* A date of birth reads DD-MM-YYYY — an identity document's format — and is
+     built by splitting the string, never through `new Date()`, which shows the
+     previous day anywhere west of Greenwich. A person with neither fact shows
+     an em-dash, not a blank. */
+  test('Details shows the title and a date of birth as digits, and an em-dash when there is none', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    expect(within(d).getByText('Title').nextElementSibling?.textContent).toContain('Dr')
+    expect(within(d).getByText('Date of birth').nextElementSibling?.textContent).toContain('01-06-1980')
+  })
+
+  test('a person with neither fact shows an em-dash for each, not a blank', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    const d = drawer(container)
+    expect(within(d).getByText('Title').nextElementSibling?.textContent).toContain('—')
+    expect(within(d).getByText('Date of birth').nextElementSibling?.textContent).toContain('—')
   })
 
   /**
@@ -180,7 +223,7 @@ describe('the staff drawer', () => {
  * The approval queue, since 19 September. A pending person is in the queue
  * and not in the list; Approve waits for a profile; Decline asks once.
  */
-const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, profile: null }
+const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, profile: null }
 
 describe('awaiting approval', () => {
   test('is absent when nobody is waiting', () => {

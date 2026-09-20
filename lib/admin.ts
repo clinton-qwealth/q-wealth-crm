@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { privateDateOfBirth } from '@/lib/staff-private'
 import { fullName } from '@/lib/staff-name'
 import type { Staff } from '@/lib/staff'
 import type { AuditActor, AuditCursor, AuditEntry, AuditFilters } from '@/lib/audit'
@@ -99,6 +100,10 @@ export type StaffRow = {
   created_at: string
   /** Per person since 20 Sep 2026; toggled in the drawer's Access box. */
   verify_identity: boolean
+  /** Optional salutation. Since 20 Sep 2026. */
+  title: string | null
+  /** `YYYY-MM-DD` or null, from staff_private_details — administrators may read every row. */
+  date_of_birth: string | null
   profile: { id: string; name: string } | null
 }
 
@@ -125,7 +130,7 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('staff_users')
-    .select('id, first_name, last_name, email, status, avatar_path, created_at, verify_identity, staff_access_assignments(profile_id, access_profiles(id, name))')
+    .select('id, first_name, last_name, title, email, status, avatar_path, created_at, verify_identity, staff_private_details(date_of_birth), staff_access_assignments(profile_id, access_profiles(id, name))')
     .order('last_name')
     .order('first_name')
   if (error) throw new Error(`The staff list could not be read: ${error.message}`)
@@ -147,6 +152,8 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
       avatar_path: (row.avatar_path as string | null) ?? null,
       created_at: row.created_at as string,
       verify_identity: row.verify_identity === true,
+      title: (row.title as string | null) ?? null,
+      date_of_birth: privateDateOfBirth(row.staff_private_details),
       profile: profile ? { id: profile.id, name: profile.name } : null,
     }
   })

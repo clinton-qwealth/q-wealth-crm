@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { approveStaffRegistration, declineStaffRegistration, saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
+import { formatBirthDate } from '@/lib/note-date'
 import {
   isStaffAvatarType,
   STAFF_AVATAR_BUCKET,
@@ -24,8 +25,9 @@ import { formatNoteDateTime } from '@/lib/note-date'
  *
  * The account list's shape: rows as data, one `Drawer`, `selectedId` naming
  * the open record so a rename reaches the open heading after revalidation.
- * Three `FieldBox`es carry the edits — Details, Access, Photo — each a form of
- * its own, because each is a different fact about the person.
+ * Three `FieldBox`es carry the edits — Photo, Details, Access, in that order
+ * since 20 Sep 2026 — each a form of its own, because each is a different fact
+ * about the person.
  *
  * ## Two things the screen says plainly
  *
@@ -139,24 +141,40 @@ function StaffPanel({
       />
 
       <DrawerBody>
+        {/* The face first, since 20 Sep 2026: it is how a person is recognised
+            in a list, and the box an administrator most often opens the drawer
+            for. The two forms follow. */}
+        <PhotoBox person={p} />
+
         <FieldBox
           title="Details"
           action={saveStaffDetails}
           identity={identity}
           view={
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
+              <Field label="Title" value={p.title} />
               <Field label="First name" value={p.first_name} />
               <Field label="Last name" value={p.last_name} />
+              <Field label="Date of birth" value={formatBirthDate(p.date_of_birth)} />
               <Field label="Email" value={p.email} />
             </dl>
           }
           edit={
             <div className="flex flex-col gap-3">
+              {/* Optional, so not `required`; and a blank submits as a present
+                  key, which the action turns into null — that is how a title or
+                  a birthday is removed. */}
+              <EditField label="Title">
+                <input name="title" defaultValue={p.title ?? ''} maxLength={30} placeholder="Mr, Ms, Dr" className={FIELD_INPUT} />
+              </EditField>
               <EditField label="First name">
                 <input name="first_name" defaultValue={p.first_name} required className={FIELD_INPUT} />
               </EditField>
               <EditField label="Last name">
                 <input name="last_name" defaultValue={p.last_name} required className={FIELD_INPUT} />
+              </EditField>
+              <EditField label="Date of birth">
+                <input name="date_of_birth" type="date" defaultValue={p.date_of_birth ?? ''} className={FIELD_INPUT} />
               </EditField>
               <EditField label="Email">
                 <input name="email" type="email" defaultValue={p.email} required className={FIELD_INPUT} />
@@ -241,7 +259,6 @@ function StaffPanel({
           }
         />
 
-        <PhotoBox person={p} />
       </DrawerBody>
     </>
   )

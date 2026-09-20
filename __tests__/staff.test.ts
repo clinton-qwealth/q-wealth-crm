@@ -74,6 +74,8 @@ const row = (o: Record<string, unknown> = {}) => ({
   email: 'a@example.com',
   status: 'active',
   verify_identity: true,
+  title: 'Dr',
+  staff_private_details: { date_of_birth: '1980-06-01' },
   staff_access_assignments: { access_profiles: PROFILE },
   ...o,
 })
@@ -111,6 +113,8 @@ describe('getCurrentStaff', () => {
       status: 'active',
       avatar_path: null,
       verify_identity: true,
+      title: 'Dr',
+      date_of_birth: '1980-06-01',
       access_profiles: PROFILE,
     })
   })
@@ -193,8 +197,22 @@ describe('what getCurrentStaff asks for', () => {
     /* Per person since 20 Sep 2026: asked for at the top level, and NOT inside
        the profile embed — the deployed app must stop selecting the profile
        column before the migration that drops it can run. */
-    expect(cols).toMatch(/,\s*verify_identity\s*,\s*staff_access_assignments/)
+    expect(cols).toMatch(/verify_identity\s*,\s*staff_private_details\(date_of_birth\)/)
     expect(cols).not.toMatch(/access_profiles\([^)]*verify_identity/)
+    /* The two optional facts: title on the row, date of birth through the
+       private-details embed, which RLS may answer with nothing. */
+    expect(cols).toContain('title')
+    expect(cols).toContain('staff_private_details(date_of_birth)')
+  })
+
+  test('a person with no private-details row, or one RLS hides, has a null date of birth', async () => {
+    CLAIMS = signedIn
+    ROW = row({ staff_private_details: null, title: null })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ date_of_birth: null, title: null })
+    ROW = row({ staff_private_details: [] })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ date_of_birth: null })
+    ROW = row({ staff_private_details: [{ date_of_birth: '1975-12-31' }] })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ date_of_birth: '1975-12-31' })
   })
 
   test('the person\'s verify-identity flag comes back as a real boolean', async () => {

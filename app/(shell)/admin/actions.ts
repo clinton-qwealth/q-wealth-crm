@@ -84,7 +84,7 @@ const STATUSES = new Set(['active', 'inactive'])
  * Save a staff member's details from the Staff tab's forms.
  *
  * Patch-shaped, like `saveAccountDetails`: KEY PRESENCE is the meaning, so a
- * form carrying only a name leaves everything else alone. Only the seven keys
+ * form carrying only a name leaves everything else alone. Only the nine keys
  * the database function knows are ever forwarded — anything else on the form
  * is ignored here rather than refused there. Email is trimmed and lowercased
  * before it travels. Every rule lives in the database and its sentences pass
@@ -105,6 +105,19 @@ export async function saveStaffDetails(_prev: StaffDetailState, formData: FormDa
     const last = String(formData.get('last_name')).trim()
     if (!last) return { error: 'Enter a last name.' }
     patch.last_name = last
+  }
+  /* Optional facts: a present-and-blank value CLEARS, matching the patch
+     function's contract — "remove my title" has to be sayable. Sent as null,
+     not '', so the database sees one shape for "cleared". */
+  if (formData.has('title')) {
+    const title = String(formData.get('title')).trim()
+    if (title.length > 30) return { error: 'Use 30 characters or fewer for the title.' }
+    patch.title = title || null
+  }
+  if (formData.has('date_of_birth')) {
+    const dob = String(formData.get('date_of_birth')).trim()
+    if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) return { error: 'Enter the date of birth as a date.' }
+    patch.date_of_birth = dob || null
   }
   if (formData.has('email')) {
     const email = String(formData.get('email')).trim().toLowerCase()

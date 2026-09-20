@@ -104,6 +104,37 @@ describe('saveStaffDetails', () => {
     expect(patch(), 'absent from the form means absent from the patch').toEqual({ email: 'x@qwealth.com.au' })
   })
 
+  /**
+   * Two optional facts, since 20 Sep 2026. Presence is still the instruction,
+   * but a present BLANK clears rather than being refused — "remove my title" has
+   * to be sayable — and it travels as null so the database sees one shape.
+   */
+  test('a title is trimmed, and a blank one clears', async () => {
+    await saveStaffDetails(null, form({ staff_id: 's2', title: '  Dr ' }))
+    expect(patch()).toEqual({ title: 'Dr' })
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', title: '   ' }))
+    expect(patch()).toEqual({ title: null })
+  })
+
+  test('a date of birth passes through as the ISO date, and a blank one clears', async () => {
+    await saveStaffDetails(null, form({ staff_id: 's2', date_of_birth: '1980-06-01' }))
+    expect(patch()).toEqual({ date_of_birth: '1980-06-01' })
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', date_of_birth: '' }))
+    expect(patch()).toEqual({ date_of_birth: null })
+  })
+
+  test('a malformed date and an over-long title never reach the database', async () => {
+    expect(await saveStaffDetails(null, form({ staff_id: 's2', date_of_birth: '01/06/1980' }))).toEqual({
+      error: 'Enter the date of birth as a date.',
+    })
+    expect(await saveStaffDetails(null, form({ staff_id: 's2', title: 'T'.repeat(31) }))).toEqual({
+      error: 'Use 30 characters or fewer for the title.',
+    })
+    expect(log).toEqual([])
+  })
+
   test('a form with nothing to change, or no staff member, is refused', async () => {
     expect(await saveStaffDetails(null, form({ staff_id: 's2' }))).toEqual({ error: 'Nothing to save.' })
     expect(await saveStaffDetails(null, form({ first_name: 'X' }))).toEqual({ error: 'No staff member selected.' })

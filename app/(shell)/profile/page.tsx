@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Avatar } from '@/components/avatar'
 import { getCurrentStaff } from '@/lib/staff'
+import { formatBirthDate } from '@/lib/note-date'
 import { getMfaState } from '@/lib/mfa'
 import { signOut } from '@/app/actions'
 import { Card, PageHeading, Pill } from '@/components/ui'
@@ -43,6 +44,18 @@ export default async function ProfilePage() {
               {fullName(staff)}
             </dd>
           </div>
+          {staff.title ? (
+            <div className="flex items-center justify-between gap-4 py-2">
+              <dt className="text-sm text-neutral-500">Title</dt>
+              <dd className="text-sm text-neutral-900">{staff.title}</dd>
+            </div>
+          ) : null}
+          {staff.date_of_birth ? (
+            <div className="flex items-center justify-between gap-4 py-2">
+              <dt className="text-sm text-neutral-500">Date of birth</dt>
+              <dd className="text-sm text-neutral-900">{formatBirthDate(staff.date_of_birth)}</dd>
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-4 py-2">
             <dt className="text-sm text-neutral-500">Email</dt>
             <dd className="truncate text-sm text-neutral-900">{staff.email}</dd>
@@ -55,8 +68,9 @@ export default async function ProfilePage() {
           </div>
         </dl>
         <p className="mt-3 text-xs leading-relaxed text-neutral-400">
-          Name, email, profile and photo are set by an administrator, under Administration in the
-          account menu.
+          Name, title, date of birth, email, profile and photo are set by an administrator, under
+          Administration in the account menu. Your date of birth is visible to you and to
+          administrators only.
         </p>
       </Card>
 

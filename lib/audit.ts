@@ -82,6 +82,7 @@ export const TABLE_LABEL: Record<string, string> = {
   client_group_members: 'Group membership',
   staff_users: 'Staff member',
   access_profiles: 'Access profile',
+  staff_private_details: 'Staff private details',
   teams: 'Team',
   team_members: 'Team membership',
   client_group_access: 'Group access grant',

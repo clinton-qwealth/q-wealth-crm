@@ -18,6 +18,7 @@ import {
   attestVerification,
 } from '@/app/(shell)/groups/actions'
 import type { Address, PersonDetail, Subscription, VerificationEntry } from '@/lib/person'
+import { formatBirthDate as formatDate } from '@/lib/note-date'
 import { CloseIcon, CopyIcon, CrossIcon, EyeIcon, EyeOffIcon, PencilIcon, PlusIcon, SmsIcon, TickIcon } from './icons'
 import { Drawer } from './drawer'
 import { Tabs } from './tabs'
@@ -87,12 +88,6 @@ function Field({
  * Greenwich `toLocaleDateString` renders the day before — a date of birth off by
  * one, which is exactly the kind of error nobody notices until it matters.
  */
-function formatDate(iso?: string | null) {
-  if (!iso) return null
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso
-}
-
 /**
  * Smoker status has three states, not two.
  *
