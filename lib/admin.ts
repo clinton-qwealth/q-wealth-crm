@@ -104,6 +104,15 @@ export type StaffRow = {
   title: string | null
   /** `YYYY-MM-DD` or null, from staff_private_details — administrators may read every row. */
   date_of_birth: string | null
+  /**
+   * The later of their last sign-in and their newest session's refresh, as an
+   * instant — or null for somebody who has never signed in. Not a plain
+   * sign-in time: a person working all afternoon stops signing in but keeps
+   * refreshing. See `staff_last_seen()`.
+   */
+  last_seen_at: string | null
+  /** Holds a session they have not given up. The Staff tab says "Signed in". */
+  signed_in: boolean
   profile: { id: string; name: string } | null
 }
 
@@ -128,12 +137,28 @@ export type AccessProfileChoice = {
  */
 export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
-  const { data, error } = await supabase
-    .from('staff_users')
-    .select('id, first_name, last_name, title, email, status, avatar_path, created_at, verify_identity, staff_private_details(date_of_birth), staff_access_assignments(profile_id, access_profiles(id, name))')
-    .order('last_name')
-    .order('first_name')
+  /* Two reads, ONE wave. `staff_last_seen()` reaches auth.users, which PostgREST
+     does not serve, so it cannot be an embed on the select above — but it must
+     not become a second round trip either, or the page's depth-1 test fails.
+     Issued together and joined in memory. */
+  const [{ data, error }, { data: seen }] = await Promise.all([
+    supabase
+      .from('staff_users')
+      .select('id, first_name, last_name, title, email, status, avatar_path, created_at, verify_identity, staff_private_details(date_of_birth), staff_access_assignments(profile_id, access_profiles(id, name))')
+      .order('last_name')
+      .order('first_name'),
+    supabase.rpc('staff_last_seen'),
+  ])
   if (error) throw new Error(`The staff list could not be read: ${error.message}`)
+
+  /* A caller without manage_staff gets zero rows from the function rather than
+     an error, so an absent entry is "not told", which reads as never seen. */
+  const activity = new Map(
+    ((seen ?? []) as { staff_id: string; last_seen_at: string | null; has_live_session: boolean }[]).map((r) => [
+      r.staff_id,
+      r,
+    ]),
+  )
   return (data ?? []).map((r) => {
     const row = r as Record<string, unknown>
     const raw = row.staff_access_assignments
@@ -154,6 +179,8 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
       verify_identity: row.verify_identity === true,
       title: (row.title as string | null) ?? null,
       date_of_birth: privateDateOfBirth(row.staff_private_details),
+      last_seen_at: activity.get(row.id as string)?.last_seen_at ?? null,
+      signed_in: activity.get(row.id as string)?.has_live_session === true,
       profile: profile ? { id: profile.id, name: profile.name } : null,
     }
   })

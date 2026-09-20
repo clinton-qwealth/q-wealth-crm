@@ -26,8 +26,8 @@ const PROFILES: AccessProfileChoice[] = [
   { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true },
   { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false },
 ]
-const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, title: 'Dr', date_of_birth: '1980-06-01', profile: { id: 'pb', name: 'Adviser' } }
+const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: { id: 'pa', name: 'Admin' } }
+const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, title: 'Dr', date_of_birth: '1980-06-01', last_seen_at: '2026-09-20T01:08:23+00:00', signed_in: true, profile: { id: 'pb', name: 'Adviser' } }
 
 const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
@@ -127,6 +127,33 @@ describe('the staff drawer', () => {
     expect(form.querySelector('[data-slot="status-note"]')!.textContent).toContain('removes access immediately')
   })
 
+  /**
+   * Last seen, since 20 Sep 2026.
+   *
+   * It is an INSTANT, so it renders in the reader's own timezone — the opposite
+   * of the date of birth two fields above it, which is a calendar date and must
+   * never go near a Date. The two sit in the same drawer, which is exactly how
+   * somebody comes to use the wrong one.
+   *
+   * "Signed in" says they hold a session they have not given up. It is not a
+   * claim that they are looking at the screen, and the label is chosen to say
+   * only what the session actually knows.
+   */
+  test('the drawer says when somebody was last seen, and the row marks a live session', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    expect(within(drawer(container)).getByText('Last seen').nextElementSibling?.textContent).toMatch(/20 Sep 2026/)
+    expect(within(container.querySelector('ul')!).getAllByText('Signed in')).toHaveLength(1)
+  })
+
+  test('somebody who has never signed in says so, rather than showing a blank', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    expect(within(drawer(container)).getByText('Last seen').nextElementSibling?.textContent).toContain(
+      'Never signed in',
+    )
+  })
+
   /* A date of birth reads DD-MM-YYYY — an identity document's format — and is
      built by splitting the string, never through `new Date()`, which shows the
      previous day anywhere west of Greenwich. A person with neither fact shows
@@ -223,7 +250,7 @@ describe('the staff drawer', () => {
  * The approval queue, since 19 September. A pending person is in the queue
  * and not in the list; Approve waits for a profile; Decline asks once.
  */
-const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, profile: null }
+const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, title: null, date_of_birth: null, last_seen_at: null, signed_in: false, profile: null }
 
 describe('awaiting approval', () => {
   test('is absent when nobody is waiting', () => {

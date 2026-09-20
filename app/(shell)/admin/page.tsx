@@ -10,8 +10,20 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
 
 /**
  * The Administration page: one page, tabs, for the people allowed to change
- * things. Asked for on 19 September; the first tab is the audit trail, the
- * second is staff management, and more will follow as tabs rather than pages.
+ * things. Asked for on 19 September; more will follow as tabs rather than pages.
+ *
+ * ## Three columns since 20 September, matching the group page
+ *
+ * The same 3 / 6 / 9 split over the shell's twelve-column grid, so the two
+ * pages an administrator moves between do not rearrange themselves. The
+ * flanking columns are **deliberately empty for now** — Clinton asked for the
+ * shape first and will decide what goes in them. They are not placeholders
+ * pretending to be content: nothing is rendered, and the working area simply
+ * sits in the middle where the group page's does.
+ *
+ * **Staff is the first tab**, also since 20 September. It is the one an
+ * administrator comes here to use; the audit trail is what they consult when
+ * something looks wrong, which is the rarer errand.
  *
  * ## The gate comes before the wave
  *
@@ -48,25 +60,37 @@ export default async function AdminPage() {
         description="Who changed what, who works here, and who may sign in. Administrators only."
       />
 
-      <Card className="col-span-full">
-        <Tabs
-          ground
-          minPanel={WORKING_AREA}
-          label="Administration"
-          items={[
-            {
-              id: 'audit',
-              label: 'Audit trail',
-              panel: <AuditTrail initial={page.entries} initialHasMore={page.hasMore} actors={actors} />,
-            },
-            {
-              id: 'staff',
-              label: pending > 0 ? `Staff (${pending} awaiting approval)` : 'Staff',
-              panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
-            },
-          ]}
-        />
-      </Card>
+      {/* Left — reserved. See the note above. */}
+      <div className="col-span-full flex flex-col gap-4 lg:col-span-3" />
+
+      {/* Centre — the working area */}
+      <div className="col-span-full lg:col-span-6">
+        <Card>
+          <Tabs
+            ground
+            /* A floor under the working area, so switching to a quiet tab does
+               not collapse the middle column. Same reasoning as the group
+               page's. */
+            minPanel={WORKING_AREA}
+            label="Administration"
+            items={[
+              {
+                id: 'staff',
+                label: pending > 0 ? `Staff (${pending} awaiting approval)` : 'Staff',
+                panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
+              },
+              {
+                id: 'audit',
+                label: 'Audit trail',
+                panel: <AuditTrail initial={page.entries} initialHasMore={page.hasMore} actors={actors} />,
+              },
+            ]}
+          />
+        </Card>
+      </div>
+
+      {/* Right — reserved. */}
+      <div className="col-span-full lg:col-span-3" />
     </>
   )
 }

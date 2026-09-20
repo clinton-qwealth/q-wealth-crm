@@ -3,7 +3,6 @@
 import { useRef, useState, useTransition } from 'react'
 import { approveStaffRegistration, declineStaffRegistration, saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
-import { formatBirthDate } from '@/lib/note-date'
 import {
   isStaffAvatarType,
   STAFF_AVATAR_BUCKET,
@@ -18,7 +17,7 @@ import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox, ReadonlyField } from './field-box'
 import { Pill, SHEET } from './ui'
 import { fullName } from '@/lib/staff-name'
-import { formatNoteDateTime } from '@/lib/note-date'
+import { formatBirthDate, formatNoteDateTime } from '@/lib/note-date'
 
 /**
  * The staff, and the one drawer that edits any of them.
@@ -83,6 +82,10 @@ export function StaffList({
               secondary={s.email}
               meta={
                 <span className="flex items-center gap-1.5">
+                  {/* "Signed in" is what the session actually says — that they
+                      hold one and have not given it up — rather than a claim
+                      about whether they are looking at the screen. */}
+                  {s.signed_in ? <Pill tone="brand">Signed in</Pill> : null}
                   <Pill tone="brand">{s.profile?.name ?? 'No profile'}</Pill>
                   <Pill on={s.status === 'active'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill>
                 </span>
@@ -196,6 +199,14 @@ function StaffPanel({
               <Field label="Access profile" value={p.profile?.name ?? null} />
               <Field label="Status" value={active ? 'Active' : 'Inactive'} />
               <Field label="Verify identity" value={p.verify_identity ? 'Yes' : 'No'} />
+              {/* An instant, so it renders in the reader's own timezone — unlike
+                  the date of birth above, which is a calendar date and must not
+                  go near a Date. `muted` carries the never case as a word. */}
+              <Field
+                label="Last seen"
+                value={p.last_seen_at ? formatNoteDateTime(p.last_seen_at) : 'Never signed in'}
+                muted={!p.last_seen_at}
+              />
               {current?.description ? (
                 <div className="col-span-2 text-xs leading-relaxed text-neutral-500">{current.description}</div>
               ) : null}

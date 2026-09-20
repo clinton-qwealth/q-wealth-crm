@@ -33,6 +33,13 @@ function stubClient() {
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }
+  /* `staff_last_seen()` reaches auth.users, which PostgREST does not serve, so
+     it is an RPC rather than an embed — and it therefore has to be counted as
+     a round trip like any other, or the depth this file measures would quietly
+     stop covering it. */
+  const rpcFixtures: Record<string, unknown[]> = {
+    staff_last_seen: [{ staff_id: 's1', last_seen_at: '2026-09-20T01:08:23+00:00', last_sign_in_at: '2026-09-19T15:20:23+00:00', has_live_session: true }],
+  }
   const builder = (table: string) => {
     const data = fixtures[table] ?? []
     const chain: Record<string, unknown> = {}
@@ -45,7 +52,10 @@ function stubClient() {
     chain.then = (res: never, rej: never) => settle().then(res, rej)
     return chain
   }
-  return { from: (table: string) => builder(table) }
+  return {
+    from: (table: string) => builder(table),
+    rpc: (name: string) => wait(name).then(() => ({ data: rpcFixtures[name] ?? [], error: null })),
+  }
 }
 
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: () => {} }) }))
@@ -76,6 +86,9 @@ describe('/admin round-trip depth', () => {
     expect(calls).toContain('staff_directory')
     expect(calls).toContain('staff_users')
     expect(calls).toContain('access_profiles')
+    /* In the SAME wave, not after it — the depth assertion above is what says
+       so, and this says the call happened at all. */
+    expect(calls).toContain('staff_last_seen')
     /* The view, not the table beneath it. */
     expect(calls).not.toContain('audit_log')
     for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles']) {
