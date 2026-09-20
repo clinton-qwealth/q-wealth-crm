@@ -82,6 +82,28 @@ describe('saveStaffDetails', () => {
     expect(log).toEqual([])
   })
 
+  /**
+   * The toggle's three shapes. Both inputs arrive when it is on, the hidden
+   * `false` alone when it is off, and nothing at all when the box was not on
+   * the form — which must leave the flag untouched, not switch it off.
+   */
+  test('the verify-identity toggle travels as a real boolean, and only when it was on the form', async () => {
+    const both = new FormData()
+    both.set('staff_id', 's2')
+    both.append('verify_identity', 'false')
+    both.append('verify_identity', 'true')
+    await saveStaffDetails(null, both)
+    expect(patch()).toEqual({ verify_identity: true })
+
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', verify_identity: 'false' }))
+    expect(patch()).toEqual({ verify_identity: false })
+
+    log.length = 0
+    await saveStaffDetails(null, form({ staff_id: 's2', email: 'x@qwealth.com.au' }))
+    expect(patch(), 'absent from the form means absent from the patch').toEqual({ email: 'x@qwealth.com.au' })
+  })
+
   test('a form with nothing to change, or no staff member, is refused', async () => {
     expect(await saveStaffDetails(null, form({ staff_id: 's2' }))).toEqual({ error: 'Nothing to save.' })
     expect(await saveStaffDetails(null, form({ first_name: 'X' }))).toEqual({ error: 'No staff member selected.' })

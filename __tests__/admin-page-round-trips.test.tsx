@@ -28,8 +28,8 @@ function stubClient() {
     })),
     staff_directory: [{ id: 's1', full_name: 'A Adviser', status: 'active' }],
     /* The Staff tab's two reads, on the same wave since Phase 2. */
-    staff_users: [{ id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Admin' } } }],
-    access_profiles: [{ id: 'p1', name: 'Admin', description: null, view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true, verify_identity: false }],
+    staff_users: [{ id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, staff_access_assignments: { profile_id: 'p1', access_profiles: { id: 'p1', name: 'Admin' } } }],
+    access_profiles: [{ id: 'p1', name: 'Admin', description: null, view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true }],
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }
@@ -57,7 +57,7 @@ vi.mock('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () =
 vi.mock('@/lib/staff', () => ({
   getCurrentStaff: async () => ({
     id: 's1', full_name: 'A Adviser', email: 'a@example.com', status: 'active',
-    access_profiles: { name: manageStaff ? 'Admin' : 'Adviser', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: manageStaff, file_unmatched_notes: true, verify_identity: false },
+    access_profiles: { name: manageStaff ? 'Admin' : 'Adviser', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: manageStaff, file_unmatched_notes: true },
   }),
 }))
 

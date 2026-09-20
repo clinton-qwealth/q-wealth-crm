@@ -97,6 +97,8 @@ export type StaffRow = {
   avatar_path: string | null
   /** When the row was made — for a pending request, when the person asked. */
   created_at: string
+  /** Per person since 20 Sep 2026; toggled in the drawer's Access box. */
+  verify_identity: boolean
   profile: { id: string; name: string } | null
 }
 
@@ -109,7 +111,6 @@ export type AccessProfileChoice = {
   manage_groups: boolean
   manage_staff: boolean
   file_unmatched_notes: boolean
-  verify_identity: boolean
 }
 
 /**
@@ -124,7 +125,7 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('staff_users')
-    .select('id, first_name, last_name, email, status, avatar_path, created_at, staff_access_assignments(profile_id, access_profiles(id, name))')
+    .select('id, first_name, last_name, email, status, avatar_path, created_at, verify_identity, staff_access_assignments(profile_id, access_profiles(id, name))')
     .order('last_name')
     .order('first_name')
   if (error) throw new Error(`The staff list could not be read: ${error.message}`)
@@ -145,6 +146,7 @@ export async function getStaffForAdmin(): Promise<StaffRow[]> {
       status: row.status as string,
       avatar_path: (row.avatar_path as string | null) ?? null,
       created_at: row.created_at as string,
+      verify_identity: row.verify_identity === true,
       profile: profile ? { id: profile.id, name: profile.name } : null,
     }
   })
@@ -155,7 +157,7 @@ export async function getAccessProfiles(): Promise<AccessProfileChoice[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('access_profiles')
-    .select('id, name, description, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity')
+    .select('id, name, description, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes')
     .order('name')
   if (error) throw new Error(`The access profiles could not be read: ${error.message}`)
   return (data ?? []) as unknown as AccessProfileChoice[]

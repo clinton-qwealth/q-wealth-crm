@@ -22,7 +22,8 @@ export default async function ProfilePage() {
     ['Manage groups', p.manage_groups],
     ['Manage staff', p.manage_staff],
     ['File unmatched notes', p.file_unmatched_notes],
-    ['Verify identity', p.verify_identity],
+    // Granted to the person, not the profile, since 20 Sep 2026.
+    ['Verify identity', staff.verify_identity],
   ]
 
   return (

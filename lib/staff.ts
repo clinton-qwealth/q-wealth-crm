@@ -8,8 +8,6 @@ export type AccessProfile = {
   manage_groups: boolean
   manage_staff: boolean
   file_unmatched_notes: boolean
-  /** Added to the profile on 3 Sep; reached the app's type on 19 Sep with the Administration page. */
-  verify_identity: boolean
 }
 
 export type Staff = {
@@ -21,6 +19,13 @@ export type Staff = {
   status: string
   /** Object path of their photo in the staff-avatars bucket, or null. See lib/avatar.ts. */
   avatar_path: string | null
+  /**
+   * May send a client an identity-verification code. **A property of the person,
+   * not of their profile, since 20 Sep 2026** — an administrator opts each staff
+   * member in or out on the Staff tab. It sat on `access_profiles` from 3 Sep,
+   * which meant changing it for one person meant changing their whole role.
+   */
+  verify_identity: boolean
   access_profiles: AccessProfile
 }
 
@@ -75,7 +80,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
   const { data, error } = await supabase
     .from('staff_users')
     .select(
-      'id, first_name, last_name, email, status, avatar_path, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes, verify_identity))'
+      'id, first_name, last_name, email, status, avatar_path, verify_identity, staff_access_assignments(access_profiles(name, view_all_groups, view_sensitive, manage_groups, manage_staff, file_unmatched_notes))'
     )
     .eq('auth_user_id', sub)
     .maybeSingle()
@@ -103,6 +108,7 @@ export const getCurrentStaff = cache(async (): Promise<Staff | null> => {
     email: row.email as string,
     status: row.status as string,
     avatar_path: (row.avatar_path as string | null) ?? null,
+    verify_identity: row.verify_identity === true,
     access_profiles: profile,
   }
 })

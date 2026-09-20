@@ -23,11 +23,11 @@ vi.mock('@/lib/supabase/client', () => ({
 const { StaffList } = await import('@/components/staff-list')
 
 const PROFILES: AccessProfileChoice[] = [
-  { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true, verify_identity: false },
-  { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false, verify_identity: true },
+  { id: 'pa', name: 'Admin', description: 'Everything, including staff.', view_all_groups: true, view_sensitive: true, manage_groups: true, manage_staff: true, file_unmatched_notes: true },
+  { id: 'pb', name: 'Adviser', description: 'Own groups.', view_all_groups: false, view_sensitive: true, manage_groups: true, manage_staff: false, file_unmatched_notes: false },
 ]
-const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pa', name: 'Admin' } }
-const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', profile: { id: 'pb', name: 'Adviser' } }
+const ME: StaffRow = { id: 's1', first_name: 'Sarah', last_name: 'Chen', email: 'sarah@qwealth.com.au', status: 'active', avatar_path: null, created_at: '2026-09-01T00:00:00+00:00', verify_identity: false, profile: { id: 'pa', name: 'Admin' } }
+const THEM: StaffRow = { id: 's2', first_name: 'Reece', last_name: 'Testlee', email: 'reece@qwealth.com.au', status: 'inactive', avatar_path: 's2/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f.png', created_at: '2026-09-01T00:00:00+00:00', verify_identity: true, profile: { id: 'pb', name: 'Adviser' } }
 
 const list = () => render(<ul><StaffList staff={[ME, THEM]} profiles={PROFILES} viewer={{ id: 's1' }} /></ul>)
 const open = (name: string) => act(() => { fireEvent.click(screen.getByRole('button', { name: `Open ${name}` })) })
@@ -105,6 +105,40 @@ describe('the staff drawer', () => {
   })
 
   /**
+   * Verify-identity is a toggle on the PERSON since 20 Sep 2026, not a property
+   * of the profile. What matters here is the submission shape: a checkbox that is
+   * off sends nothing, which under key-presence would make opting somebody OUT
+   * impossible — so a hidden `false` travels ahead of the checkbox's `true`, and
+   * the action reads whether `true` arrived at all.
+   */
+  test('the Access box shows whether this person may verify identity, and offers the toggle', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    expect(within(d).getByText('Verify identity').nextElementSibling?.textContent).toContain('Yes')
+
+    edit(d, 'access')
+    const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
+    const inputs = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="verify_identity"]'))
+    expect(inputs.map((i) => [i.type, i.value])).toEqual([
+      ['hidden', 'false'],
+      ['checkbox', 'true'],
+    ])
+    expect(inputs[1]!.checked, 'the checkbox mirrors the row').toBe(true)
+    expect(form.querySelector('[data-slot="verify-note"]')!.textContent).toContain('second factor')
+  })
+
+  test('the toggle starts off for somebody who may not verify', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    const d = drawer(container)
+    expect(within(d).getByText('Verify identity').nextElementSibling?.textContent).toContain('No')
+    edit(d, 'access')
+    const box = drawer(container).querySelector<HTMLInputElement>('input[type="checkbox"][name="verify_identity"]')!
+    expect(box.checked).toBe(false)
+  })
+
+  /**
    * THE ONE THAT MATTERS. On the viewer's own row the status control is not
    * on the form: an absent control is an absent key in the patch, and the
    * database refuses the attempt regardless. The sentence says why.
@@ -146,7 +180,7 @@ describe('the staff drawer', () => {
  * The approval queue, since 19 September. A pending person is in the queue
  * and not in the list; Approve waits for a profile; Decline asks once.
  */
-const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', profile: null }
+const PENDING: StaffRow = { id: 's9', first_name: 'Nina', last_name: 'New', email: 'nina@qwealth.com.au', status: 'pending', avatar_path: null, created_at: '2026-09-19T01:00:00+00:00', verify_identity: false, profile: null }
 
 describe('awaiting approval', () => {
   test('is absent when nobody is waiting', () => {

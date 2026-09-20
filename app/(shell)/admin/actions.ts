@@ -84,7 +84,7 @@ const STATUSES = new Set(['active', 'inactive'])
  * Save a staff member's details from the Staff tab's forms.
  *
  * Patch-shaped, like `saveAccountDetails`: KEY PRESENCE is the meaning, so a
- * form carrying only a name leaves everything else alone. Only the six keys
+ * form carrying only a name leaves everything else alone. Only the seven keys
  * the database function knows are ever forwarded — anything else on the form
  * is ignored here rather than refused there. Email is trimmed and lowercased
  * before it travels. Every rule lives in the database and its sentences pass
@@ -120,6 +120,15 @@ export async function saveStaffDetails(_prev: StaffDetailState, formData: FormDa
     const profile = String(formData.get('profile_id'))
     if (!profile) return { error: 'Choose an access profile.' }
     patch.profile_id = profile
+  }
+  /* A checkbox that is off submits NOTHING, which under key-presence would read
+     as "leave it alone" — so opting somebody out would be impossible. The form
+     therefore carries a hidden `verify_identity=false` ahead of the checkbox's
+     `true`; both arrive when it is on, only the hidden one when it is off, and
+     neither when the box is not on the form at all. A real boolean travels,
+     because the database refuses anything else. */
+  if (formData.has('verify_identity')) {
+    patch.verify_identity = formData.getAll('verify_identity').includes('true')
   }
   if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
 

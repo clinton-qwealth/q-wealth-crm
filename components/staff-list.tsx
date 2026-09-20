@@ -177,6 +177,7 @@ function StaffPanel({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
               <Field label="Access profile" value={p.profile?.name ?? null} />
               <Field label="Status" value={active ? 'Active' : 'Inactive'} />
+              <Field label="Verify identity" value={p.verify_identity ? 'Yes' : 'No'} />
               {current?.description ? (
                 <div className="col-span-2 text-xs leading-relaxed text-neutral-500">{current.description}</div>
               ) : null}
@@ -213,6 +214,29 @@ function StaffPanel({
                 session — and can be reversed. The last active administrator cannot be removed or
                 demoted.
               </p>
+              {/* Per person since 20 Sep 2026, not per profile. A checkbox that is
+                  off submits nothing, which under key-presence would mean "leave it
+                  alone" and make opting OUT impossible — so a hidden `false` travels
+                  ahead of the checkbox's `true`, and the action reads whether `true`
+                  arrived. See saveStaffDetails. */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-neutral-500">Verify identity</span>
+                <label className="flex items-start gap-2 text-sm text-neutral-900">
+                  <input type="hidden" name="verify_identity" value="false" />
+                  <input
+                    type="checkbox"
+                    name="verify_identity"
+                    value="true"
+                    defaultChecked={p.verify_identity}
+                    className="mt-0.5 accent-brand"
+                  />
+                  <span>May send a client an identity-verification code and record the outcome</span>
+                </label>
+                <p data-slot="verify-note" className="text-xs leading-relaxed text-neutral-500">
+                  Applies to this person only, whatever their profile. Sending a code also requires
+                  their second factor, and only reaches clients they can already see.
+                </p>
+              </div>
             </div>
           }
         />

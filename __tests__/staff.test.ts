@@ -65,7 +65,6 @@ const PROFILE = {
   view_sensitive: false,
   manage_groups: false,
   manage_staff: false,
-  verify_identity: false,
   file_unmatched_notes: false,
 }
 const signedIn: Claims = { data: { claims: { sub: 'user-1', aal: 'aal2' } }, error: null }
@@ -74,6 +73,7 @@ const row = (o: Record<string, unknown> = {}) => ({
   first_name: 'A', last_name: 'Adviser',
   email: 'a@example.com',
   status: 'active',
+  verify_identity: true,
   staff_access_assignments: { access_profiles: PROFILE },
   ...o,
 })
@@ -110,6 +110,7 @@ describe('getCurrentStaff', () => {
       email: 'a@example.com',
       status: 'active',
       avatar_path: null,
+      verify_identity: true,
       access_profiles: PROFILE,
     })
   })
@@ -186,9 +187,26 @@ describe('what getCurrentStaff asks for', () => {
     const cols = selects[0]
     for (const c of ['id', 'first_name', 'last_name', 'email', 'status', 'avatar_path']) expect(cols).toContain(c)
     expect(cols, 'the split is done: nothing still asks for full_name').not.toContain('full_name')
-    for (const f of ['view_all_groups', 'view_sensitive', 'manage_groups', 'manage_staff', 'file_unmatched_notes', 'verify_identity']) {
+    for (const f of ['view_all_groups', 'view_sensitive', 'manage_groups', 'manage_staff', 'file_unmatched_notes']) {
       expect(cols, `the profile embed names ${f}`).toContain(f)
     }
+    /* Per person since 20 Sep 2026: asked for at the top level, and NOT inside
+       the profile embed — the deployed app must stop selecting the profile
+       column before the migration that drops it can run. */
+    expect(cols).toMatch(/,\s*verify_identity\s*,\s*staff_access_assignments/)
+    expect(cols).not.toMatch(/access_profiles\([^)]*verify_identity/)
+  })
+
+  test('the person\'s verify-identity flag comes back as a real boolean', async () => {
+    CLAIMS = signedIn
+    ROW = row({ verify_identity: true })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ verify_identity: true })
+    ROW = row({ verify_identity: false })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ verify_identity: false })
+    /* A missing column — an old select against a new build — reads as off,
+       never as undefined leaking into a permission display. */
+    ROW = row({ verify_identity: undefined })
+    await expect(getCurrentStaff()).resolves.toMatchObject({ verify_identity: false })
   })
 })
 
