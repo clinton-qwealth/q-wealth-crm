@@ -50,6 +50,29 @@ import { formatBirthDate, formatNoteDateTime } from '@/lib/note-date'
  */
 type Viewer = { id: string }
 
+/**
+ * A green light beside the name of somebody holding a session.
+ *
+ * A light rather than a pill, because it is not the same KIND of fact as the
+ * profile and status pills it used to sit among: those are properties of the
+ * record, this is something happening now. It moved out of the row's right-hand
+ * meta column on 20 September for the same reason — a state that belongs to the
+ * person reads next to the person, not in the column of record attributes.
+ *
+ * The colour is not the message. A green dot alone says nothing to a screen
+ * reader and nothing to anyone who cannot separate it from the background, so
+ * the words ride along in an `sr-only` span and the dot itself is hidden from
+ * the accessibility tree. `title` gives the same words to a pointer.
+ */
+function SignedIn() {
+  return (
+    <span data-slot="signed-in" title="Signed in">
+      <span aria-hidden="true" className="qw-live" />
+      <span className="sr-only">Signed in</span>
+    </span>
+  )
+}
+
 export function StaffList({
   staff,
   profiles,
@@ -79,13 +102,10 @@ export function StaffList({
               key={s.id}
               leading={<Avatar staffId={s.id} firstName={s.first_name} lastName={s.last_name} avatarPath={s.avatar_path} />}
               primary={fullName(s)}
+              indicator={s.signed_in ? <SignedIn /> : null}
               secondary={s.email}
               meta={
                 <span className="flex items-center gap-1.5">
-                  {/* "Signed in" is what the session actually says — that they
-                      hold one and have not given it up — rather than a claim
-                      about whether they are looking at the screen. */}
-                  {s.signed_in ? <Pill tone="brand">Signed in</Pill> : null}
                   <Pill tone="brand">{s.profile?.name ?? 'No profile'}</Pill>
                   <Pill on={s.status === 'active'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill>
                 </span>
@@ -132,8 +152,9 @@ function StaffPanel({
     <>
       <DrawerHeader
         id="staff-drawer-title"
-        eyebrow="Staff"
+        eyebrow="User"
         title={fullName(p)}
+        indicator={p.signed_in ? <SignedIn /> : null}
         pills={
           <>
             <Pill tone="brand">{p.profile?.name ?? 'No profile'}</Pill>

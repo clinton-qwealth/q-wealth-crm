@@ -532,3 +532,67 @@ dialog.qw-drawer[open]::backdrop {
 .qw-field {
   text-align: left;
 }
+
+/* ---------------------------------------------------------------------------
+   The live indicator — a small green light beside a signed-in person's name
+
+   A traffic light rather than a pill, asked for on 20 September 2026, because
+   it is not the same KIND of fact as the two pills beside it. An access profile
+   and a status are properties of the record, set by an administrator and true
+   until changed. Holding a session is a thing happening now. Giving it the same
+   shape as the other two said it was the same sort of fact, which it is not.
+
+   Two parts: a solid dot, and a ring that grows out of it and fades. The ring
+   is a `::after` on the same element rather than a second node, so a caller
+   cannot render half of it, and it is `position: absolute` inside a `relative`
+   dot so the growth costs no layout — it must not nudge the name it sits beside.
+
+   The dot is 8px and FIXED. That matters where this is used: it sits inside the
+   truncating name column of a DataRow, and a `badge` slot was removed from that
+   component on 11 September precisely because a variable-width pill won the
+   width contest and cut the name off. A fixed 8px mark with `shrink-0` cannot,
+   which is what makes this safe where the pill was not.
+--------------------------------------------------------------------------- */
+.qw-live {
+  position: relative;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background-color: #10b981;
+  /* A ring of the page's own ground, so the dot reads as a light sitting ON the
+     row rather than a hole punched through it. */
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.qw-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: #10b981;
+  animation: qw-live-pulse 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes qw-live-pulse {
+  0% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  /* Gone well before the cycle ends: the pause between pulses is what keeps it
+     subtle. A ring that is always mid-flight reads as a spinner — something
+     loading — rather than as a steady state. */
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+/* The dot stays; only the motion goes. Removing the indicator entirely would
+   take the information with it, which is not what the preference asks for. */
+@media (prefers-reduced-motion: reduce) {
+  .qw-live::after {
+    animation: none;
+  }
+}

@@ -21,9 +21,11 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  * pretending to be content: nothing is rendered, and the working area simply
  * sits in the middle where the group page's does.
  *
- * **Staff is the first tab**, also since 20 September. It is the one an
+ * **Users is the first tab**, also since 20 September. It is the one an
  * administrator comes here to use; the audit trail is what they consult when
- * something looks wrong, which is the rarer errand.
+ * something looks wrong, which is the rarer errand. The tab was called Staff
+ * until later that day; the underlying table is still `staff_users`, and that
+ * is deliberate — renaming a label is not renaming a schema.
  *
  * ## The gate comes before the wave
  *
@@ -76,7 +78,7 @@ export default async function AdminPage() {
             items={[
               {
                 id: 'staff',
-                label: pending > 0 ? `Staff (${pending} awaiting approval)` : 'Staff',
+                label: pending > 0 ? `Users (${pending} awaiting approval)` : 'Users',
                 panel: <StaffList staff={staffRows} profiles={profiles} viewer={{ id: staff.id }} />,
               },
               {

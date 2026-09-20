@@ -143,7 +143,34 @@ describe('the staff drawer', () => {
     const { container } = list()
     open('Reece Testlee')
     expect(within(drawer(container)).getByText('Last seen').nextElementSibling?.textContent).toMatch(/20 Sep 2026/)
-    expect(within(container.querySelector('ul')!).getAllByText('Signed in')).toHaveLength(1)
+    /* Scoped to the ROWS. By slot rather than by text, because the wrapper and
+       its sr-only child both read as "Signed in" and a text match counts one
+       light twice — and scoped to `li`, because this harness wraps the whole
+       component in a `ul` of its own, so a list-wide query catches the open
+       drawer's light as well. */
+    const rowLights = container.querySelectorAll('li [data-slot="signed-in"]')
+    expect(rowLights, 'one light, on the one person holding a session').toHaveLength(1)
+    expect(rowLights[0]!.textContent, 'the colour is not the only carrier').toBe('Signed in')
+  })
+
+  /* Asked for on 20 Sep 2026: the same live mark in the drawer, beside the
+     name, so a record marked live in the list stays marked when it is opened. */
+  test('the drawer carries the same live mark beside the name', () => {
+    const { container } = list()
+    open('Reece Testlee')
+    const d = drawer(container)
+    const light = d.querySelector('[data-slot="signed-in"]')
+    expect(light, 'the drawer marks a live session too').toBeTruthy()
+    expect(light!.textContent).toBe('Signed in')
+    /* Beside the NAME, not down among the pills. */
+    const heading = d.querySelector('#staff-drawer-title')!
+    expect(heading.parentElement!.contains(light!), 'it shares the heading line').toBe(true)
+  })
+
+  test('a person with no live session has no mark in the drawer', () => {
+    const { container } = list()
+    open('Sarah Chen')
+    expect(drawer(container).querySelector('[data-slot="signed-in"]')).toBeNull()
   })
 
   test('somebody who has never signed in says so, rather than showing a blank', () => {

@@ -95,7 +95,7 @@ describe('DataSection', () => {
   })
 
   /**
-   * **The name has the header line to itself.**
+   * **Nothing UNBOUNDED shares the header line with the name.**
    *
    * A `badge` prop used to put a status pill here, to the right of the name.
    * The pill was `whitespace-nowrap` and the name is `truncate`, so in this
@@ -103,13 +103,20 @@ describe('DataSection', () => {
    * plainly wrong once the accounts list moved into the 65% column of a
    * `TAB_SPLIT`. Status moved to the leading tile, which is a fixed 36px
    * square and cannot squeeze anything, and the prop was removed rather than
-   * left unused (see the note in the component, and the removed `metaBelow`
-   * before it).
+   * left unused.
    *
-   * So the header line is one element now, and that is the assertion: a second
-   * child here means something is competing for the width again.
+   * The rule was "the header line is one element" until 20 September 2026, when
+   * the staff list needed a live indicator beside a colleague's name. That is
+   * the same *position* and a different *thing*: a fixed 8px light, not a pill
+   * of unbounded width. So the rule is now about the failure mode rather than
+   * about the element count — **the name must always be the thing that gives
+   * way**, and anything beside it must be unable to grow.
+   *
+   * Both halves are asserted below, because only together do they prevent the
+   * pill coming back: a sibling that is `shrink-0` cannot take the row, and a
+   * name that is `min-w-0 truncate` will always yield before it.
    */
-  test('nothing shares the header line with the name', () => {
+  test('with no indicator, the name has the header line to itself', () => {
     render(
       <DataSection addLabel="Add" empty={empty}>
         <DataRow primary="A Very Long Account Label Indeed" secondary="Janet" meta="$1.00" />
@@ -117,12 +124,35 @@ describe('DataSection', () => {
     )
     const name = screen.getByText('A Very Long Account Label Indeed')
     expect(name.className).toContain('truncate')
-    // `block`, not a flex row holding the name plus a badge.
-    expect(name.className).toContain('block')
-    expect(name.parentElement!.firstElementChild, 'the name is first in its column').toBe(name)
-    // Its column holds the name and the second line, and nothing else.
-    expect(name.parentElement!.children).toHaveLength(2)
+    expect(name.className, 'it must be able to shrink, or truncate never fires').toContain('min-w-0')
+    expect(name.parentElement!.firstElementChild, 'the name is first on its line').toBe(name)
+    expect(name.parentElement!.children, 'nothing else is on the line').toHaveLength(1)
   })
+
+  test('an indicator may sit beside the name only if it cannot grow', () => {
+    render(
+      <DataSection addLabel="Add" empty={empty}>
+        <DataRow
+          primary="A Very Long Account Label Indeed"
+          indicator={<span data-testid="light" />}
+          secondary="Janet"
+          meta="$1.00"
+        />
+      </DataSection>,
+    )
+    const name = screen.getByText('A Very Long Account Label Indeed')
+    const line = name.parentElement!
+    expect(line.children, 'the name and the mark, and nothing more').toHaveLength(2)
+    expect(line.firstElementChild, 'the name still comes first').toBe(name)
+    expect(name.className).toContain('truncate')
+    expect(name.className).toContain('min-w-0')
+    /* The whole reason the removed pill was unsafe: it could grow. */
+    expect(
+      (line.children[1] as HTMLElement).className,
+      'the mark must not be able to take width from the name',
+    ).toContain('shrink-0')
+  })
+
 })
 
 /**

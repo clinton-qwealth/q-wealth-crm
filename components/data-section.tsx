@@ -200,6 +200,7 @@ export function DataSection({
 export function DataRow({
   leading,
   primary,
+  indicator,
   secondary,
   meta,
   trigger,
@@ -208,6 +209,19 @@ export function DataRow({
    *  with nothing meaningful to draw is better off without a decorative one. */
   leading?: ReactNode
   primary: string
+  /**
+   * A small, FIXED-SIZE state mark sitting immediately after the name.
+   *
+   * Deliberately not a general badge slot. A `badge` prop lived here until
+   * 11 September and was removed because a `whitespace-nowrap` pill of
+   * unbounded width always beat the truncating name beside it — see the note
+   * below. This is safe where that was not, and only because of its
+   * constraints: the mark is `shrink-0` and the name keeps `min-w-0 truncate`,
+   * so the name gives way and the mark cannot grow to take the row.
+   *
+   * Pass a light or a dot. Anything that renders text belongs in `meta`.
+   */
+  indicator?: ReactNode
   secondary?: string
   meta?: ReactNode
   /**
@@ -246,7 +260,13 @@ export function DataRow({
       removed `badge` prop above. */}
   const text = (
     <span className="min-w-0 flex-1 basis-40">
-      <span className="block truncate text-sm font-semibold text-neutral-900">{primary}</span>
+      {/* The name truncates; the mark does not shrink. With the name in its own
+          `min-w-0` span, the row gives up name characters under pressure and
+          keeps the mark — the opposite of what the removed `badge` did. */}
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate text-sm font-semibold text-neutral-900">{primary}</span>
+        {indicator ? <span className="shrink-0">{indicator}</span> : null}
+      </span>
       {secondary ? (
         <span className="block truncate text-xs text-neutral-500">{secondary}</span>
       ) : null}

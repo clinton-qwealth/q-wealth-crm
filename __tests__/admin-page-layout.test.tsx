@@ -41,15 +41,15 @@ beforeEach(() => {
 })
 
 describe('the Administration page', () => {
-  test('Staff is the first tab and the audit trail the second', async () => {
+  test('Users is the first tab and the audit trail the second', async () => {
     const { getAllByRole } = await page()
-    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Staff', 'Audit trail'])
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Users', 'Audit trail'])
   })
 
-  test('the first tab is the one selected, so Staff is what opens', async () => {
+  test('the first tab is the one selected, so Users is what opens', async () => {
     const { getAllByRole } = await page()
     const selected = getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true')
-    expect(selected.map((t) => t.textContent)).toEqual(['Staff'])
+    expect(selected.map((t) => t.textContent)).toEqual(['Users'])
   })
 
   /* 3 / 6 / 3 over the shell's twelve columns — the group page's split, so the

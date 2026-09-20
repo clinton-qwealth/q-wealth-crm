@@ -142,6 +142,7 @@ export function DrawerHeader({
   id,
   eyebrow,
   title,
+  indicator,
   pills,
   actions,
   onClose,
@@ -150,6 +151,10 @@ export function DrawerHeader({
   id: string
   eyebrow?: string
   title: string
+  /** A small fixed-size state mark beside the title. Same slot, and the same
+   *  constraints, as `DataRow`'s — so a record marked live in a list stays
+   *  marked when its drawer opens. */
+  indicator?: ReactNode
   pills?: ReactNode
   /** Anything that belongs beside the close button, e.g. a Mark done. */
   actions?: ReactNode
@@ -183,17 +188,20 @@ export function DrawerHeader({
             {eyebrow}
           </p>
         ) : null}
-        <h2
-          id={id}
-          ref={heading}
-          /* Focusable by the app, not by Tab — the reading order below it is
-             unchanged. No focus ring: the house ring is `focus-visible`, and a
-             heading focused programmatically is not a focus-visible event. */
-          tabIndex={-1}
-          className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900 outline-none"
-        >
-          {title}
-        </h2>
+        <div className="mt-1 flex min-w-0 items-center gap-2.5">
+          <h2
+            id={id}
+            ref={heading}
+            /* Focusable by the app, not by Tab — the reading order below it is
+               unchanged. No focus ring: the house ring is `focus-visible`, and a
+               heading focused programmatically is not a focus-visible event. */
+            tabIndex={-1}
+            className="min-w-0 text-2xl font-semibold tracking-tight text-neutral-900 outline-none"
+          >
+            {title}
+          </h2>
+          {indicator ? <span className="shrink-0">{indicator}</span> : null}
+        </div>
         {pills ? <div className="mt-2 flex flex-wrap items-center gap-1.5">{pills}</div> : null}
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
