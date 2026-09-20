@@ -66,11 +66,25 @@ type Viewer = { id: string }
  * the words ride along in an `sr-only` span and the dot itself is hidden from
  * the accessibility tree. `title` gives the same words to a pointer.
  */
-function SignedIn() {
+function SignedIn({ labelled = false }: { labelled?: boolean }) {
   return (
-    <span data-slot="signed-in" title="Signed in">
+    <span
+      data-slot="signed-in"
+      /* The tooltip is for the bare dot only. Beside the words it would just
+         repeat them on hover. */
+      title={labelled ? undefined : 'Signed in'}
+      className={labelled ? 'inline-flex items-center gap-1.5' : undefined}
+    >
       <span aria-hidden="true" className="qw-live" />
-      <span className="sr-only">Signed in</span>
+      {labelled ? (
+        /* The words, on the record itself, asked for on 20 Sep 2026. Emerald-700
+           is the `success` pill's own text colour, so the label and the dot read
+           as one mark rather than two greens. Not `sr-only` as well: a screen
+           reader would then say it twice. */
+        <span className="text-xs font-medium text-emerald-700">Signed in</span>
+      ) : (
+        <span className="sr-only">Signed in</span>
+      )}
     </span>
   )
 }
@@ -175,7 +189,7 @@ function StaffPanel({
         id="staff-drawer-title"
         eyebrow="User"
         title={fullName(p)}
-        indicator={p.signed_in ? <SignedIn /> : null}
+        indicator={p.signed_in ? <SignedIn labelled /> : null}
         pills={
           <>
             <Pill tone="brand">{p.profile?.name ?? 'No profile'}</Pill>

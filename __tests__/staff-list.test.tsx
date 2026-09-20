@@ -161,17 +161,32 @@ describe('the staff drawer', () => {
   })
 
   /* Asked for on 20 Sep 2026: the same live mark in the drawer, beside the
-     name, so a record marked live in the list stays marked when it is opened. */
-  test('the drawer carries the same live mark beside the name', () => {
+     name, so a record marked live in the list stays marked when it is opened —
+     and later the same day, with the WORDS beside the dot on the record itself. */
+  test('the drawer carries the same live mark beside the name, and names it in words', () => {
     const { container } = list()
     open('Reece Testlee')
     const d = drawer(container)
     const light = d.querySelector('[data-slot="signed-in"]')
     expect(light, 'the drawer marks a live session too').toBeTruthy()
     expect(light!.textContent).toBe('Signed in')
+    /* VISIBLE words on the record, not the row's screen-reader-only copy — and
+       not both, which would announce it twice. */
+    expect(light!.querySelector('.sr-only'), 'the words are shown, not hidden').toBeNull()
+    expect(light!.querySelector('[aria-hidden="true"].qw-live'), 'the dot is still there').toBeTruthy()
     /* Beside the NAME, not down among the pills. */
     const heading = d.querySelector('#staff-drawer-title')!
     expect(heading.parentElement!.contains(light!), 'it shares the heading line').toBe(true)
+  })
+
+  /* The LIST keeps the bare dot: a row is dense, and its right-hand column
+     already carries two pills. The words belong on the record. */
+  test('a row carries the dot with its words for a screen reader only', () => {
+    const { container } = list()
+    const rowLight = container.querySelector('li [data-slot="signed-in"]')!
+    expect(rowLight.textContent).toBe('Signed in')
+    expect(rowLight.querySelector('.sr-only'), 'on a row the words stay hidden').toBeTruthy()
+    expect(rowLight.getAttribute('title')).toBe('Signed in')
   })
 
   test('a person with no live session has no mark in the drawer', () => {
