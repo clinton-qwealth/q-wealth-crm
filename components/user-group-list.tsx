@@ -1,15 +1,15 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
+  addUserGroupMember,
   createUserGroup,
+  removeUserGroupMember,
   saveUserGroupDetails,
-  saveUserGroupMembers,
   type UserGroupState,
 } from '@/app/(shell)/admin/actions'
 import type { UserGroupRow } from '@/lib/admin'
 import { USER_GROUP_STATUS_LABEL } from '@/lib/user-groups'
-import { CheckboxSet } from './checkbox-set'
 import { DataRow, DataSection } from './data-section'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox } from './field-box'
@@ -88,6 +88,125 @@ export function UserGroupList({
   )
 }
 
+/**
+ * Who is in this user group, and the two controls that change it.
+ *
+ * **Search to add, list to remove — and every action is its own write.** The
+ * first version of this box was a checkbox per staff member with one Save, which
+ * Clinton rightly questioned on 20 Sep 2026: "if i have 100-200 users, what
+ * would ideally be the best way?" Three things break at that size, and only one
+ * of them is the scrolling:
+ *
+ *  - **A Save replaces the whole membership**, so two administrators editing the
+ *    same group minutes apart silently revert each other.
+ *  - **The trail loses the intent.** "Added Jo Smith to Northern" is the event
+ *    worth recording; a set-replace leaves only whichever rows differed.
+ *  - **You cannot see who is in** without reading two hundred boxes.
+ *
+ * So: the members are a short list with a remove beside each, and adding is a
+ * search. The search is entirely in the browser over the staff the page has
+ * already loaded for the Users tab — two hundred names is nothing to filter, and
+ * it costs no round trip and no wave.
+ *
+ * Nothing is listed until something is typed. A picker that dumps every
+ * colleague on opening is the control this one replaced.
+ */
+function MemberManager({ group: g, staff }: { group: UserGroupRow; staff: { id: string; name: string }[] }) {
+  const [query, setQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+
+  const memberIds = useMemo(() => new Set(g.members.map((m) => m.id)), [g.members])
+  const needle = query.trim().toLowerCase()
+  /* Capped, because a two-letter query matches half the firm and a list that
+     long is the problem this box exists to avoid. */
+  const matches = useMemo(
+    () => (needle ? staff.filter((s) => !memberIds.has(s.id) && s.name.toLowerCase().includes(needle)) : []),
+    [needle, staff, memberIds],
+  )
+  const shown = matches.slice(0, 8)
+
+  function run(action: () => Promise<{ error: string } | { ok: true } | null>) {
+    setError(null)
+    start(async () => {
+      const result = await action()
+      if (result && 'error' in result) setError(result.error)
+      else setQuery('')
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          disabled={busy}
+          aria-label={`Search staff to add to ${g.name}`}
+          placeholder="Search staff to add…"
+          className={FIELD_INPUT}
+        />
+        {needle ? (
+          shown.length ? (
+            <ul data-slot="member-matches" className="flex flex-col gap-1 rounded-md border border-neutral-200 bg-neutral-50 p-2">
+              {shown.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2 rounded px-1.5 py-1 text-sm text-neutral-800">
+                  <span className="min-w-0 truncate">{s.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => run(() => addUserGroupMember(g.id, s.id))}
+                    disabled={busy}
+                    aria-label={`Add ${s.name}`}
+                    className="shrink-0 rounded-md bg-brand px-2.5 py-1 text-xs font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+                  >
+                    Add
+                  </button>
+                </li>
+              ))}
+              {matches.length > shown.length ? (
+                <li className="px-1.5 pt-1 text-xs text-neutral-500">
+                  {matches.length - shown.length} more — keep typing to narrow it.
+                </li>
+              ) : null}
+            </ul>
+          ) : (
+            <p className="text-xs text-neutral-500">
+              Nobody left to add by that name. Everybody matching is already a member.
+            </p>
+          )
+        ) : null}
+      </div>
+
+      {g.members.length ? (
+        <ul data-slot="member-list" className="flex flex-col gap-1">
+          {g.members.map((m) => (
+            <li key={m.id} className="flex items-center justify-between gap-2 text-sm text-neutral-900">
+              <span className="min-w-0 truncate">{m.name}</span>
+              <button
+                type="button"
+                onClick={() => run(() => removeUserGroupMember(g.id, m.id))}
+                disabled={busy}
+                aria-label={`Remove ${m.name}`}
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 outline-none transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500/30"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-neutral-400">No members yet</p>
+      )}
+
+      {error ? (
+        <p role="alert" className="text-xs text-red-600">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 /** "2 members · 5 households", singular-aware. */
 function countsLine(g: UserGroupRow): string {
   const m = g.members.length
@@ -159,32 +278,10 @@ function UserGroupPanel({
           }
         />
 
-        <FieldBox
-          title="Members"
-          action={saveUserGroupMembers}
-          identity={identity}
-          view={
-            g.members.length ? (
-              <ul className="flex flex-col gap-1 text-sm text-neutral-900">
-                {g.members.map((m) => (
-                  <li key={m.id}>{m.name}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-neutral-400">No members yet</p>
-            )
-          }
-          edit={
-            <CheckboxSet
-              legend="Members"
-              field="staff_ids"
-              sentinel="members_present"
-              options={staff}
-              chosen={g.members.map((m) => m.id)}
-              emptyText="Nobody active on the staff to add."
-            />
-          }
-        />
+        {/* No pencil, no Save — like the Photo box, and for the same reason:
+            this is not a form, it is a set of immediate actions. See
+            `MemberManager` for why that matters at 200 users. */}
+        <FieldBox title="Members" view={<MemberManager group={g} staff={staff} />} />
       </DrawerBody>
     </>
   )

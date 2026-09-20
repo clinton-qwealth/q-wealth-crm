@@ -314,21 +314,69 @@ export async function saveUserGroupDetails(_prev: UserGroupState, formData: Form
 }
 
 /**
- * Replace a user group's members with exactly what is ticked. The sentinel is
- * what lets an EMPTIED list mean "remove everyone" rather than "nothing to
- * save" — without it the two are the same `[]`.
+ * Membership, one person at a time — the Members box on a user group.
+ *
+ * INCREMENTAL, not a set-replace, and that is the whole point at 100-200 users:
+ * two administrators working on the same group cannot revert each other, because
+ * neither call carries an opinion about anybody it was not asked about. It also
+ * gives the audit trail the event that actually happened ("Added Jo Smith")
+ * rather than whichever rows happened to differ.
+ *
+ * Both are idempotent in the database, so a double click is not an error.
  */
-export async function saveUserGroupMembers(_prev: UserGroupState, formData: FormData): Promise<UserGroupState> {
-  const id = String(formData.get('user_group_id') ?? '')
-  if (!UUID.test(id)) return { error: 'No user group selected.' }
-  const ids = readSet(formData, 'staff_ids', 'members_present')
-  if (!ids) return { error: 'Nothing to save.' }
-  if (!ids.every((s) => UUID.test(s))) return { error: 'Choose members from the list.' }
+export async function addUserGroupMember(userGroupId: string, staffId: string): Promise<UserGroupState> {
+  if (!UUID.test(userGroupId)) return { error: 'No user group selected.' }
+  if (!UUID.test(staffId)) return { error: 'No person selected.' }
 
   const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.rpc('set_user_group_members', { p_user_group_id: id, p_staff_ids: ids })
+  const { error } = await supabase.rpc('add_user_group_member', {
+    p_user_group_id: userGroupId,
+    p_staff_id: staffId,
+  })
   if (error) return { error: error.message }
 
   revalidatePath('/admin')
   return { ok: true }
+}
+
+export async function removeUserGroupMember(userGroupId: string, staffId: string): Promise<UserGroupState> {
+  if (!UUID.test(userGroupId)) return { error: 'No user group selected.' }
+  if (!UUID.test(staffId)) return { error: 'No person selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('remove_user_group_member', {
+    p_user_group_id: userGroupId,
+    p_staff_id: staffId,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+/**
+ * Several people into one user group, from the Users list — the errand that
+ * actually takes the time when first carving a hundred people into territories.
+ *
+ * ADDITIVE: it never removes anybody, so pressing it from a list somebody else
+ * may be editing cannot undo their work. The database returns how many rows it
+ * actually wrote, so the message says "Added 12" rather than "Added 15" when
+ * three were already members.
+ */
+export type BulkAssignState = { error: string } | { ok: true; added: number } | null
+
+export async function addUsersToUserGroup(userGroupId: string, staffIds: string[]): Promise<BulkAssignState> {
+  if (!UUID.test(userGroupId)) return { error: 'Choose a user group.' }
+  if (staffIds.length === 0) return { error: 'Choose at least one person.' }
+  if (!staffIds.every((id) => UUID.test(id))) return { error: 'Choose people from the list.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('add_user_group_members', {
+    p_user_group_id: userGroupId,
+    p_staff_ids: staffIds,
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin')
+  return { ok: true, added: typeof data === 'number' ? data : 0 }
 }

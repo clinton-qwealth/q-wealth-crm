@@ -12,6 +12,7 @@ import type { UserGroupChoice } from '@/lib/user-groups'
  * from a Storage URL rather than the app's own route; a drawer per row.
  */
 vi.mock('@/app/(shell)/admin/actions', () => ({
+  addUsersToUserGroup: vi.fn(async () => ({ ok: true as const, added: 2 })),
   saveStaffDetails: vi.fn(async () => ({ ok: true as const })),
   setStaffAvatar: vi.fn(async () => ({ ok: true as const })),
   approveStaffRegistration: vi.fn(async () => ({ ok: true as const })),
@@ -179,14 +180,27 @@ describe('the staff drawer', () => {
     expect(heading.parentElement!.contains(light!), 'it shares the heading line').toBe(true)
   })
 
-  /* The LIST keeps the bare dot: a row is dense, and its right-hand column
-     already carries two pills. The words belong on the record. */
-  test('a row carries the dot with its words for a screen reader only', () => {
+  /* The words on the ROW too, asked for on 20 Sep 2026 — the same mark in both
+     places, so a record marked live in the list reads identically when opened. */
+  test('a row shows the same dot and words, and only one person has them', () => {
     const { container } = list()
-    const rowLight = container.querySelector('li [data-slot="signed-in"]')!
-    expect(rowLight.textContent).toBe('Signed in')
-    expect(rowLight.querySelector('.sr-only'), 'on a row the words stay hidden').toBeTruthy()
-    expect(rowLight.getAttribute('title')).toBe('Signed in')
+    const rowLights = container.querySelectorAll('li [data-slot="signed-in"]')
+    expect(rowLights, 'one mark, on the one person holding a session').toHaveLength(1)
+    expect(rowLights[0]!.textContent).toBe('Signed in')
+    expect(rowLights[0]!.querySelector('[aria-hidden="true"].qw-live'), 'the dot').toBeTruthy()
+    expect(rowLights[0]!.querySelector('.sr-only'), 'the words are shown, not doubled up').toBeNull()
+  })
+
+  /* The mark must never squeeze the name out of a row. The name truncates and
+     the mark does not shrink — the contract `DataRow`'s indicator slot was added
+     for, and the reason the old `badge` prop was removed. */
+  test('the row mark cannot grow at the name’s expense', () => {
+    const { container } = list()
+    const mark = container.querySelector('li [data-slot="signed-in"]')!
+    expect(mark.parentElement!.className, 'the slot does not shrink').toContain('shrink-0')
+    expect(mark.querySelector('span:last-child')!.className).toContain('whitespace-nowrap')
+    const name = container.querySelectorAll('li')[1]!.querySelector('.truncate')!
+    expect(name.className, 'the name is what gives way').toContain('min-w-0')
   })
 
   test('a person with no live session has no mark in the drawer', () => {
@@ -429,5 +443,123 @@ describe('awaiting approval', () => {
     await act(async () => { fireEvent.change(screen.getByRole('combobox', { name: 'Access profile for Nina New' }), { target: { value: 'pa' } }) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Approve' })) })
     expect(screen.getByRole('alert').textContent).toBe('This request has already been decided')
+  })
+})
+
+/**
+ * Choosing several users and putting them in a territory at once — the errand
+ * that actually takes the time when first carving 100-200 people into groups.
+ *
+ * Two things are load-bearing and neither is visible in a screenshot: only an
+ * ACTIVE person may be ticked (the database refuses the rest, and a control that
+ * offers a refusal is worse than none), and the count reported back is the one
+ * the DATABASE wrote, not the number ticked — the difference being everybody who
+ * was already a member.
+ */
+describe('assigning several users to a group at once', () => {
+  const tick = (name: string) =>
+    act(() => { fireEvent.click(screen.getByRole('checkbox', { name: `Select ${name}` })) })
+
+  test('the bar is absent until somebody is chosen, and names how many', () => {
+    const { container } = list()
+    expect(container.querySelector('[data-slot="bulk-assign"]')).toBeNull()
+    tick('Sarah Chen')
+    expect(container.querySelector('[data-slot="bulk-assign"]')!.textContent).toContain('1 user selected')
+    tick('Sarah Chen')
+    expect(container.querySelector('[data-slot="bulk-assign"]'), 'unticking the last one puts it away').toBeNull()
+  })
+
+  /* Reece is inactive: the database will not let him join a user group, so the
+     row offers no way to ask. */
+  test('an inactive person cannot be ticked at all', () => {
+    list()
+    expect(screen.getByRole('checkbox', { name: 'Select Sarah Chen' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: 'Select Reece Testlee' })).toBeNull()
+  })
+
+  test('it offers active user groups only, and sends every ticked person to the additive call', async () => {
+    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    const select = within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }) as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      'Choose a user group…',
+      'North',
+      'South',
+    ])
+    await act(async () => { fireEvent.change(select, { target: { value: 'ug-north' } }) })
+    await act(async () => {
+      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
+    })
+    expect(addUsersToUserGroup).toHaveBeenCalledWith('ug-north', ['s1'])
+  })
+
+  test('the button waits for a group to be chosen', () => {
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    expect((within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  test('it reports the number the database wrote, not the number ticked', async () => {
+    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ ok: true, added: 1 })
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    await act(async () => {
+      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
+        target: { value: 'ug-north' },
+      })
+    })
+    await act(async () => {
+      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
+    })
+    expect(screen.getByRole('status').textContent).toBe('Added 1 user.')
+  })
+
+  test('adding nobody new says so rather than claiming a change', async () => {
+    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ ok: true, added: 0 })
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    await act(async () => {
+      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
+        target: { value: 'ug-north' },
+      })
+    })
+    await act(async () => {
+      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
+    })
+    expect(screen.getByRole('status').textContent).toContain('already a member')
+  })
+
+  test('the database’s refusal is shown and the selection is kept', async () => {
+    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ error: 'Only an administrator can manage user groups' })
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    await act(async () => {
+      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
+        target: { value: 'ug-north' },
+      })
+    })
+    await act(async () => {
+      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Only an administrator can manage user groups')
+    expect(container.querySelector('[data-slot="bulk-assign"]'), 'still there to try again').toBeTruthy()
+  })
+
+  /* A checkbox inside the row's own button would be invalid markup whose click
+     the button swallows — the reason DataRow renders `select` outside it. */
+  test('the checkbox sits outside the row’s open button', () => {
+    const { container } = list()
+    const box = screen.getByRole('checkbox', { name: 'Select Sarah Chen' })
+    expect(box.closest('button'), 'never nested in the row trigger').toBeNull()
+    expect(container.querySelectorAll('li')[0]!.contains(box)).toBe(true)
   })
 })

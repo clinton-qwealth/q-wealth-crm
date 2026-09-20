@@ -12,10 +12,12 @@ import type { UserGroupRow } from '@/lib/admin'
 vi.mock('@/app/(shell)/admin/actions', () => ({
   createUserGroup: vi.fn(async () => ({ ok: true as const })),
   saveUserGroupDetails: vi.fn(async () => ({ ok: true as const })),
-  saveUserGroupMembers: vi.fn(async () => ({ ok: true as const })),
+  addUserGroupMember: vi.fn(async () => ({ ok: true as const })),
+  removeUserGroupMember: vi.fn(async () => ({ ok: true as const })),
 }))
 const { UserGroupList } = await import('@/components/user-group-list')
 
+/* s1 and s2 are members of North; s3 is not, and matches a search for "e". */
 const STAFF = [
   { id: 's1', name: 'Sarah Chen' },
   { id: 's2', name: 'Reece Testlee' },
@@ -85,10 +87,21 @@ describe('the user group list', () => {
 })
 
 describe('the user group drawer', () => {
-  test('the read state contains no form control at all', () => {
+  /**
+   * The FieldBox rule is that reading a record cannot change it. The Members
+   * box is the one exception, and the same kind as the Photo box: it is not a
+   * form at all but a set of immediate actions, so its search field lives in
+   * the read state. The guarantee is kept a different way — the field carries
+   * no `name`, so it submits nothing — and that is asserted rather than assumed.
+   */
+  test('the read state holds no form control but the member search, which submits nothing', () => {
     const { container } = list()
     open('North')
-    expect(drawer(container).querySelectorAll('input, select, textarea')).toHaveLength(0)
+    const d = drawer(container)
+    const controls = Array.from(d.querySelectorAll<HTMLElement>('input, select, textarea'))
+    expect(controls).toHaveLength(1)
+    expect(controls[0]!.getAttribute('aria-label')).toBe('Search staff to add to North')
+    expect(controls[0]!.getAttribute('name'), 'it is a filter, not a field').toBeNull()
   })
 
   test('reads the name, status, households and members', () => {
@@ -127,36 +140,84 @@ describe('the user group drawer', () => {
     expect(form.querySelector('[data-slot="archive-note"]')!.textContent).toContain('keep it until changed')
   })
 
-  /* The sentinel FIRST, then one box per person offered, ticked for members. */
-  test('editing Members offers every active person behind the sentinel, ticked for the current members', () => {
+  /**
+   * Members are managed by SEARCH AND REMOVE, not a checkbox per colleague.
+   * The list must show nobody until something is typed — a picker that dumps
+   * every one of 200 staff on opening is the control this replaced.
+   */
+  test('the Members box lists current members and offers nobody until you search', () => {
     const { container } = list()
     open('North')
     const d = drawer(container)
-    edit(d, 'members')
-    const form = within(d).getByRole('button', { name: 'Save' }).closest('form')!
-    const inputs = Array.from(form.querySelectorAll<HTMLInputElement>('input'))
-    expect(inputs.map((i) => [i.type, i.name])).toEqual([
-      ['hidden', 'user_group_id'],
-      ['hidden', 'members_present'],
-      ['checkbox', 'staff_ids'],
-      ['checkbox', 'staff_ids'],
-      ['checkbox', 'staff_ids'],
-    ])
-    const boxes = inputs.filter((i) => i.type === 'checkbox')
-    expect(boxes.map((b) => [b.value, b.checked])).toEqual([
-      ['s1', true],
-      ['s2', true],
-      ['s3', false],
-    ])
+    const box = within(d).getByRole('heading', { name: 'Members' }).closest('form')!
+    expect(box.querySelector('[data-slot="member-list"]')!.textContent).toContain('Sarah Chen')
+    expect(box.querySelector('[data-slot="member-list"]')!.textContent).toContain('Reece Testlee')
+    expect(box.querySelector('[data-slot="member-matches"]'), 'nothing offered before a search').toBeNull()
+    expect(box.textContent, 'and no non-member is listed either').not.toContain('Nina New')
   })
 
-  test('with nobody active to add, the sentinel still travels', () => {
-    const { container } = render(<UserGroupList groups={[NORTH]} staff={[]} />)
+  test('there is no Save: each add and each remove is its own action', () => {
+    const { container } = list()
     open('North')
     const d = drawer(container)
-    edit(d, 'members')
-    expect(d.querySelector('input[name="members_present"]')).toBeTruthy()
-    expect(d.querySelectorAll('input[name="staff_ids"]')).toHaveLength(0)
-    expect(d.textContent).toContain('Nobody active on the staff to add')
+    const box = within(d).getByRole('heading', { name: 'Members' }).closest('form')!
+    expect(within(box as HTMLElement).queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(within(box as HTMLElement).queryByRole('button', { name: 'Edit members' })).toBeNull()
+    expect(box.querySelector('input[type="checkbox"]'), 'no checkbox set any more').toBeNull()
+  })
+
+  test('searching offers only people who are NOT already members, and adds one', async () => {
+    const { addUserGroupMember } = await import('@/app/(shell)/admin/actions')
+    const { container } = list()
+    open('North')
+    const d = drawer(container)
+    const search = within(d).getByLabelText('Search staff to add to North')
+    await act(async () => { fireEvent.change(search, { target: { value: 'e' } }) })
+    const matches = d.querySelector('[data-slot="member-matches"]')!
+    /* Nina matches "e" and is not a member; Reece matches but already is. */
+    expect(matches.textContent).toContain('Nina New')
+    expect(matches.textContent).not.toContain('Reece Testlee')
+    await act(async () => { fireEvent.click(within(d).getByRole('button', { name: 'Add Nina New' })) })
+    expect(addUserGroupMember).toHaveBeenCalledWith('ug-north', 's3')
+  })
+
+  test('a search matching only existing members says so rather than offering nothing', async () => {
+    const { container } = list()
+    open('North')
+    const d = drawer(container)
+    await act(async () => {
+      fireEvent.change(within(d).getByLabelText('Search staff to add to North'), { target: { value: 'Sarah' } })
+    })
+    expect(d.querySelector('[data-slot="member-matches"]')).toBeNull()
+    expect(d.textContent).toContain('already a member')
+  })
+
+  test('removing names the one person and the one group', async () => {
+    const { removeUserGroupMember } = await import('@/app/(shell)/admin/actions')
+    const { container } = list()
+    open('North')
+    await act(async () => {
+      fireEvent.click(within(drawer(container)).getByRole('button', { name: 'Remove Sarah Chen' }))
+    })
+    expect(removeUserGroupMember).toHaveBeenCalledWith('ug-north', 's1')
+  })
+
+  test('the database’s refusal is shown in the box', async () => {
+    const { removeUserGroupMember } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(removeUserGroupMember).mockResolvedValueOnce({ error: 'Only an administrator can manage user groups' })
+    const { container } = list()
+    open('North')
+    await act(async () => {
+      fireEvent.click(within(drawer(container)).getByRole('button', { name: 'Remove Sarah Chen' }))
+    })
+    expect(within(drawer(container)).getByRole('alert').textContent).toBe('Only an administrator can manage user groups')
+  })
+
+  test('a group with nobody in it says so, and still offers the search', () => {
+    const { container } = list([{ ...NORTH, members: [], household_count: 0 }])
+    open('North')
+    const d = drawer(container)
+    expect(d.textContent).toContain('No members yet')
+    expect(within(d).getByLabelText('Search staff to add to North')).toBeTruthy()
   })
 })

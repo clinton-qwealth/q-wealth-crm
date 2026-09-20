@@ -199,6 +199,7 @@ export function DataSection({
  */
 export function DataRow({
   leading,
+  select,
   primary,
   indicator,
   secondary,
@@ -208,6 +209,15 @@ export function DataRow({
   /** A tile or glyph before the text, e.g. AccountTypeTile. Optional: a list
    *  with nothing meaningful to draw is better off without a decorative one. */
   leading?: ReactNode
+  /**
+   * A control that picks this row out of the list, e.g. a checkbox for a bulk
+   * action. Rendered BEFORE and OUTSIDE the trigger button, which is the whole
+   * point: `leading` sits inside it, and a checkbox nested in a button is
+   * invalid markup whose click the button would swallow.
+   *
+   * Added 20 Sep 2026 for choosing several users at once on the Users tab.
+   */
+  select?: ReactNode
   primary: string
   /**
    * A small, FIXED-SIZE state mark sitting immediately after the name.
@@ -283,6 +293,7 @@ export function DataRow({
         trigger ? ' transition-colors hover:bg-neutral-50' : ''
       }`}
     >
+      {select ? <span className="shrink-0">{select}</span> : null}
       {trigger ? (
         <button
           type="button"

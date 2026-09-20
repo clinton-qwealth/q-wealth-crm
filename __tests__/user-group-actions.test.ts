@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
  */
 const log: { call: string; args: unknown }[] = []
 let failure: string | null = null
+let rpcData: unknown = null
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ getAll: () => [], set: () => {} }) }))
@@ -15,12 +16,13 @@ vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: async () => ({
     rpc: async (name: string, args: Record<string, unknown>) => {
       log.push({ call: `rpc:${name}`, args })
-      return { data: null, error: failure ? { message: failure } : null }
+      return { data: failure ? null : rpcData, error: failure ? { message: failure } : null }
     },
   }),
 }))
 
-const { createUserGroup, saveUserGroupDetails, saveUserGroupMembers } = await import('@/app/(shell)/admin/actions')
+const { createUserGroup, saveUserGroupDetails, addUserGroupMember, removeUserGroupMember, addUsersToUserGroup } =
+  await import('@/app/(shell)/admin/actions')
 const { revalidatePath } = await import('next/cache')
 
 const UG = '11111111-1111-4111-8111-111111111111'
@@ -36,6 +38,7 @@ const form = (entries: Record<string, string>) => {
 beforeEach(() => {
   log.length = 0
   failure = null
+  rpcData = null
   vi.mocked(revalidatePath).mockClear()
 })
 
@@ -90,31 +93,74 @@ describe('saveUserGroupDetails', () => {
   })
 })
 
-describe('saveUserGroupMembers', () => {
-  test('sends the ticked members as a set', async () => {
-    const fd = form({ user_group_id: UG, members_present: '1' })
-    fd.append('staff_ids', S1)
-    fd.append('staff_ids', S2)
-    expect(await saveUserGroupMembers(null, fd)).toEqual({ ok: true })
-    expect(log).toEqual([{ call: 'rpc:set_user_group_members', args: { p_user_group_id: UG, p_staff_ids: [S1, S2] } }])
-    expect(vi.mocked(revalidatePath).mock.calls).toEqual([['/admin']])
-  })
-
-  /* THE sentinel case: every box unticked is "remove everyone", and it must
-     reach the database as an empty list rather than as nothing to save. */
-  test('the sentinel alone means remove everyone; no sentinel means nothing to save', async () => {
-    await saveUserGroupMembers(null, form({ user_group_id: UG, members_present: '1' }))
-    expect(log).toEqual([{ call: 'rpc:set_user_group_members', args: { p_user_group_id: UG, p_staff_ids: [] } }])
+describe('membership, one person at a time', () => {
+  /**
+   * INCREMENTAL, not a set-replace. At 100-200 users a Save that carries the
+   * whole membership lets two administrators silently revert each other; these
+   * calls carry no opinion about anybody they were not asked about.
+   */
+  test('adding and removing each name exactly one person and one group', async () => {
+    expect(await addUserGroupMember(UG, S1)).toEqual({ ok: true })
+    expect(log).toEqual([{ call: 'rpc:add_user_group_member', args: { p_user_group_id: UG, p_staff_id: S1 } }])
     log.length = 0
-    expect(await saveUserGroupMembers(null, form({ user_group_id: UG }))).toEqual({ error: 'Nothing to save.' })
+    expect(await removeUserGroupMember(UG, S1)).toEqual({ ok: true })
+    expect(log).toEqual([{ call: 'rpc:remove_user_group_member', args: { p_user_group_id: UG, p_staff_id: S1 } }])
+  })
+
+  test('neither touches the set-replacing function the checkbox box used', async () => {
+    await addUserGroupMember(UG, S1)
+    await removeUserGroupMember(UG, S1)
+    expect(log.map((l) => l.call)).not.toContain('rpc:set_user_group_members')
+  })
+
+  test('a malformed group or person never reaches the database', async () => {
+    expect(await addUserGroupMember('north', S1)).toEqual({ error: 'No user group selected.' })
+    expect(await addUserGroupMember(UG, 'reece')).toEqual({ error: 'No person selected.' })
+    expect(await removeUserGroupMember('north', S1)).toEqual({ error: 'No user group selected.' })
+    expect(await removeUserGroupMember(UG, 'reece')).toEqual({ error: 'No person selected.' })
     expect(log).toEqual([])
   })
 
-  test('a member id that is not a uuid, or a missing group, never reaches the database', async () => {
-    const fd = form({ user_group_id: UG, members_present: '1' })
-    fd.append('staff_ids', 'reece')
-    expect(await saveUserGroupMembers(null, fd)).toEqual({ error: 'Choose members from the list.' })
-    expect(await saveUserGroupMembers(null, form({ members_present: '1' }))).toEqual({ error: 'No user group selected.' })
+  test('both revalidate the admin page, and neither does on a refusal', async () => {
+    await addUserGroupMember(UG, S1)
+    expect(vi.mocked(revalidatePath).mock.calls).toEqual([['/admin']])
+    vi.mocked(revalidatePath).mockClear()
+    failure = 'Only an administrator can manage user groups'
+    expect(await removeUserGroupMember(UG, S1)).toEqual({ error: failure })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+})
+
+describe('addUsersToUserGroup', () => {
+  /* ADDITIVE: the function it calls only ever adds, which is what makes it safe
+     to press from a list somebody else may be editing. */
+  test('sends every chosen person to the additive function', async () => {
+    rpcData = 2
+    expect(await addUsersToUserGroup(UG, [S1, S2])).toEqual({ ok: true, added: 2 })
+    expect(log).toEqual([
+      { call: 'rpc:add_user_group_members', args: { p_user_group_id: UG, p_staff_ids: [S1, S2] } },
+    ])
+  })
+
+  /* The count comes from the DATABASE, not from the length of the list: the
+     difference is everybody who was already a member. */
+  test('it reports how many rows were really written, not how many were ticked', async () => {
+    rpcData = 1
+    expect(await addUsersToUserGroup(UG, [S1, S2])).toEqual({ ok: true, added: 1 })
+    rpcData = null
+    expect(await addUsersToUserGroup(UG, [S1])).toEqual({ ok: true, added: 0 })
+  })
+
+  test('an empty selection, a bad group and a bad person are refused before any round trip', async () => {
+    expect(await addUsersToUserGroup(UG, [])).toEqual({ error: 'Choose at least one person.' })
+    expect(await addUsersToUserGroup('north', [S1])).toEqual({ error: 'Choose a user group.' })
+    expect(await addUsersToUserGroup(UG, [S1, 'reece'])).toEqual({ error: 'Choose people from the list.' })
     expect(log).toEqual([])
+  })
+
+  test('the database’s sentence comes back verbatim', async () => {
+    failure = 'Only an active staff member can join a user group'
+    expect(await addUsersToUserGroup(UG, [S1])).toEqual({ error: failure })
+    expect(revalidatePath).not.toHaveBeenCalled()
   })
 })

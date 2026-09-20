@@ -1,7 +1,13 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { approveStaffRegistration, declineStaffRegistration, saveStaffDetails, setStaffAvatar } from '@/app/(shell)/admin/actions'
+import {
+  addUsersToUserGroup,
+  approveStaffRegistration,
+  declineStaffRegistration,
+  saveStaffDetails,
+  setStaffAvatar,
+} from '@/app/(shell)/admin/actions'
 import type { AccessProfileChoice, StaffRow } from '@/lib/admin'
 import type { UserGroupChoice } from '@/lib/user-groups'
 import {
@@ -66,26 +72,130 @@ type Viewer = { id: string }
  * the words ride along in an `sr-only` span and the dot itself is hidden from
  * the accessibility tree. `title` gives the same words to a pointer.
  */
-function SignedIn({ labelled = false }: { labelled?: boolean }) {
+function SignedIn() {
   return (
-    <span
-      data-slot="signed-in"
-      /* The tooltip is for the bare dot only. Beside the words it would just
-         repeat them on hover. */
-      title={labelled ? undefined : 'Signed in'}
-      className={labelled ? 'inline-flex items-center gap-1.5' : undefined}
-    >
+    /* No `title`: it would only repeat the words on hover. */
+    <span data-slot="signed-in" className="inline-flex items-center gap-1.5">
       <span aria-hidden="true" className="qw-live" />
-      {labelled ? (
-        /* The words, on the record itself, asked for on 20 Sep 2026. Emerald-700
-           is the `success` pill's own text colour, so the label and the dot read
-           as one mark rather than two greens. Not `sr-only` as well: a screen
-           reader would then say it twice. */
-        <span className="text-xs font-medium text-emerald-700">Signed in</span>
-      ) : (
-        <span className="sr-only">Signed in</span>
-      )}
+      {/* The words, in the `success` pill's own green, so the dot and the label
+          read as one mark rather than two greens. NOT `sr-only` as well — a
+          screen reader would say it twice.
+
+          On the row as well as the record since 20 Sep 2026. The row's name is
+          `min-w-0 truncate` and this sits in a `shrink-0` slot, so a long name
+          gives way rather than squeezing the mark — the contract `DataRow`'s
+          `indicator` slot exists to keep, and the one the removed `badge` prop
+          could not. */}
+      <span className="whitespace-nowrap text-xs font-medium text-emerald-700">Signed in</span>
     </span>
+  )
+}
+
+/**
+ * Put everybody ticked into one user group, from the list.
+ *
+ * The errand this exists for is the first one: carving a hundred people into
+ * territories. Doing that a group at a time, a person at a time, is the part
+ * that actually takes an afternoon.
+ *
+ * **Additive, never subtractive.** The database function only ever adds, so
+ * pressing this cannot undo work another administrator is doing in the same
+ * group — which is exactly what a set-replacing Save would do. It reports how
+ * many rows it really wrote, so somebody already in the group is not counted.
+ *
+ * Only ACTIVE people can be ticked, and only active groups are offered: the
+ * database refuses the other cases, and a control that offers a refusal is
+ * worse than no control.
+ */
+function BulkAssign({
+  staffIds,
+  userGroups,
+  onDone,
+}: {
+  staffIds: string[]
+  userGroups: UserGroupChoice[]
+  onDone: () => void
+}) {
+  const [groupId, setGroupId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+  const [busy, start] = useTransition()
+  const options = userGroups.filter((g) => g.status === 'active')
+
+  function assign() {
+    setError(null)
+    setDone(null)
+    start(async () => {
+      const result = await addUsersToUserGroup(groupId, staffIds)
+      if (result && 'error' in result) {
+        setError(result.error)
+        return
+      }
+      const added = result && 'added' in result ? result.added : 0
+      /* The number the DATABASE wrote, not the number ticked — the difference is
+         everybody who was already a member, and saying "Added 15" when it wrote
+         12 is the kind of small lie that costs trust in the whole screen. */
+      setDone(
+        added === 0
+          ? 'Everybody chosen was already a member.'
+          : `Added ${added} ${added === 1 ? 'user' : 'users'}.`,
+      )
+      /* The selection is deliberately KEPT. Clearing it here unmounts this bar,
+         which takes the sentence above with it — press Add, see nothing. Holding
+         it also makes the common next move cheap: the same batch into a second
+         territory. `Clear` is right there when the batch is finished. */
+    })
+  }
+
+  return (
+    <div
+      data-slot="bulk-assign"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
+    >
+      <span className="text-sm font-medium text-neutral-800">
+        {staffIds.length} {staffIds.length === 1 ? 'user' : 'users'} selected
+      </span>
+      <select
+        value={groupId}
+        onChange={(e) => setGroupId(e.target.value)}
+        disabled={busy || options.length === 0}
+        aria-label="User group to add them to"
+        className={FIELD_INPUT + ' w-auto'}
+      >
+        <option value="">{options.length === 0 ? 'No active user groups' : 'Choose a user group…'}</option>
+        {options.map((g) => (
+          <option key={g.id} value={g.id}>
+            {g.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={assign}
+        disabled={busy || groupId === ''}
+        className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+      >
+        {busy ? 'Adding…' : 'Add to user group'}
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        disabled={busy}
+        className="rounded-md px-2 py-1 text-sm font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
+      >
+        Clear
+      </button>
+      {error ? (
+        <p role="alert" className="w-full text-xs text-red-600">
+          {error}
+        </p>
+      ) : null}
+      {done ? (
+        <p role="status" className="w-full text-xs text-neutral-600">
+          {done}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
@@ -102,6 +212,9 @@ export function StaffList({
   viewer: Viewer
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /* Who is ticked for a bulk action. Kept here rather than on the rows so the
+     bar above the list and the rows cannot disagree about it. */
+  const [chosen, setChosen] = useState<string[]>([])
   /* The queue and the list are the same rows in two states. A pending person
      is not yet on the staff, so they are not in the list they would be edited
      from; they are in the queue, where the only two things to do are the two
@@ -109,16 +222,41 @@ export function StaffList({
   const waiting = staff.filter((s) => s.status === 'pending')
   const members = staff.filter((s) => s.status !== 'pending')
   const person = members.find((s) => s.id === selectedId) ?? null
+  /* Only an ACTIVE person can join a user group — the database says so, and a
+     checkbox on somebody it would refuse is a control that lies. */
+  const selectable = members.filter((s) => s.status === 'active')
+  const picked = chosen.filter((id) => selectable.some((s) => s.id === id))
 
   return (
     <>
       {waiting.length > 0 ? <AwaitingApproval requests={waiting} profiles={profiles} /> : null}
+
+      {picked.length > 0 ? (
+        <BulkAssign
+          staffIds={picked}
+          userGroups={userGroups}
+          onDone={() => setChosen([])}
+        />
+      ) : null}
 
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
           {members.map((s) => (
             <DataRow
               key={s.id}
+              select={
+                s.status === 'active' ? (
+                  <input
+                    type="checkbox"
+                    checked={picked.includes(s.id)}
+                    onChange={(e) =>
+                      setChosen((prev) => (e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)))
+                    }
+                    aria-label={`Select ${fullName(s)}`}
+                    className="h-3.5 w-3.5 accent-brand"
+                  />
+                ) : null
+              }
               leading={<Avatar staffId={s.id} firstName={s.first_name} lastName={s.last_name} avatarPath={s.avatar_path} />}
               primary={fullName(s)}
               indicator={s.signed_in ? <SignedIn /> : null}
@@ -189,7 +327,7 @@ function StaffPanel({
         id="staff-drawer-title"
         eyebrow="User"
         title={fullName(p)}
-        indicator={p.signed_in ? <SignedIn labelled /> : null}
+        indicator={p.signed_in ? <SignedIn /> : null}
         pills={
           <>
             <Pill tone="brand">{p.profile?.name ?? 'No profile'}</Pill>
