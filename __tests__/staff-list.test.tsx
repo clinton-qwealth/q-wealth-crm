@@ -12,7 +12,7 @@ import type { UserGroupChoice } from '@/lib/user-groups'
  * from a Storage URL rather than the app's own route; a drawer per row.
  */
 vi.mock('@/app/(shell)/admin/actions', () => ({
-  addUsersToUserGroup: vi.fn(async () => ({ ok: true as const, added: 2 })),
+  addUsersToUserGroups: vi.fn(async () => ({ ok: true as const, results: [{ id: 'ug-north', added: 2 }] })),
   saveStaffDetails: vi.fn(async () => ({ ok: true as const })),
   setStaffAvatar: vi.fn(async () => ({ ok: true as const })),
   approveStaffRegistration: vi.fn(async () => ({ ok: true as const })),
@@ -459,6 +459,10 @@ describe('awaiting approval', () => {
 describe('assigning several users to a group at once', () => {
   const tick = (name: string) =>
     act(() => { fireEvent.click(screen.getByRole('checkbox', { name: `Select ${name}` })) })
+  /** Tick a territory inside the bar's popover. Scoped to the bar, because the
+   *  drawer's Access box offers the same names. */
+  const pick = (bar: HTMLElement, name: string) =>
+    act(() => { fireEvent.click(within(bar).getByLabelText(name)) })
 
   test('the bar is absent until somebody is chosen, and names how many', () => {
     const { container } = list()
@@ -467,6 +471,23 @@ describe('assigning several users to a group at once', () => {
     expect(container.querySelector('[data-slot="bulk-assign"]')!.textContent).toContain('1 user selected')
     tick('Sarah Chen')
     expect(container.querySelector('[data-slot="bulk-assign"]'), 'unticking the last one puts it away').toBeNull()
+  })
+
+  /* The bar must not appear ABOVE the rows. Mounting it there pushed the whole
+     list down the moment the first checkbox was ticked, so the row under the
+     pointer moved out from under it — Clinton, 22 Sep: "This just pushes the
+     list down and is a bad UI experience." It now sticks to the bottom, which
+     costs no layout because nothing above it can move. */
+  test('the bar comes AFTER the list, so ticking a row moves nothing above it', () => {
+    const { container } = list()
+    tick('Sarah Chen')
+    const rows = container.querySelector('ul.divide-y')!
+    const bar = container.querySelector('[data-slot="bulk-assign"]')!
+    expect(
+      rows.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the bar renders after the rows, not before them',
+    ).toBeTruthy()
+    expect(bar.className, 'and it sticks rather than scrolling away').toContain('sticky')
   })
 
   /* Reece is inactive: the database will not let him join a user group, so the
@@ -478,78 +499,103 @@ describe('assigning several users to a group at once', () => {
   })
 
   test('it offers active user groups only, and sends every ticked person to the additive call', async () => {
-    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
     const { container } = list()
     tick('Sarah Chen')
-    const bar = container.querySelector('[data-slot="bulk-assign"]')!
-    const select = within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }) as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
-      'Choose a user group…',
-      'North',
-      'South',
-    ])
-    await act(async () => { fireEvent.change(select, { target: { value: 'ug-north' } }) })
-    await act(async () => {
-      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
-    })
-    expect(addUsersToUserGroup).toHaveBeenCalledWith('ug-north', ['s1'])
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    const offered = within(bar)
+      .getAllByRole('checkbox')
+      .map((b) => b.closest('label')!.textContent!.trim())
+    expect(offered, 'the archived territory is not offered').toEqual(['North', 'South'])
+    pick(bar, 'North')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
+    expect(addUsersToUserGroups).toHaveBeenCalledWith(['ug-north'], ['s1'])
+  })
+
+  /* The point of the rewrite: a person works in as many territories as they
+     work in, so one press can put the batch in several. The single-group
+     version made "north and west" two passes over the same selection. */
+  test('several user groups go in one press', async () => {
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    pick(bar, 'North')
+    pick(bar, 'South')
+    expect(within(bar).getByLabelText('User groups to add them to').textContent).toBe('2 user groups')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
+    expect(addUsersToUserGroups).toHaveBeenCalledWith(['ug-north', 'ug-south'], ['s1'])
+  })
+
+  test('a group can be taken back off before the press', async () => {
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
+    const { container } = list()
+    tick('Sarah Chen')
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    pick(bar, 'North')
+    pick(bar, 'South')
+    pick(bar, 'North')
+    expect(within(bar).getByLabelText('User groups to add them to').textContent).toBe('South')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
+    expect(addUsersToUserGroups).toHaveBeenCalledWith(['ug-south'], ['s1'])
   })
 
   test('the button waits for a group to be chosen', () => {
     const { container } = list()
     tick('Sarah Chen')
-    const bar = container.querySelector('[data-slot="bulk-assign"]')!
-    expect((within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }) as HTMLButtonElement).disabled).toBe(true)
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    expect((within(bar).getByRole('button', { name: 'Add to user groups' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  test('it reports the number the database wrote, not the number ticked', async () => {
-    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
-    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ ok: true, added: 1 })
+  /* Per group, never summed: "Added 12" across three territories says nothing
+     about which one is still empty. */
+  test('it reports what the database wrote, group by group', async () => {
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroups).mockResolvedValueOnce({
+      ok: true,
+      results: [{ id: 'ug-north', added: 1 }, { id: 'ug-south', added: 0 }],
+    })
     const { container } = list()
     tick('Sarah Chen')
-    const bar = container.querySelector('[data-slot="bulk-assign"]')!
-    await act(async () => {
-      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
-        target: { value: 'ug-north' },
-      })
-    })
-    await act(async () => {
-      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
-    })
-    expect(screen.getByRole('status').textContent).toBe('Added 1 user.')
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    pick(bar, 'North')
+    pick(bar, 'South')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
+    const said = screen.getByRole('status').textContent!
+    expect(said, 'the number written, not the number ticked').toContain('North: added 1')
+    expect(said, 'and a group that gained nobody says so rather than claiming a change').toContain(
+      'South: all were members already',
+    )
   })
 
-  test('adding nobody new says so rather than claiming a change', async () => {
-    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
-    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ ok: true, added: 0 })
+  /* One group refusing must not hide behind its neighbours succeeding. */
+  test('a group that refuses is named while the others still report', async () => {
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroups).mockResolvedValueOnce({
+      ok: true,
+      results: [
+        { id: 'ug-north', added: 2 },
+        { id: 'ug-south', added: 0, error: 'That user group is archived' },
+      ],
+    })
     const { container } = list()
     tick('Sarah Chen')
-    const bar = container.querySelector('[data-slot="bulk-assign"]')!
-    await act(async () => {
-      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
-        target: { value: 'ug-north' },
-      })
-    })
-    await act(async () => {
-      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
-    })
-    expect(screen.getByRole('status').textContent).toContain('already a member')
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    pick(bar, 'North')
+    pick(bar, 'South')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
+    expect(screen.getByRole('alert').textContent).toBe('South: That user group is archived')
+    expect(screen.getByRole('status').textContent, 'the one that worked still says so').toContain('North: added 2')
   })
 
   test('the database’s refusal is shown and the selection is kept', async () => {
-    const { addUsersToUserGroup } = await import('@/app/(shell)/admin/actions')
-    vi.mocked(addUsersToUserGroup).mockResolvedValueOnce({ error: 'Only an administrator can manage user groups' })
+    const { addUsersToUserGroups } = await import('@/app/(shell)/admin/actions')
+    vi.mocked(addUsersToUserGroups).mockResolvedValueOnce({ error: 'Only an administrator can manage user groups' })
     const { container } = list()
     tick('Sarah Chen')
-    const bar = container.querySelector('[data-slot="bulk-assign"]')!
-    await act(async () => {
-      fireEvent.change(within(bar as HTMLElement).getByRole('combobox', { name: 'User group to add them to' }), {
-        target: { value: 'ug-north' },
-      })
-    })
-    await act(async () => {
-      fireEvent.click(within(bar as HTMLElement).getByRole('button', { name: 'Add to user group' }))
-    })
+    const bar = container.querySelector('[data-slot="bulk-assign"]') as HTMLElement
+    pick(bar, 'North')
+    await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Add to user groups' })) })
     expect(screen.getByRole('alert').textContent).toBe('Only an administrator can manage user groups')
     expect(container.querySelector('[data-slot="bulk-assign"]'), 'still there to try again').toBeTruthy()
   })

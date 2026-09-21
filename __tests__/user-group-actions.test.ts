@@ -21,11 +21,12 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }))
 
-const { createUserGroup, saveUserGroupDetails, addUserGroupMember, removeUserGroupMember, addUsersToUserGroup } =
+const { createUserGroup, saveUserGroupDetails, addUserGroupMember, removeUserGroupMember, addUsersToUserGroups } =
   await import('@/app/(shell)/admin/actions')
 const { revalidatePath } = await import('next/cache')
 
 const UG = '11111111-1111-4111-8111-111111111111'
+const UG2 = '44444444-4444-4444-8444-444444444444'
 const S1 = '22222222-2222-4222-8222-222222222222'
 const S2 = '33333333-3333-4333-8333-333333333333'
 
@@ -131,36 +132,67 @@ describe('membership, one person at a time', () => {
   })
 })
 
-describe('addUsersToUserGroup', () => {
+describe('addUsersToUserGroups', () => {
   /* ADDITIVE: the function it calls only ever adds, which is what makes it safe
      to press from a list somebody else may be editing. */
   test('sends every chosen person to the additive function', async () => {
     rpcData = 2
-    expect(await addUsersToUserGroup(UG, [S1, S2])).toEqual({ ok: true, added: 2 })
+    expect(await addUsersToUserGroups([UG], [S1, S2])).toEqual({ ok: true, results: [{ id: UG, added: 2 }] })
     expect(log).toEqual([
       { call: 'rpc:add_user_group_members', args: { p_user_group_id: UG, p_staff_ids: [S1, S2] } },
     ])
   })
 
-  /* The count comes from the DATABASE, not from the length of the list: the
-     difference is everybody who was already a member. */
-  test('it reports how many rows were really written, not how many were ticked', async () => {
-    rpcData = 1
-    expect(await addUsersToUserGroup(UG, [S1, S2])).toEqual({ ok: true, added: 1 })
-    rpcData = null
-    expect(await addUsersToUserGroup(UG, [S1])).toEqual({ ok: true, added: 0 })
+  /* Several territories in one press — the errand the single-group version made
+     into one pass per territory over the same selection. One call each, because
+     the database function takes one group. */
+  test('several user groups each get their own additive call, with the same people', async () => {
+    rpcData = 2
+    expect(await addUsersToUserGroups([UG, UG2], [S1, S2])).toEqual({
+      ok: true,
+      results: [{ id: UG, added: 2 }, { id: UG2, added: 2 }],
+    })
+    expect(log).toEqual([
+      { call: 'rpc:add_user_group_members', args: { p_user_group_id: UG, p_staff_ids: [S1, S2] } },
+      { call: 'rpc:add_user_group_members', args: { p_user_group_id: UG2, p_staff_ids: [S1, S2] } },
+    ])
   })
 
-  test('an empty selection, a bad group and a bad person are refused before any round trip', async () => {
-    expect(await addUsersToUserGroup(UG, [])).toEqual({ error: 'Choose at least one person.' })
-    expect(await addUsersToUserGroup('north', [S1])).toEqual({ error: 'Choose a user group.' })
-    expect(await addUsersToUserGroup(UG, [S1, 'reece'])).toEqual({ error: 'Choose people from the list.' })
+  /* The count comes from the DATABASE, not from the length of the list: the
+     difference is everybody who was already a member. Reported PER GROUP, never
+     summed — a total hides which territory is still empty. */
+  test('it reports how many rows were really written, not how many were ticked', async () => {
+    rpcData = 1
+    expect(await addUsersToUserGroups([UG], [S1, S2])).toEqual({ ok: true, results: [{ id: UG, added: 1 }] })
+    rpcData = null
+    expect(await addUsersToUserGroups([UG], [S1])).toEqual({ ok: true, results: [{ id: UG, added: 0 }] })
+  })
+
+  test('an empty selection, no group, a bad group and a bad person are refused before any round trip', async () => {
+    expect(await addUsersToUserGroups([UG], [])).toEqual({ error: 'Choose at least one person.' })
+    expect(await addUsersToUserGroups([], [S1])).toEqual({ error: 'Choose at least one user group.' })
+    expect(await addUsersToUserGroups(['north'], [S1])).toEqual({ error: 'Choose user groups from the list.' })
+    expect(await addUsersToUserGroups([UG], [S1, 'reece'])).toEqual({ error: 'Choose people from the list.' })
     expect(log).toEqual([])
   })
 
-  test('the database’s sentence comes back verbatim', async () => {
+  /* A refusal is attached to the GROUP that refused rather than replacing the
+     whole answer, so one archived territory cannot hide what the others did. */
+  test('the database’s sentence comes back verbatim, against the group it belongs to', async () => {
     failure = 'Only an active staff member can join a user group'
-    expect(await addUsersToUserGroup(UG, [S1])).toEqual({ error: failure })
+    expect(await addUsersToUserGroups([UG], [S1])).toEqual({
+      ok: true,
+      results: [{ id: UG, added: 0, error: failure }],
+    })
+    expect(revalidatePath, 'nothing was written, so nothing needs re-reading').not.toHaveBeenCalled()
+  })
+
+  test('a run that writes nothing does not revalidate', async () => {
+    rpcData = 0
+    await addUsersToUserGroups([UG, UG2], [S1])
     expect(revalidatePath).not.toHaveBeenCalled()
+    rpcData = 1
+    await addUsersToUserGroups([UG], [S1])
+    expect(revalidatePath).toHaveBeenCalledWith('/admin')
   })
 })

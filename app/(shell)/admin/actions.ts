@@ -355,28 +355,51 @@ export async function removeUserGroupMember(userGroupId: string, staffId: string
 }
 
 /**
- * Several people into one user group, from the Users list — the errand that
- * actually takes the time when first carving a hundred people into territories.
+ * Several people into several user groups, from the Users list — the errand
+ * that actually takes the time when first carving a hundred people into
+ * territories. A person belongs to as many territories as they work in, so the
+ * bar takes a set rather than one: the single-group version made "north and
+ * west" two passes over the same selection, which is where a batch gets missed.
  *
  * ADDITIVE: it never removes anybody, so pressing it from a list somebody else
  * may be editing cannot undo their work. The database returns how many rows it
  * actually wrote, so the message says "Added 12" rather than "Added 15" when
  * three were already members.
+ *
+ * ONE OUTCOME PER GROUP, not a total. "Added 12" across three territories tells
+ * the reader nothing about which of them is still empty, and summing hides a
+ * group that refused while its neighbours succeeded.
  */
-export type BulkAssignState = { error: string } | { ok: true; added: number } | null
+export type BulkAssignResult = { id: string; added: number; error?: string }
+export type BulkAssignState = { error: string } | { ok: true; results: BulkAssignResult[] } | null
 
-export async function addUsersToUserGroup(userGroupId: string, staffIds: string[]): Promise<BulkAssignState> {
-  if (!UUID.test(userGroupId)) return { error: 'Choose a user group.' }
+export async function addUsersToUserGroups(
+  userGroupIds: string[],
+  staffIds: string[],
+): Promise<BulkAssignState> {
+  if (userGroupIds.length === 0) return { error: 'Choose at least one user group.' }
+  if (!userGroupIds.every((id) => UUID.test(id))) return { error: 'Choose user groups from the list.' }
   if (staffIds.length === 0) return { error: 'Choose at least one person.' }
   if (!staffIds.every((id) => UUID.test(id))) return { error: 'Choose people from the list.' }
 
   const supabase = await createSupabaseServerClient()
-  const { data, error } = await supabase.rpc('add_user_group_members', {
-    p_user_group_id: userGroupId,
-    p_staff_ids: staffIds,
-  })
-  if (error) return { error: error.message }
+  /* One call per territory, in one wave: `add_user_group_members` takes a single
+     group, and each call is additive and idempotent, so a partial run leaves no
+     half-state to unwind — whatever succeeded is simply done, and the report
+     below says so group by group. */
+  const results = await Promise.all(
+    userGroupIds.map(async (userGroupId): Promise<BulkAssignResult> => {
+      const { data, error } = await supabase.rpc('add_user_group_members', {
+        p_user_group_id: userGroupId,
+        p_staff_ids: staffIds,
+      })
+      if (error) return { id: userGroupId, added: 0, error: error.message }
+      return { id: userGroupId, added: typeof data === 'number' ? data : 0 }
+    }),
+  )
 
-  revalidatePath('/admin')
-  return { ok: true, added: typeof data === 'number' ? data : 0 }
+  /* Only when something was actually written. Every group refusing, or every
+     person already being a member, changes nothing for anybody to re-read. */
+  if (results.some((r) => r.added > 0)) revalidatePath('/admin')
+  return { ok: true, results }
 }

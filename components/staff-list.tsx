@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react'
 import {
-  addUsersToUserGroup,
+  addUsersToUserGroups,
   approveStaffRegistration,
   declineStaffRegistration,
   saveStaffDetails,
@@ -92,16 +92,31 @@ function SignedIn() {
 }
 
 /**
- * Put everybody ticked into one user group, from the list.
+ * Put everybody ticked into as many user groups as you choose, from the list.
  *
  * The errand this exists for is the first one: carving a hundred people into
  * territories. Doing that a group at a time, a person at a time, is the part
  * that actually takes an afternoon.
  *
+ * **It STICKS to the bottom, it does not sit above the list.** The first
+ * version mounted a bar above the rows, so ticking one checkbox pushed the
+ * whole list down and the row under the pointer moved out from under it —
+ * Clinton's words, 22 Sep: *"This just pushes the list down and is a bad UI
+ * experience."* `sticky bottom-0` costs no layout at all: the bar is the last
+ * thing in the panel, so nothing above it can move, and it rides the bottom of
+ * the viewport while there is list below it. Being **inside** the column rather
+ * than fixed to the viewport is what keeps it the width of the content without
+ * anybody having to keep two max-widths in step.
+ *
+ * **Several groups, not one.** A person works in as many territories as they
+ * work in; offering one per press made "north and west" two passes over the
+ * same selection. The set is chosen in a popover so the bar stays one line
+ * however many territories the firm grows.
+ *
  * **Additive, never subtractive.** The database function only ever adds, so
  * pressing this cannot undo work another administrator is doing in the same
- * group — which is exactly what a set-replacing Save would do. It reports how
- * many rows it really wrote, so somebody already in the group is not counted.
+ * group — which is exactly what a set-replacing Save would do. It reports what
+ * it really wrote, per group, so somebody already in one is not counted.
  *
  * Only ACTIVE people can be ticked, and only active groups are offered: the
  * database refuses the other cases, and a control that offers a refusal is
@@ -116,82 +131,135 @@ function BulkAssign({
   userGroups: UserGroupChoice[]
   onDone: () => void
 }) {
-  const [groupId, setGroupId] = useState('')
+  const [groupIds, setGroupIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const [busy, start] = useTransition()
+  const picker = useRef<HTMLDetailsElement>(null)
   const options = userGroups.filter((g) => g.status === 'active')
+  const nameOf = (id: string) => options.find((o) => o.id === id)?.name ?? 'That user group'
+
+  function toggle(id: string, on: boolean) {
+    setGroupIds((prev) => (on ? [...prev, id] : prev.filter((g) => g !== id)))
+    /* Last run's report is about the last set of groups. Leaving it up while
+       the set changes underneath it makes it a claim about the new one. */
+    setDone(null)
+    setError(null)
+  }
 
   function assign() {
     setError(null)
     setDone(null)
+    picker.current?.removeAttribute('open')
     start(async () => {
-      const result = await addUsersToUserGroup(groupId, staffIds)
+      const result = await addUsersToUserGroups(groupIds, staffIds)
       if (result && 'error' in result) {
         setError(result.error)
         return
       }
-      const added = result && 'added' in result ? result.added : 0
-      /* The number the DATABASE wrote, not the number ticked — the difference is
+      const results = result && 'results' in result ? result.results : []
+      const refused = results.filter((r) => r.error)
+      const written = results.filter((r) => !r.error)
+      /* A group that refused is named. Summing would have let one failure hide
+         behind two successes, which is the whole reason the action reports per
+         group rather than returning a total. */
+      if (refused.length > 0) {
+        setError(refused.map((r) => `${nameOf(r.id)}: ${r.error}`).join(' '))
+      }
+      /* The numbers the DATABASE wrote — the difference from the count ticked is
          everybody who was already a member, and saying "Added 15" when it wrote
          12 is the kind of small lie that costs trust in the whole screen. */
       setDone(
-        added === 0
-          ? 'Everybody chosen was already a member.'
-          : `Added ${added} ${added === 1 ? 'user' : 'users'}.`,
+        written.length === 0
+          ? null
+          : written
+              .map((r) =>
+                r.added === 0
+                  ? `${nameOf(r.id)}: all were members already`
+                  : `${nameOf(r.id)}: added ${r.added}`,
+              )
+              .join(' · '),
       )
       /* The selection is deliberately KEPT. Clearing it here unmounts this bar,
-         which takes the sentence above with it — press Add, see nothing. Holding
-         it also makes the common next move cheap: the same batch into a second
-         territory. `Clear` is right there when the batch is finished. */
+         which takes the sentence above with it — press Add, see nothing. `Clear`
+         is right there when the batch is finished. */
     })
   }
+
+  const label =
+    groupIds.length === 0
+      ? 'Choose user groups…'
+      : groupIds.length === 1
+        ? nameOf(groupIds[0])
+        : `${groupIds.length} user groups`
 
   return (
     <div
       data-slot="bulk-assign"
-      className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2"
+      /* `sticky bottom-0`, and BELOW the list rather than above it. Nothing
+         above this element can move when it appears, which is the whole point;
+         and because it is in the column's flow it is the column's width without
+         a second max-width to keep in step. */
+      className="sticky bottom-0 z-10 mt-3 rounded-lg border border-brand-200 bg-brand-50/95 px-3 py-2 shadow-[0_-1px_6px_rgba(0,0,0,0.06)] backdrop-blur"
     >
-      <span className="text-sm font-medium text-neutral-800">
-        {staffIds.length} {staffIds.length === 1 ? 'user' : 'users'} selected
-      </span>
-      <select
-        value={groupId}
-        onChange={(e) => setGroupId(e.target.value)}
-        disabled={busy || options.length === 0}
-        aria-label="User group to add them to"
-        className={FIELD_INPUT + ' w-auto'}
-      >
-        <option value="">{options.length === 0 ? 'No active user groups' : 'Choose a user group…'}</option>
-        {options.map((g) => (
-          <option key={g.id} value={g.id}>
-            {g.name}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={assign}
-        disabled={busy || groupId === ''}
-        className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
-      >
-        {busy ? 'Adding…' : 'Add to user group'}
-      </button>
-      <button
-        type="button"
-        onClick={onDone}
-        disabled={busy}
-        className="rounded-md px-2 py-1 text-sm font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
-      >
-        Clear
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-neutral-800">
+          {staffIds.length} {staffIds.length === 1 ? 'user' : 'users'} selected
+        </span>
+        {options.length === 0 ? (
+          <span className="text-sm text-neutral-600">No active user groups</span>
+        ) : (
+          <details ref={picker} data-slot="bulk-groups" className="relative">
+            <summary
+              aria-label="User groups to add them to"
+              className={FIELD_INPUT + ' w-auto cursor-pointer list-none [&::-webkit-details-marker]:hidden'}
+            >
+              {label}
+            </summary>
+            {/* Opens UPWARD: the bar lives at the bottom of the viewport, so a
+                panel below it would be off screen. */}
+            <div className="absolute bottom-full left-0 z-20 mb-1 max-h-56 w-56 overflow-y-auto rounded-md border border-neutral-200 bg-white p-1 shadow-lg">
+              {options.map((g) => (
+                <label
+                  key={g.id}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-neutral-800 hover:bg-neutral-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={groupIds.includes(g.id)}
+                    onChange={(e) => toggle(g.id, e.target.checked)}
+                    className="h-3.5 w-3.5 accent-brand"
+                  />
+                  {g.name}
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
+        <button
+          type="button"
+          onClick={assign}
+          disabled={busy || groupIds.length === 0}
+          className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-brand/40"
+        >
+          {busy ? 'Adding…' : 'Add to user groups'}
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          disabled={busy}
+          className="rounded-md px-2 py-1 text-sm font-medium text-neutral-600 outline-none transition-colors hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          Clear
+        </button>
+      </div>
       {error ? (
-        <p role="alert" className="w-full text-xs text-red-600">
+        <p role="alert" className="mt-1 text-xs text-red-600">
           {error}
         </p>
       ) : null}
       {done ? (
-        <p role="status" className="w-full text-xs text-neutral-600">
+        <p role="status" className="mt-1 text-xs text-neutral-600">
           {done}
         </p>
       ) : null}
@@ -231,14 +299,6 @@ export function StaffList({
     <>
       {waiting.length > 0 ? <AwaitingApproval requests={waiting} profiles={profiles} /> : null}
 
-      {picked.length > 0 ? (
-        <BulkAssign
-          staffIds={picked}
-          userGroups={userGroups}
-          onDone={() => setChosen([])}
-        />
-      ) : null}
-
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
           {members.map((s) => (
@@ -272,6 +332,12 @@ export function StaffList({
           ))}
         </ul>
       </div>
+
+      {/* AFTER the list, never before it. Ticking a row must not move the rows
+          around the pointer — see the note on BulkAssign. */}
+      {picked.length > 0 ? (
+        <BulkAssign staffIds={picked} userGroups={userGroups} onDone={() => setChosen([])} />
+      ) : null}
 
       <Drawer open={selectedId !== null} onClose={() => setSelectedId(null)} labelledBy="staff-drawer-title">
         {person ? (
