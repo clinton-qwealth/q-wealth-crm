@@ -1,4 +1,4 @@
--- A staff member no longer has a full name (19 Sep 2026)
+-- A staff member no longer has a full name (written 19 Sep 2026, applied 21 Sep 2026)
 --
 -- M3, the last of three, and THE ONLY ONE-WAY STEP.
 --
@@ -109,166 +109,27 @@ comment on view public.workflow_posts_summary is
 -- ---------------------------------------------------------------------------
 -- 3. The write paths stop accepting it
 -- ---------------------------------------------------------------------------
--- Restated only to take `full_name` out of the whitelist and off the UPDATE.
--- An old caller now gets 'Unknown field in patch: full_name' — a sentence — in
--- place of a 500 from a column that is not there.
-
-create or replace function public.update_staff_patch(p_staff_id uuid, p_patch jsonb)
-returns text
-language plpgsql
-security invoker
-set search_path to ''
-as $fn$
-declare
-  v_keys         text[] := array['first_name', 'last_name', 'email', 'status', 'profile_id', 'avatar_path'];
-  v_key          text;
-  cur            record;
-  v_first        text;
-  v_last         text;
-  v_email        text;
-  v_status       text;
-  v_profile      uuid;
-  v_avatar       text;
-  v_before_admin boolean;
-  v_after_admin  boolean;
-  v_after_active boolean;
-  v_rows         int;
-begin
-  if public.current_staff_id() is null then
-    raise exception 'Not an active staff member';
-  end if;
-  if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then
-    raise exception 'Nothing to change';
-  end if;
-  for v_key in select jsonb_object_keys(p_patch) loop
-    if not (v_key = any (v_keys)) then
-      raise exception 'Unknown field in patch: %', v_key;
-    end if;
-  end loop;
-
-  select su.id, su.status::text as status, su.avatar_path, saa.profile_id
-    into cur
-    from public.staff_users su
-    left join public.staff_access_assignments saa on saa.staff_id = su.id
-   where su.id = p_staff_id;
-  if not found then
-    raise exception 'No such staff member, or not one you have access to';
-  end if;
-
-  if p_patch ? 'first_name' then
-    v_first := btrim(regexp_replace(coalesce(p_patch->>'first_name', ''), '\s+', ' ', 'g'));
-    if v_first = '' then
-      raise exception 'Enter a first name';
-    end if;
-    if length(v_first) > 60 then
-      raise exception 'That first name is too long';
-    end if;
-  end if;
-
-  if p_patch ? 'last_name' then
-    v_last := btrim(regexp_replace(coalesce(p_patch->>'last_name', ''), '\s+', ' ', 'g'));
-    if v_last = '' then
-      raise exception 'Enter a last name';
-    end if;
-    if length(v_last) > 60 then
-      raise exception 'That last name is too long';
-    end if;
-  end if;
-
-  if p_patch ? 'email' then
-    v_email := lower(btrim(p_patch->>'email'));
-    if coalesce(v_email, '') = '' or v_email not like '%_@_%.%' then
-      raise exception 'Enter a valid email address';
-    end if;
-    if exists (select 1 from public.staff_users su where lower(su.email) = v_email and su.id <> p_staff_id) then
-      raise exception 'Another staff member already uses that email address';
-    end if;
-  end if;
-
-  if p_patch ? 'status' then
-    v_status := p_patch->>'status';
-    if v_status is null or not (v_status = any (enum_range(null::public.staff_status)::text[])) then
-      raise exception 'Unknown status: %', coalesce(v_status, 'null');
-    end if;
-    if v_status = 'pending' then
-      raise exception 'A staff member cannot be returned to pending';
-    end if;
-    if cur.status = 'pending' and v_status = 'active' then
-      raise exception 'Use Approve to activate a pending request';
-    end if;
-    if p_staff_id = public.current_staff_id() and v_status <> 'active' then
-      raise exception 'You cannot deactivate your own account';
-    end if;
-  end if;
-
-  if p_patch ? 'profile_id' then
-    begin
-      v_profile := (p_patch->>'profile_id')::uuid;
-    exception when others then
-      raise exception 'No such access profile';
-    end;
-    if not exists (select 1 from public.access_profiles ap where ap.id = v_profile) then
-      raise exception 'No such access profile';
-    end if;
-  end if;
-
-  if p_patch ? 'avatar_path' then
-    v_avatar := nullif(p_patch->>'avatar_path', '');
-    if v_avatar is not null then
-      if v_avatar !~ ('^' || p_staff_id::text || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg|webp)$') then
-        raise exception 'That photo does not belong to this staff member';
-      end if;
-      if not exists (select 1 from storage.objects o where o.bucket_id = 'staff-avatars' and o.name = v_avatar) then
-        raise exception 'That photo has not been uploaded';
-      end if;
-    end if;
-  end if;
-
-  if (p_patch ? 'status' or p_patch ? 'profile_id') and cur.status = 'active' then
-    select ap.manage_staff into v_before_admin from public.access_profiles ap where ap.id = cur.profile_id;
-    if coalesce(v_before_admin, false) then
-      v_after_active := coalesce(v_status, cur.status) = 'active';
-      select ap.manage_staff into v_after_admin from public.access_profiles ap where ap.id = coalesce(v_profile, cur.profile_id);
-      if not (v_after_active and coalesce(v_after_admin, false))
-         and not exists (
-           select 1
-             from public.staff_users su
-             join public.staff_access_assignments saa on saa.staff_id = su.id
-             join public.access_profiles ap on ap.id = saa.profile_id
-            where su.id <> p_staff_id and su.status = 'active' and ap.manage_staff
-         ) then
-        raise exception 'At least one active administrator must remain';
-      end if;
-    end if;
-  end if;
-
-  if p_patch ?| array['first_name', 'last_name', 'email', 'status', 'avatar_path'] then
-    update public.staff_users su
-       set first_name  = coalesce(v_first, su.first_name),
-           last_name   = coalesce(v_last, su.last_name),
-           email       = coalesce(v_email, su.email),
-           status      = case when p_patch ? 'status' then v_status::public.staff_status else su.status end,
-           avatar_path = case when p_patch ? 'avatar_path' then v_avatar else su.avatar_path end
-     where su.id = p_staff_id;
-    get diagnostics v_rows = row_count;
-    if v_rows = 0 then
-      raise exception 'You do not have permission to change this staff member';
-    end if;
-  end if;
-
-  if p_patch ? 'profile_id' then
-    insert into public.staff_access_assignments (staff_id, profile_id)
-    values (p_staff_id, v_profile)
-    on conflict (staff_id) do update
-      set profile_id = excluded.profile_id
-      where staff_access_assignments.profile_id is distinct from excluded.profile_id;
-  end if;
-
-  return case when p_patch ? 'avatar_path' and cur.avatar_path is distinct from v_avatar then cur.avatar_path end;
-end $fn$;
-
-comment on function public.update_staff_patch(uuid, jsonb) is
-  'Change a staff member: first_name, last_name, email, status, profile_id and avatar_path, by key presence; unknown keys refused. Email is the CRM address, not the sign-in email. Refuses deactivating yourself and removing the last active administrator (both also enforced by triggers). Returns the photo path it replaced or removed, or null.';
+-- `update_staff_patch()` is deliberately NOT restated here.
+--
+-- When this file was written on 19 Sep 2026 it carried a full restatement of
+-- that function whose only purpose was to take `full_name` out of the key
+-- whitelist and off the UPDATE. Three later migrations rewrote the function for
+-- their own reasons and dropped the `full_name` handling along the way:
+--
+--   20260920010040  verify_identity moves onto the person
+--   20260920012806  title and date_of_birth
+--   20260920042604  limited_to_user_groups and user_group_ids
+--
+-- The live function no longer names the column. That does NOT make the old
+-- restatement harmless: `create or replace` replaces the whole body, so
+-- shipping the 19-Sep text on 21 Sep would silently revert all three of those
+-- migrations and take five keys off the administration screen. The section is
+-- removed rather than refreshed, because there is nothing left for it to do,
+-- and a second copy of a function that is maintained elsewhere is a trap for
+-- whoever edits it next.
+--
+-- Section 5 is what proves the claim: the sweep fails if any function still
+-- names `full_name` outside the audit whitelist.
 
 -- The request function is restated for one reason: its body carried a comment
 -- naming the transition trigger, which no longer exists. Nothing else changes.

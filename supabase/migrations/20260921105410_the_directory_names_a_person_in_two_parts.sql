@@ -1,4 +1,4 @@
--- The directory names a person in two parts (19 Sep 2026)
+-- The directory names a person in two parts (written 19 Sep 2026, applied 21 Sep 2026)
 --
 -- M2 of three. M1 added `first_name` and `last_name` alongside `full_name` and
 -- changed nothing that reads. This file takes `full_name` OUT OF THE VIEWS —
