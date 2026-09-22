@@ -19,6 +19,25 @@
 // natively in the edge runtime — 384 dimensions, 512 tokens, unit-normalised —
 // and the chunker's 1,100-character cap is that token budget in characters.
 //
+// IT EMBEDS A SLICE, NOT A PAGE, AND THAT IS NOT A PREFERENCE. A hosted edge
+// worker gets TWO SECONDS OF CPU per request, fixed — not configurable on any
+// plan, only by self-hosting — and exceeding it kills the worker with a 546
+// before it can answer. Measured on the real corpus, 22 Sep 2026: a 19-chunk
+// page took 2073ms and scraped through; every page of 21 chunks or more died,
+// deterministically, retries included. Fifteen of the twenty-eight policies
+// were on the wrong side of that line, including every one worth reading.
+//
+// So the caller asks for `offset` and `limit` and calls again until it has
+// `chunk_count` of them. Converting and chunking is pure string work costing
+// single-digit milliseconds, so it is simply redone on each slice rather than
+// cached — statelessness is worth more here than the milliseconds.
+//
+// EMBED_BATCH is 8 because the worst case has to fit, not the average: eight
+// chunks at the 1,100-character cap is 8,800 characters, and the measured rate
+// of ~5.8 chars/ms puts that at ~1,500ms, inside the budget with room. Counting
+// average-sized chunks instead would pass the average page and kill the
+// table-heavy ones, which is the failure this replaces.
+//
 // DEPLOY NOTE. The Supabase CLI resolves `../_shared/` by bundling the whole
 // functions directory. The dashboard/MCP deploy takes a flat file list, so the
 // deploy step ships `_shared/adf.ts` and `_shared/chunk.ts` INSIDE this
@@ -31,6 +50,9 @@ import { chunk, CHUNK_CAP } from '../_shared/chunk.ts'
 
 const SECRET = Deno.env.get('KB_PREPARE_SECRET') ?? ''
 
+/** Chunks embedded per request. See the header: the worst case must fit 2s of CPU. */
+const EMBED_BATCH = 8
+
 type PrepareRequest = {
   title?: unknown
   /** The ADF document — an object, or the JSON string Confluence's REST API
@@ -38,6 +60,10 @@ type PrepareRequest = {
   body?: unknown
   page_id?: unknown
   version?: unknown
+  /** First chunk to embed, 0-based. */
+  offset?: unknown
+  /** How many to embed. 0 asks only for the shape: chunk_count and the markdown. */
+  limit?: unknown
 }
 
 function json(data: unknown, status = 200) {
@@ -126,15 +152,20 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'body must be an ADF document (type "doc")' }, 400)
   }
 
+  const offset = typeof input.offset === 'number' && input.offset >= 0 ? Math.trunc(input.offset) : 0
+  const limit = typeof input.limit === 'number' && input.limit >= 0 ? Math.trunc(input.limit) : EMBED_BATCH
+
   const started = Date.now()
   try {
     const { markdown, unsupported } = adfToMarkdown(doc)
     const chunks = chunk(markdown, { title })
+    const slice = chunks.slice(offset, offset + limit)
 
-    // Sequential on purpose: the session is one model, and a page is fifty
-    // passages at most. Parallel calls would contend for it, not overlap.
+    // Sequential on purpose: the session is one model, so parallel calls would
+    // contend for it rather than overlap. The slice is what keeps this inside
+    // the CPU budget; see the header.
     const out = []
-    for (const c of chunks) {
+    for (const c of slice) {
       out.push({
         ordinal: c.ordinal,
         heading_path: c.headingPath,
@@ -151,7 +182,10 @@ Deno.serve(async (req: Request) => {
         page_id: typeof input.page_id === 'string' || typeof input.page_id === 'number' ? String(input.page_id) : null,
         version: typeof input.version === 'number' ? input.version : null,
         markdown_chars: markdown.length,
-        chunks: out.length,
+        chunk_count: chunks.length,
+        offset,
+        embedded: out.length,
+        embedded_chars: out.reduce((n, c) => n + c.content.length, 0),
         unsupported,
         ms: Date.now() - started,
       }),
@@ -159,10 +193,12 @@ Deno.serve(async (req: Request) => {
 
     return json({
       title,
-      markdown,
-      chunk_count: out.length,
+      chunk_count: chunks.length,
+      offset,
       chunk_cap: CHUNK_CAP,
-      unsupported,
+      // Only with the first slice: the markdown is identical on every call and
+      // there is no reason to send 40KB back eight times.
+      ...(offset === 0 ? { markdown, unsupported } : {}),
       chunks: out,
     })
   } catch (e) {
