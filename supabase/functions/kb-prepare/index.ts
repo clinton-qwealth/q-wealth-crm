@@ -78,12 +78,31 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'kb-prepare is not configured' }, 503)
   }
   // Either header carries the secret: `x-kb-secret`, or `Authorization: Bearer`,
-  // which is what n8n's templated-credential type sends by default. The
-  // gateway does not read the bearer (verify_jwt is off), so it reaches here.
+  // which is what n8n's templated-credential type sends. The gateway does not
+  // read the bearer (verify_jwt is off), so it reaches here.
+  const fromHeader = req.headers.get('x-kb-secret')
   const authz = req.headers.get('Authorization') ?? ''
-  const presented = req.headers.get('x-kb-secret') ?? (authz.startsWith('Bearer ') ? authz.slice(7) : '')
+  const fromBearer = authz.startsWith('Bearer ') ? authz.slice(7) : ''
+  const presented = fromHeader ?? fromBearer
   if (!constantTimeEqual(presented, SECRET)) {
-    console.warn(JSON.stringify({ event: 'kb_prepare_rejected', header_present: presented.length > 0 }))
+    // LENGTHS AND SHAPE, NEVER THE VALUE. "A header arrived and it was wrong"
+    // is not a diagnosis — it cannot tell a mistyped secret from the two ways
+    // this actually goes wrong: an n8n `httpCustomAuth` credential does no
+    // template substitution, so a `{{api_key}}` placeholder is sent
+    // literally; and a copy-pasted secret picks up a trailing newline. Both
+    // are visible in a length and a shape test, and neither needs the secret
+    // itself to reach a log.
+    const trimmed = presented.trim()
+    console.warn(
+      JSON.stringify({
+        event: 'kb_prepare_rejected',
+        source: fromHeader !== null ? 'x-kb-secret' : fromBearer ? 'authorization' : 'none',
+        presented_length: presented.length,
+        expected_length: SECRET.length,
+        looks_like_unsubstituted_placeholder: /^\{\{.*\}\}$/.test(trimmed),
+        differs_only_by_whitespace: trimmed !== presented && constantTimeEqual(trimmed, SECRET),
+      }),
+    )
     return json({ error: 'Not authorised' }, 401)
   }
 
