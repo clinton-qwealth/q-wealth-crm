@@ -41,6 +41,6 @@
     "supabase/functions/crm-mcp/**/*",
     "supabase/functions/identity-verify/**/*",
     "supabase/functions/kb-prepare/**/*",
-    "supabase/functions/kb-ask/**/*"
+    "supabase/functions/kb-search/**/*"
   ]
 }

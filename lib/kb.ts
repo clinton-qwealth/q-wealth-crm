@@ -2,112 +2,127 @@
  * The knowledge base, as the /help screen reads it.
  *
  * Pure: types and small helpers, no Supabase and no `next/headers`, so the
- * client component that streams an answer can import it — the same split
- * `lib/audit.ts` keeps for the trail.
+ * client component can import it — the same split `lib/audit.ts` keeps for the
+ * trail.
+ *
+ * ## Why there is no answer here
+ *
+ * /help searched the policies and wrote an answer from them until 22 Sep 2026,
+ * when Clinton moved the answering to Claude. The CRM retrieves and shows; the
+ * question goes to Claude, where the connector gives it these passages
+ * ALONGSIDE the client tools. What the CRM keeps is the question and what it
+ * showed — never what Claude then said, which lives in the asker's own account.
  */
 
-/** A passage an answer drew on, as `kb-ask` numbered it. */
-export type KbCitation = {
-  n: number
+/** A passage of a policy, exactly as `search_knowledge_base` returns it. */
+export type KbPassage = {
+  chunk_id: string
   document_id: string
   page_id: string
   title: string
+  section: string
   heading_path: string[]
   anchor: string | null
-  version: number
-  excerpt: string
-}
-
-export type KbMessage = {
-  id: string
-  role: 'user' | 'assistant'
+  /** Breadcrumb line, a blank line, then the passage. See `passageBody`. */
   content: string
-  /** The fixed sentence given without a model call. */
-  refused: boolean
-  model: string | null
-  /** Only the passages the answer actually cited, in citation order. */
-  citations: KbCitation[]
-  /** Still streaming in. */
-  pending?: boolean
+  version: number
+  score: number
+  /** Null when this passage was found only by meaning. */
+  lexical_rank: number | null
+  /** Null when only by keyword, and always null for a keyword-only search. */
+  semantic_rank: number | null
 }
 
-export type KbConversationSummary = { id: string; title: string; updated_at: string }
+/** A question this person asked, as /help lists it back to them. */
+export type KbQuestion = { id: string; title: string; updated_at: string }
 
-/** What `kb-ask` streams back, one JSON object per line. */
-export type KbAskEvent =
-  | { type: 'meta'; conversation_id: string; citations: KbCitation[] }
-  | { type: 'delta'; text: string }
-  | { type: 'done'; message_id: string | null; refused: boolean; cited: number[]; model?: string }
-  | { type: 'error'; message: string }
-
-export const REFUSAL = "Our policies don't appear to cover this. Ask the compliance manager."
+/** Below this it is not a question, and the database says so too. */
+export const MIN_QUESTION = 3
 
 /**
- * What the box says above the question. Load-bearing rather than decorative:
- * this is the first place the CRM sends text to an external AI service, and the
- * knowledge base holds no client data — so the only way a client's details
- * could leave is by somebody typing them here.
+ * What the box says above the question.
+ *
+ * Load-bearing rather than decorative. Searching happens here and costs
+ * nothing; handing over sends the question — and only the question — out of
+ * the CRM, so the line has to be true of both.
  */
 export const ASK_NOTE =
-  'Ask what the firm’s policies and procedures say. The question and the passages it matches are ' +
-  'sent to Claude, so don’t include client names or details. Answers summarise written policy; ' +
-  'they are not advice.'
+  'Search the firm’s policies, or take the question to Claude, where it can also see the client record. ' +
+  'Claude answers in your own account, so what it says is not kept here.'
 
 /** Into the CRM's own reader, at the heading the passage sits under. */
-export function citationHref(c: Pick<KbCitation, 'page_id' | 'anchor'>): string {
-  return `/help/${encodeURIComponent(c.page_id)}${c.anchor ? `#${c.anchor}` : ''}`
+export function passageHref(p: Pick<KbPassage, 'page_id' | 'anchor'>): string {
+  return `/help/${encodeURIComponent(p.page_id)}${p.anchor ? `#${p.anchor}` : ''}`
 }
 
 /** "Complaints Policy › Timeframes" */
-export function citationLabel(c: Pick<KbCitation, 'title' | 'heading_path'>): string {
-  return c.heading_path.length ? `${c.title} › ${c.heading_path.join(' › ')}` : c.title
+export function passageLabel(p: Pick<KbPassage, 'title' | 'heading_path'>): string {
+  return p.heading_path.length ? `${p.title} › ${p.heading_path.join(' › ')}` : p.title
 }
 
-export type AnswerPart = { kind: 'text'; text: string } | { kind: 'cite'; n: number }
-
-/**
- * An answer split into text and its `[n]` markers, so the markers can be drawn
- * as links and everything else as TEXT — never as markup. `[1, 3]` is two
- * markers; a number with no passage behind it stays as typed.
- */
-export function splitCitations(answer: string, known: number): AnswerPart[] {
-  const parts: AnswerPart[] = []
-  let last = 0
-  for (const m of answer.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
-    const numbers = m[1].split(',').map((s) => Number(s.trim()))
-    if (!numbers.every((n) => Number.isInteger(n) && n >= 1 && n <= known)) continue
-    if (m.index! > last) parts.push({ kind: 'text', text: answer.slice(last, m.index) })
-    for (const n of numbers) parts.push({ kind: 'cite', n })
-    last = m.index! + m[0].length
-  }
-  if (last < answer.length) parts.push({ kind: 'text', text: answer.slice(last) })
-  return parts
+/** The passage without the breadcrumb line it was embedded with. */
+export function passageBody(p: Pick<KbPassage, 'content'>): string {
+  const at = p.content.indexOf('\n\n')
+  return at < 0 ? p.content : p.content.slice(at + 2)
 }
 
-/** "Written from 3 passages · Complaints Policy v7, Privacy Policy v3" */
-export function summaryLine(citations: KbCitation[]): string {
-  if (citations.length === 0) return ''
-  const docs = new Map<string, string>()
-  for (const c of citations) docs.set(c.document_id, `${c.title} v${c.version}`)
-  const n = citations.length
-  return `Written from ${n} passage${n === 1 ? '' : 's'} · ${[...docs.values()].join(', ')}`
+/** How a passage was found, for the small grey line under it. */
+export function matchedBy(p: Pick<KbPassage, 'lexical_rank' | 'semantic_rank'>): string {
+  if (p.lexical_rank !== null && p.semantic_rank !== null) return 'wording and meaning'
+  return p.lexical_rank !== null ? 'wording' : 'meaning'
+}
+
+/** A short excerpt of a passage, for the record and for a result line. */
+export function excerptOf(p: Pick<KbPassage, 'content'>, max = 320): string {
+  const body = passageBody(p).replace(/\s+/g, ' ').trim()
+  return body.length > max ? body.slice(0, max - 3).replace(/\s+\S*$/, '') + '…' : body
 }
 
 /**
- * Newline-delimited JSON, arriving in arbitrary pieces. Returns the complete
- * events and whatever partial line is left to carry into the next piece.
+ * Where a handed-over question goes.
+ *
+ * **Verify this parameter before relying on the button alone.** `?q=` is the
+ * prefill claude.ai takes; if it ever changes, the question silently opens an
+ * empty conversation, which looks like it worked. The Copy button beside it is
+ * the fallback that cannot break, and is why one exists.
+ *
+ * An https URL rather than a `claude://` scheme on purpose: the desktop app
+ * takes claude.ai links when it is installed, and when it is not, the browser
+ * opens claude.ai — where the CRM connector is configured just the same,
+ * because it is an account-level connector. Either way the connector is there.
  */
-export function parseNdjson(buffer: string): { events: KbAskEvent[]; rest: string } {
-  const lines = buffer.split('\n')
-  const rest = lines.pop() ?? ''
-  const events: KbAskEvent[] = []
-  for (const line of lines) {
-    if (!line.trim()) continue
-    try {
-      events.push(JSON.parse(line) as KbAskEvent)
-    } catch {
-      /* A torn line is not an event; the stream continues. */
-    }
-  }
-  return { events, rest }
+export const HANDOFF_BASE = 'https://claude.ai/new'
+
+/**
+ * The prompt the question travels in.
+ *
+ * It does NOT carry the passages. They would be a snapshot taken seconds
+ * earlier, and Claude holds `search_knowledge_base` itself — so it is told to
+ * go and fetch them, and gets the current version with links back into this
+ * reader. The instruction to stay inside firm policy is a request and not a
+ * boundary: the CRM's own assistant could not step outside it, and Claude can.
+ */
+export function handoffPrompt(question: string): string {
+  return (
+    'Use the Q Wealth CRM connector: search the knowledge base and answer from the firm’s own ' +
+    'policies, citing each one by title and version. If the policies do not cover it, say so rather ' +
+    'than answering from general knowledge.\n\n' +
+    `Question: ${question.trim()}`
+  )
+}
+
+export function handoffUrl(question: string): string {
+  return `${HANDOFF_BASE}?q=${encodeURIComponent(handoffPrompt(question))}`
+}
+
+/** What `kb_record_handoff` stores about each passage that was on screen. */
+export function handoffCitations(passages: KbPassage[], max = 8) {
+  return passages.slice(0, max).map((p) => ({
+    document_id: p.document_id,
+    title: p.title,
+    heading_path: p.heading_path,
+    anchor: p.anchor,
+    version: p.version,
+    excerpt: excerptOf(p),
+  }))
 }

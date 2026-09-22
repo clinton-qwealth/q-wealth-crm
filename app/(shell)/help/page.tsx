@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { KbAsk } from '@/components/kb-ask'
 import { Card, PageHeading } from '@/components/ui'
 import { SUPABASE_URL } from '@/lib/env'
-import type { KbConversationSummary, KbMessage } from '@/lib/kb'
+import type { KbQuestion } from '@/lib/kb'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export const metadata = { title: 'Help · Q Wealth CRM' }
@@ -11,24 +11,25 @@ export const metadata = { title: 'Help · Q Wealth CRM' }
  * /help, rebuilt on 22 Sep 2026 around the firm's own policies.
  *
  * Until then this was a stub that said so — "Written procedures live in
- * Confluence". Now the procedures live HERE too: synced from Confluence into
- * kb_documents, listed by section on the right, opened in the CRM's own reader
- * (/help/[pageId]), and answered from by the Ask panel on the left.
+ * Confluence". Now they live HERE too: synced into kb_documents, listed by
+ * section, opened in the CRM's own reader, and searched by the box at the top.
+ *
+ * **The CRM shows; Claude answers.** The box retrieves passages and puts them
+ * on screen; a question that wants more than an extract goes to Claude, where
+ * the connector reaches these same passages alongside the client record. What
+ * is kept here is the question and what was shown — see `kb_record_handoff`.
  *
  * Everything is read as the caller. kb_documents is readable by every active
  * staff member — the firm's rules are not territory-scoped — and a person's
- * conversations are readable by them and by an administrator.
- *
- * `?c=<conversation id>` reopens a conversation: the recorded turns are handed
- * to the panel as its starting state, and the panel continues it.
+ * questions are readable by them and by an administrator.
  */
-export default async function HelpPage({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
-  const { c } = await searchParams
+export default async function HelpPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams
   const supabase = await createSupabaseServerClient({ writable: false })
 
-  /* One wave: the list, the person's conversations, and — when reopening
-     one — its messages with their citations. */
-  const [docsRes, convRes, msgRes] = await Promise.all([
+  /* One wave: the list and the person's earlier questions need nothing from
+     one another. The passages themselves are fetched by the box, on submit. */
+  const [docsRes, askedRes] = await Promise.all([
     supabase
       .from('kb_documents')
       .select('confluence_page_id, title, section, version, synced_at')
@@ -36,64 +37,32 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
       .eq('excluded', false)
       .order('section')
       .order('title'),
-    supabase.from('kb_conversations').select('id, title, updated_at').order('updated_at', { ascending: false }).limit(20),
-    c
-      ? supabase
-          .from('kb_messages')
-          .select(
-            'id, role, content, refused, model, created_at, kb_message_citations(ordinal, document_id, title, heading_path, anchor, version, excerpt, kb_documents(confluence_page_id))',
-          )
-          .eq('conversation_id', c)
-          .order('created_at')
-      : Promise.resolve({ data: null }),
+    supabase.from('kb_conversations').select('id, title, updated_at').order('updated_at', { ascending: false }).limit(15),
   ])
 
-  const docs = (docsRes.data ?? []) as { confluence_page_id: string; title: string; section: string; version: number; synced_at: string }[]
+  const docs = (docsRes.data ?? []) as {
+    confluence_page_id: string
+    title: string
+    section: string
+    version: number
+    synced_at: string
+  }[]
   const sections = new Map<string, typeof docs>()
   for (const d of docs) sections.set(d.section, [...(sections.get(d.section) ?? []), d])
   const lastSynced = docs.reduce<string | null>((max, d) => (max === null || d.synced_at > max ? d.synced_at : max), null)
 
-  const conversations = (convRes.data ?? []) as KbConversationSummary[]
-
-  const one = <T,>(v: unknown): T | null => (Array.isArray(v) ? ((v[0] as T) ?? null) : ((v as T) ?? null))
-  const initialMessages: KbMessage[] = ((msgRes.data ?? []) as Record<string, unknown>[]).map((m) => ({
-    id: m.id as string,
-    role: m.role as 'user' | 'assistant',
-    content: m.content as string,
-    refused: Boolean(m.refused),
-    model: (m.model as string | null) ?? null,
-    citations: ((m.kb_message_citations as Record<string, unknown>[] | null) ?? [])
-      .slice()
-      .sort((a, b) => (a.ordinal as number) - (b.ordinal as number))
-      .map((ci) => ({
-        n: ci.ordinal as number,
-        document_id: ci.document_id as string,
-        page_id: one<{ confluence_page_id?: string }>(ci.kb_documents)?.confluence_page_id ?? '',
-        title: ci.title as string,
-        heading_path: (ci.heading_path as string[]) ?? [],
-        anchor: (ci.anchor as string | null) ?? null,
-        version: ci.version as number,
-        excerpt: ci.excerpt as string,
-      })),
-  }))
-  /* A conversation that is not theirs (or does not exist) reads as empty
-     under RLS, so the panel simply starts fresh rather than erroring. */
-  const conversationId = c && initialMessages.length > 0 ? c : null
+  const asked = (askedRes.data ?? []) as KbQuestion[]
 
   return (
     <>
       <PageHeading
         eyebrow="Help"
         title="Policies and procedures"
-        description="Ask what the firm’s written policies say, or open one to read it. Synced from Confluence; the version and date are shown on every page."
+        description="Search what the firm’s written policies say, open one to read it, or take the question to Claude. Synced from Confluence; every page shows its version and when it was last synced."
       />
 
       <Card className="col-span-full lg:col-span-8" title="Ask about a policy">
-        <KbAsk
-          functionsUrl={`${SUPABASE_URL()}/functions/v1/kb-ask`}
-          conversationId={conversationId}
-          initialMessages={initialMessages}
-        />
+        <KbAsk searchUrl={`${SUPABASE_URL()}/functions/v1/kb-search`} initialQuestion={q ?? ''} />
       </Card>
 
       <div className="col-span-full flex flex-col gap-4 lg:col-span-4">
@@ -134,19 +103,22 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
           )}
         </Card>
 
-        <Card title="Your conversations">
-          {conversations.length === 0 ? (
-            <p className="text-sm text-neutral-500">Questions you ask are kept here, so you can pick one up again.</p>
+        <Card title="Your questions">
+          {asked.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              Questions you take to Claude are recorded here — the question and what the policies showed at the time,
+              not Claude’s answer, which stays in your own account.
+            </p>
           ) : (
+            /* Re-asks the question rather than replaying a stored snapshot: the
+               policy may have been re-synced since, and the fresh answer is the
+               one that matters. The snapshot stays in the database regardless. */
             <ul data-slot="kb-history" className="flex flex-col">
-              {conversations.map((k) => (
+              {asked.map((k) => (
                 <li key={k.id}>
                   <Link
-                    href={`/help?c=${encodeURIComponent(k.id)}`}
-                    aria-current={k.id === conversationId ? 'true' : undefined}
-                    className={`block rounded px-1.5 py-1 text-sm hover:bg-neutral-50 ${
-                      k.id === conversationId ? 'bg-brand-50/70 text-neutral-900' : 'text-neutral-800'
-                    }`}
+                    href={`/help?q=${encodeURIComponent(k.title)}`}
+                    className="block rounded px-1.5 py-1 text-sm text-neutral-800 hover:bg-neutral-50"
                   >
                     <span className="block truncate">{k.title}</span>
                     <span className="block text-[11px] text-neutral-400">
