@@ -130,15 +130,40 @@ describe('handing over', () => {
    * awaited recording is what a popup blocker eats; the anchor navigates
    * natively and the recording runs beside it.
    */
-  test('the button is an anchor carrying the whole prompt, opened in a new tab', async () => {
+  test('the button is an anchor into the desktop app, carrying the whole prompt', async () => {
     await ask()
     const a = document.querySelector('[data-slot="kb-handoff"]') as HTMLAnchorElement
     expect(a.tagName).toBe('A')
-    expect(a.getAttribute('target')).toBe('_blank')
-    expect(a.getAttribute('rel')).toBe('noopener noreferrer')
-    const url = new URL(a.href)
-    expect(url.origin + url.pathname).toBe('https://claude.ai/new')
+    const url = new URL(a.getAttribute('href')!)
+    expect(url.protocol).toBe('claude:')
+    expect(`${url.host}${url.pathname}`).toBe('claude.ai/new')
     expect(url.searchParams.get('q')).toBe(handoffPrompt('what do I do if a client complains'))
+    /* No target: the OS takes a custom scheme, and _blank would leave an empty
+       tab behind. Mutation: add target="_blank" → this fails. */
+    expect(a.getAttribute('target')).toBeNull()
+  })
+
+  /**
+   * A `claude://` link with no handler does nothing, silently. Somebody
+   * without the desktop app gets the same question in a browser, where the
+   * account-level connector gives Claude the same tools.
+   */
+  test('a browser link sits beside it, in a new tab, with the same prompt', async () => {
+    await ask()
+    const web = document.querySelector('[data-slot="kb-handoff-web"]') as HTMLAnchorElement
+    const url = new URL(web.href)
+    expect(`${url.origin}${url.pathname}`).toBe('https://claude.ai/new')
+    expect(url.searchParams.get('q')).toBe(handoffPrompt('what do I do if a client complains'))
+    expect(web.getAttribute('target')).toBe('_blank')
+    expect(web.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
+  test('either route records the same hand-off', async () => {
+    const user = await ask()
+    await user.click(screen.getByRole('link', { name: 'Open in the browser' }))
+    await waitFor(() => expect(recordHandoff).toHaveBeenCalledTimes(1))
+    const [question] = recordHandoff.mock.calls[0] as unknown as [string, KbPassage[]]
+    expect(question).toBe('what do I do if a client complains')
   })
 
   test('following it records the question and the passages that were on screen', async () => {

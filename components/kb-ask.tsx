@@ -33,8 +33,10 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/client'
  *
  * The hand-off is a REAL LINK, not a scripted window.open, and the recording
  * runs beside it rather than before it — a navigation that waits on an await
- * is a navigation a popup blocker eats. The Copy button is the fallback for
- * the day the prefill parameter changes; see `HANDOFF_BASE`.
+ * is a navigation a popup blocker eats. It points at the DESKTOP APP; the
+ * browser link beside it exists because a `claude://` URL with no handler does
+ * nothing at all, silently, and somebody without the app installed needs a way
+ * through rather than a dead button. See `HANDOFF_DESKTOP`.
  *
  * Searching happens on submit, never per keystroke: the vector arm needs an
  * embedding, which is a round trip to an edge function, and a typed sentence
@@ -98,6 +100,14 @@ export function KbAsk({
     ran.current = true
     void search(initialQuestion)
   }, [initialQuestion, search])
+
+  /* Shared by both links: which one was followed changes where the question
+     lands, not what is recorded about it. */
+  function record() {
+    void recordHandoff(searched, passages).then((r) => {
+      if (r.error) setError(`Opened in Claude, but the question was not recorded: ${r.error}`)
+    })
+  }
 
   async function copyPrompt() {
     try {
@@ -184,19 +194,26 @@ export function KbAsk({
           {/* A real anchor: the browser navigates natively and the recording
               runs alongside, so a blocked popup cannot swallow the hand-off. */}
           <div className="flex flex-wrap items-center gap-2 border-t border-neutral-200 pt-3">
+            {/* No target on the desktop link: a custom scheme is handed to
+                the OS rather than navigated to, and a _blank would leave an
+                empty tab behind. The browser link is an ordinary new tab. */}
             <a
               data-slot="kb-handoff"
               href={handoffUrl(searched)}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => {
-                void recordHandoff(searched, passages).then((r) => {
-                  if (r.error) setError(`Opened in Claude, but the question was not recorded: ${r.error}`)
-                })
-              }}
+              onClick={record}
               className="rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white no-underline outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
             >
               Ask Claude
+            </a>
+            <a
+              data-slot="kb-handoff-web"
+              href={handoffUrl(searched, 'web')}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={record}
+              className="rounded-md px-2 py-1 text-xs font-medium text-neutral-600 no-underline outline-none transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              Open in the browser
             </a>
             <button
               type="button"
@@ -206,7 +223,8 @@ export function KbAsk({
               {copied ? 'Copied' : 'Copy the prompt'}
             </button>
             <span className="text-[11px] text-neutral-400">
-              Claude sees these passages and your client records; its answer stays in your Claude account.
+              Opens the Claude app. It sees these passages and your client records; its answer stays in your Claude
+              account.
             </span>
           </div>
         </div>

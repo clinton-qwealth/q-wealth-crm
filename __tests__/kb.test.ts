@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest'
 import {
   ASK_NOTE,
-  HANDOFF_BASE,
+  HANDOFF_DESKTOP,
+  HANDOFF_WEB,
   excerptOf,
   handoffCitations,
   handoffPrompt,
@@ -81,17 +82,37 @@ describe('handing the question to Claude', () => {
 
   test('the url carries the whole prompt, encoded', () => {
     const url = handoffUrl('what about an SMSF & a trust?')
-    expect(url.startsWith(`${HANDOFF_BASE}?q=`)).toBe(true)
-    expect(decodeURIComponent(url.slice(`${HANDOFF_BASE}?q=`.length))).toBe(handoffPrompt('what about an SMSF & a trust?'))
+    expect(url.startsWith(`${HANDOFF_DESKTOP}?q=`)).toBe(true)
+    expect(decodeURIComponent(url.slice(`${HANDOFF_DESKTOP}?q=`.length))).toBe(
+      handoffPrompt('what about an SMSF & a trust?'),
+    )
     /* An unencoded ampersand would truncate the prompt at "SMSF ". */
     expect(url).not.toContain('& a trust')
   })
 
-  test('an https claude.ai url, not a desktop-only scheme', () => {
-    /* The desktop app takes claude.ai links when installed; when it is not,
-       the browser opens claude.ai, where the same account connector lives.
-       Mutation: claude:// → a person without the app gets nothing. */
-    expect(HANDOFF_BASE).toBe('https://claude.ai/new')
+  /**
+   * **The desktop app by default.** The scheme keeps the claude.ai host —
+   * `claude://claude.ai/new`, not `claude://new` — which is the part that is
+   * easy to get wrong and fails silently when wrong.
+   */
+  test('the default is the desktop app, at the documented path', () => {
+    expect(HANDOFF_DESKTOP).toBe('claude://claude.ai/new')
+    const url = new URL(handoffUrl('when can I give time critical advice'))
+    expect(url.protocol).toBe('claude:')
+    expect(url.host).toBe('claude.ai')
+    expect(url.pathname).toBe('/new')
+    expect(url.searchParams.get('q')).toBe(handoffPrompt('when can I give time critical advice'))
+  })
+
+  /* A custom scheme with no handler does nothing, silently, so somebody
+     without the app needs a way through. Same Claude, same connector — it is
+     configured per account, not per app. */
+  test('the browser is the same question at an https url', () => {
+    expect(HANDOFF_WEB).toBe('https://claude.ai/new')
+    const url = new URL(handoffUrl('when can I give time critical advice', 'web'))
+    expect(url.protocol).toBe('https:')
+    expect(`${url.origin}${url.pathname}`).toBe(HANDOFF_WEB)
+    expect(url.searchParams.get('q')).toBe(handoffPrompt('when can I give time critical advice'))
   })
 
   test('what is recorded is the passages that were on screen, capped and excerpted', () => {

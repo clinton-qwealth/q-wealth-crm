@@ -81,17 +81,25 @@ export function excerptOf(p: Pick<KbPassage, 'content'>, max = 320): string {
 /**
  * Where a handed-over question goes.
  *
- * **Verify this parameter before relying on the button alone.** `?q=` is the
- * prefill claude.ai takes; if it ever changes, the question silently opens an
- * empty conversation, which looks like it worked. The Copy button beside it is
- * the fallback that cannot break, and is why one exists.
+ * **The desktop app by default**, because that is where the firm works and an
+ * https link opens a browser tab instead. Claude registers the `claude://`
+ * scheme on macOS, Windows and Linux, and the OS launches the app if it is not
+ * already running. Note the host: it is `claude://claude.ai/new`, not
+ * `claude://new` — the path mirrors the web URL after the scheme.
  *
- * An https URL rather than a `claude://` scheme on purpose: the desktop app
- * takes claude.ai links when it is installed, and when it is not, the browser
- * opens claude.ai — where the CRM connector is configured just the same,
- * because it is an account-level connector. Either way the connector is there.
+ * **The browser link is not a lesser option, and is kept for one real case:**
+ * a custom scheme with no handler does nothing at all, silently, so a colleague
+ * without the desktop app installed would click and watch nothing happen. What
+ * they get instead is the same Claude with the same tools — the CRM connector
+ * is configured per ACCOUNT, not per app, so `search_knowledge_base` and the
+ * client tools are there in a browser too.
+ *
+ * Both parameters are `q`, both must be URL-encoded, and the desktop app
+ * truncates at roughly 14,000 characters — far above the 2,000 a question is
+ * capped at, so a prompt cannot reach it.
  */
-export const HANDOFF_BASE = 'https://claude.ai/new'
+export const HANDOFF_DESKTOP = 'claude://claude.ai/new'
+export const HANDOFF_WEB = 'https://claude.ai/new'
 
 /**
  * The prompt the question travels in.
@@ -111,8 +119,9 @@ export function handoffPrompt(question: string): string {
   )
 }
 
-export function handoffUrl(question: string): string {
-  return `${HANDOFF_BASE}?q=${encodeURIComponent(handoffPrompt(question))}`
+export function handoffUrl(question: string, where: 'desktop' | 'web' = 'desktop'): string {
+  const base = where === 'web' ? HANDOFF_WEB : HANDOFF_DESKTOP
+  return `${base}?q=${encodeURIComponent(handoffPrompt(question))}`
 }
 
 /** What `kb_record_handoff` stores about each passage that was on screen. */
