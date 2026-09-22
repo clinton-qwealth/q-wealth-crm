@@ -50,6 +50,19 @@ function stubClient(rows: Record<string, unknown[]>, harness?: ReturnType<typeof
       }
       return chain
     },
+    /* An RPC is one more request in the wave, labelled by the function's
+       name; its rows come from `rows[fn]` like a table's. */
+    rpc(fn: string, args: Record<string, unknown>) {
+      filters[fn] ??= []
+      filters[fn].push(`args:${JSON.stringify(args)}`)
+      return {
+        then(resolve: (v: unknown) => void) {
+          const settle = () => resolve({ data: rows[fn] ?? [], error: null })
+          if (harness) return harness.wait(fn).then(settle)
+          return Promise.resolve().then(settle)
+        },
+      }
+    },
   }
   return { client: client as never, filters, selects }
 }
@@ -127,7 +140,7 @@ describe('searchEverything', () => {
    * queries one wave at a time, so the number of waves IS the depth, on any
    * machine and under any load.
    */
-  test('reads four tables in a single wave', async () => {
+  test('reads four tables and the knowledge base in a single wave', async () => {
     const harness = createRoundTripHarness()
     const { client } = stubClient(rows, harness)
 
@@ -135,7 +148,7 @@ describe('searchEverything', () => {
 
     expect(depth, 'the queries were chained').toBe(1)
     expect(new Set(harness.calls)).toEqual(
-      new Set(['client_groups', 'client_group_members', 'party_roles', 'workflow_board']),
+      new Set(['client_groups', 'client_group_members', 'party_roles', 'workflow_board', 'search_knowledge_base']),
     )
     expect(value).toBeDefined()
   })
@@ -218,5 +231,43 @@ describe('searchEverything', () => {
     const out = await searchEverything(client, 'test')
     expect(out.people[0].title).toBe('Janet')
     expect(out.people[0].detail).toBe('A group')
+  })
+})
+
+describe('the knowledge base section', () => {
+  const kbRows = {
+    search_knowledge_base: [
+      {
+        chunk_id: 'c1', document_id: 'd1', page_id: '10092549', title: 'Complaints Policy', section: 'Policies',
+        heading_path: ['Timeframes'], anchor: 'timeframes', content: 'Complaints Policy › Timeframes\n\n…', version: 7,
+        score: 0.05, lexical_rank: 1, semantic_rank: null, similarity: null,
+      },
+      {
+        chunk_id: 'c2', document_id: 'd2', page_id: '12746777', title: 'Privacy Policy', section: 'Policies',
+        heading_path: [], anchor: null, content: 'Privacy Policy\n\n…', version: 3,
+        score: 0.04, lexical_rank: 2, semantic_rank: null, similarity: null,
+      },
+    ],
+  }
+
+  /**
+   * **Keyword only, in the same wave, with the raw query.** Mutation: pass an
+   * embedding, or pass `q` (the escaped form) → these fail.
+   */
+  test('asks the function for the keyword arm alone, with what was typed', async () => {
+    const { client, filters } = stubClient(kbRows)
+    await searchEverything(client, 'Smith, 100%')
+    expect(filters.search_knowledge_base).toEqual([
+      `args:${JSON.stringify({ p_query: 'Smith, 100%', p_embedding: null, p_limit: 5 })}`,
+    ])
+  })
+
+  test('a passage links into the reader at its heading, and says where it sits', async () => {
+    const { client } = stubClient(kbRows)
+    const results = await searchEverything(client, 'complaint')
+    expect(results.knowledgebase).toEqual([
+      { id: 'c1', title: 'Complaints Policy', detail: 'Timeframes', href: '/help/10092549#timeframes' },
+      { id: 'c2', title: 'Privacy Policy', detail: 'Policies', href: '/help/12746777' },
+    ])
   })
 })

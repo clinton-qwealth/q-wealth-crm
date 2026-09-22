@@ -38,6 +38,9 @@
   ],
   "exclude": [
     "node_modules",
-    "supabase/functions/**/*"
+    "supabase/functions/crm-mcp/**/*",
+    "supabase/functions/identity-verify/**/*",
+    "supabase/functions/kb-prepare/**/*",
+    "supabase/functions/kb-ask/**/*"
   ]
 }

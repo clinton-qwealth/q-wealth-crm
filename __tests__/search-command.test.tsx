@@ -148,7 +148,7 @@ describe('SearchCommand', () => {
        moment somebody needs to know what this box reaches. */
     test('nothing typed names what will be searched', async () => {
       await open()
-      expect(screen.getByText('Search groups, people and workflows.')).toBeTruthy()
+      expect(screen.getByText('Search groups, people, workflows and the firm’s policies.')).toBeTruthy()
     })
 
     /* One keystroke must not sweep the database, and the modal says why it is
@@ -202,22 +202,32 @@ describe('SearchCommand', () => {
     })
 
     /**
-     * **The Knowledgebase is named as unbuilt rather than left out.**
+     * **The Knowledgebase is a section like the others, since 22 Sep 2026.**
      *
-     * Dashed, which in this app means "planned, not built" — the same mark the
-     * Tools and Actions tab's inactive buttons and the reserved column wear. Leaving it out
-     * would make the list look complete and the section look decided.
+     * It was a dashed placeholder — "Not built yet" — until the policies were
+     * synced in. A passage opens the CRM's own reader at the heading that
+     * matched, and the line under the title says which heading that was.
      */
-    test('the Knowledgebase says it is not built, rather than being absent', async () => {
-      await open()
-      const section = document.querySelector('[data-slot="search-knowledgebase"]')!
-      // Drawn as one more section — a heading like the others — not a footnote.
-      expect(section.querySelector('h2')?.textContent).toBe('Knowledgebase')
-      expect(section.textContent).toContain('Not built yet')
-      expect(
-        section.querySelector('.border-dashed'),
-        'a planned thing is dashed in this app',
-      ).not.toBeNull()
+    test('a policy passage is listed under Knowledgebase and opens the reader', async () => {
+      answerWith({
+        results: {
+          ...results,
+          knowledgebase: [
+            { id: 'c1', title: 'Complaints Policy', detail: 'Timeframes', href: '/help/10092549#timeframes' },
+          ],
+        },
+      })
+      const user = await open()
+      await user.type(screen.getByLabelText('Search or ask'), 'test')
+      await waitFor(() =>
+        expect(document.querySelector('[data-section="knowledgebase"]')).not.toBeNull(),
+      )
+      const section = document.querySelector('[data-section="knowledgebase"]')!
+      expect(section.querySelector('h2')?.textContent).toContain('Knowledgebase')
+      expect(section.textContent).toContain('Complaints Policy')
+      expect(section.textContent).toContain('Timeframes')
+      expect(document.querySelector('[data-slot="search-knowledgebase"]'), 'the placeholder is gone').toBeNull()
+      expect(document.body.textContent).not.toContain('Not built yet')
     })
   })
 

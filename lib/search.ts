@@ -29,6 +29,8 @@ export type SearchResults = {
   providers: SearchHit[]
   people: SearchHit[]
   workflows: SearchHit[]
+  /** Passages of the firm's policies, since 22 Sep 2026. */
+  knowledgebase: SearchHit[]
 }
 
 export const EMPTY_RESULTS: SearchResults = {
@@ -37,6 +39,7 @@ export const EMPTY_RESULTS: SearchResults = {
   providers: [],
   people: [],
   workflows: [],
+  knowledgebase: [],
 }
 
 /** Two characters, so a single keystroke does not sweep the whole database. */
@@ -82,11 +85,26 @@ export function escapeForFilter(query: string) {
  *
  * ## Cost
  *
- * **One wave of four.** The four queries need nothing from one another, so they
- * go together — a request to Supabase costs about 170ms whatever it carries,
- * and chaining these would make a search-as-you-type control four times slower
- * for no reason. Capped per section rather than overall, so a group with many
+ * **One wave of five.** The queries need nothing from one another, so they go
+ * together — a request to Supabase costs about 170ms whatever it carries, and
+ * chaining these would make a search-as-you-type control five times slower for
+ * no reason. Capped per section rather than overall, so a group with many
  * matching workflows cannot push the households off the list.
+ *
+ * ## The knowledge base is keyword-only here, on purpose
+ *
+ * `search_knowledge_base` fuses keyword and vector search when it is given an
+ * embedding. Computing one means a hop to an edge function BEFORE this wave
+ * can start (the vector is an input to the query), and a cold isolate takes
+ * seconds to load the model — on the first search of a session, the one that
+ * forms the opinion. So the palette passes `p_embedding = null` and gets the
+ * keyword arm alone, in this same wave, at no added cost. Titles and jargon
+ * are exactly where keyword matching is strongest; /help and the MCP tool are
+ * where meaning-based search earns its hop.
+ *
+ * The RAW query goes to the function, not the escaped one: `escapeForFilter`
+ * exists for PostgREST filter grammar, and an RPC argument is a bound
+ * parameter that `websearch_to_tsquery` parses itself.
  */
 export async function searchEverything(
   supabase: SupabaseClient,
@@ -97,7 +115,7 @@ export async function searchEverything(
 
   const like = `%${q}%`
 
-  const [groupsRes, peopleRes, providersRes, workflowsRes] = await Promise.all([
+  const [groupsRes, peopleRes, providersRes, workflowsRes, kbRes] = await Promise.all([
     supabase
       .from('client_groups')
       .select('id, name, group_type')
@@ -127,6 +145,11 @@ export async function searchEverything(
       .ilike('name', like)
       .order('updated_at', { ascending: false })
       .limit(PER_SECTION),
+    supabase.rpc('search_knowledge_base', {
+      p_query: rawQuery.trim(),
+      p_embedding: null,
+      p_limit: PER_SECTION,
+    }),
   ])
 
   const one = <T,>(v: unknown): T | null =>
@@ -170,5 +193,36 @@ export async function searchEverything(
       detail: (w.group_name as string) ?? null,
       href: `/workflows/${w.id}`,
     })),
+    knowledgebase: ((kbRes.data ?? []) as KnowledgeBaseHit[]).map((h) => ({
+      id: h.chunk_id,
+      title: h.title,
+      /* The heading the passage sits under, so two passages of one policy
+         read as two places rather than as a duplicate. The section when the
+         passage is above the first heading. */
+      detail: h.heading_path.length ? h.heading_path.join(' › ') : h.section,
+      href: knowledgeBaseHref(h),
+    })),
   }
+}
+
+/** A row of `search_knowledge_base`, as the palette and /help both receive it. */
+export type KnowledgeBaseHit = {
+  chunk_id: string
+  document_id: string
+  page_id: string
+  title: string
+  section: string
+  heading_path: string[]
+  anchor: string | null
+  content: string
+  version: number
+  score: number
+  lexical_rank: number | null
+  semantic_rank: number | null
+  similarity: number | null
+}
+
+/** Into the CRM's own reader, at the heading that matched — never out to Confluence. */
+export function knowledgeBaseHref(hit: Pick<KnowledgeBaseHit, 'page_id' | 'anchor'>): string {
+  return `/help/${encodeURIComponent(hit.page_id)}${hit.anchor ? `#${hit.anchor}` : ''}`
 }

@@ -109,8 +109,8 @@ export const TABLE_LABEL: Record<string, string> = {
 
 export const NOT_AUDITED_COPY =
   'Not everything is audited. Workflows, tasks and posts, policy covers, account allocations, ' +
-  'feed-supplied valuations and sensitive identifiers are outside this trail; sensitive-field ' +
-  'reveals have their own log.'
+  'feed-supplied valuations, the knowledge base and its conversations, and sensitive identifiers ' +
+  'are outside this trail; sensitive-field reveals have their own log.'
 
 /** `closed_on` → `Closed on`. */
 export function humaniseField(key: string): string {

@@ -18,6 +18,15 @@ const SELF_URL = `${SUPABASE_URL}/functions/v1/crm-mcp`
 
 const app = new Hono().basePath('/crm-mcp')
 
+// gte-small for the knowledge base tool: built on first use, kept for the
+// isolate's life. Constructing it is the slow part (seconds, cold), and most
+// MCP sessions never ask a policy question, so it is not built at startup.
+let kbModel: Supabase.ai.Session | null = null
+function knowledgeBaseModel() {
+  kbModel ??= new Supabase.ai.Session('gte-small')
+  return kbModel
+}
+
 type Staff = {
   id: string
   // Two columns since 19 Sep 2026; `whoami` still returns one composed `name`,
@@ -184,7 +193,7 @@ async function getStaff(db: SupabaseClient, authUserId: string): Promise<{ staff
 }
 
 function buildServer(db: SupabaseClient, staff: Staff) {
-  const server = new McpServer({ name: 'q-wealth-crm', version: '0.2.2' })
+  const server = new McpServer({ name: 'q-wealth-crm', version: '0.3.0' })
 
   server.registerTool(
     'whoami',
@@ -429,6 +438,51 @@ function buildServer(db: SupabaseClient, staff: Staff) {
         .limit(limit)
       if (error) return fail(error.message)
       return ok(data ?? [])
+    }
+  )
+
+  server.registerTool(
+    'search_knowledge_base',
+    {
+      title: 'Search the firm\u2019s policies and procedures',
+      description:
+        'Passages of Q Wealth / Financial Advice Co policies and procedures (synced from Confluence) that answer a question — ' +
+        'complaints, best interests, breaches and incidents, records of advice, DDO, privacy, referrals, SMSF suitability, ' +
+        'time-critical advice and the rest. Keyword and meaning search fused; at most two passages per document. ' +
+        'Each hit carries title, heading_path, version, content and a url into the CRM reader (/help/<page>#heading). ' +
+        'Answer from the passages and cite the title and version; if nothing relevant comes back, say the policies do not ' +
+        'appear to cover it rather than answering from general knowledge. This is firm policy, not client data.',
+      inputSchema: { question: z.string().min(3).max(500), limit: z.number().int().min(1).max(20).default(8) },
+    },
+    async ({ question, limit }) => {
+      // In-process: this IS an edge function, so the embedding is a model call
+      // on the same isolate, not a hop. The palette does not have that luxury
+      // and searches by keyword alone; here a prose question gets both arms.
+      let embedding: string | null = null
+      try {
+        const out = (await knowledgeBaseModel().run(question, { mean_pool: true, normalize: true })) as ArrayLike<number>
+        embedding = JSON.stringify(Array.from(out))
+      } catch (e) {
+        console.warn(JSON.stringify({ event: 'kb_embed_failed', message: e instanceof Error ? e.message : String(e) }))
+      }
+      const { data, error } = await db.rpc('search_knowledge_base', {
+        p_query: question,
+        p_embedding: embedding,
+        p_limit: limit,
+      })
+      if (error) return fail(error.message)
+      const rows = (data ?? []) as Array<Record<string, unknown>>
+      return ok(
+        rows.map((r) => ({
+          title: r.title,
+          section: r.section,
+          heading_path: r.heading_path,
+          version: r.version,
+          content: r.content,
+          url: `${APP_BASE}/help/${encodeURIComponent(String(r.page_id))}${r.anchor ? `#${r.anchor}` : ''}`,
+          matched_by: r.lexical_rank != null && r.semantic_rank != null ? 'keyword and meaning' : r.lexical_rank != null ? 'keyword' : 'meaning',
+        })),
+      )
     }
   )
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
-import { BuildingIcon, GroupIcon, SearchIcon, WorkflowIcon } from './icons'
+import { BuildingIcon, DocumentIcon, GroupIcon, SearchIcon, WorkflowIcon } from './icons'
 import { EMPTY_RESULTS, MIN_QUERY, type SearchHit, type SearchResults } from '@/lib/search'
 
 /**
@@ -56,7 +56,8 @@ function ResultMark({ kind, title }: { kind: keyof SearchResults; title: string 
       </span>
     )
   }
-  const Glyph = kind === 'workflows' ? WorkflowIcon : kind === 'providers' ? BuildingIcon : GroupIcon
+  const Glyph =
+    kind === 'workflows' ? WorkflowIcon : kind === 'providers' ? BuildingIcon : kind === 'knowledgebase' ? DocumentIcon : GroupIcon
   return (
     <span
       aria-hidden="true"
@@ -101,6 +102,9 @@ const SECTIONS: [key: keyof SearchResults, label: string][] = [
   ['providers', 'Service providers'],
   ['people', 'People'],
   ['workflows', 'Workflows'],
+  /* Passages of the firm's policies, keyword-matched — see lib/search.ts for
+     why this arm is keyword-only here. A hit opens the CRM's own reader. */
+  ['knowledgebase', 'Knowledgebase'],
 ]
 
 export function SearchCommand() {
@@ -159,7 +163,9 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
 
   /* Flattened once per render, so the arrow keys walk one list rather than
      knowing about sections, and Enter opens whatever is under the cursor. */
-  const hits: SearchHit[] = SECTIONS.flatMap(([key]) => results[key])
+  /* `?? []` because the server may answer in an older shape for the length
+     of a deploy — a missing section is an empty section, not a blank modal. */
+  const hits: SearchHit[] = SECTIONS.flatMap(([key]) => results[key] ?? [])
   const tooShort = query.trim().length > 0 && query.trim().length < MIN_QUERY
 
   useEffect(() => {
@@ -296,7 +302,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
           <p className="px-2 py-8 text-center text-sm text-neutral-400">
             {tooShort
               ? `Keep typing — ${MIN_QUERY} characters or more.`
-              : 'Search groups, people and workflows.'}
+              : 'Search groups, people, workflows and the firm\u2019s policies.'}
           </p>
         ) : hits.length === 0 ? (
           <p className="px-2 py-8 text-center text-sm text-neutral-400">
@@ -304,7 +310,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
           </p>
         ) : (
           SECTIONS.map(([key, label]) => {
-            const rows = results[key]
+            const rows = results[key] ?? []
             if (!rows.length) return null
             return (
               <section key={key} data-slot="search-section" data-section={key} className="mb-2">
@@ -376,26 +382,6 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
           })
         )}
 
-        {/* Drawn as one more SECTION rather than a note under the list, so the
-            eye that has learned the headings above meets it the same way. The
-            row inside is dashed, which in this app means "planned, not built":
-            the Tools and Actions tab's inactive buttons, the reserved column, the Read more
-            on a file note. Leaving it out entirely would make the list look
-            complete and the section look decided. */}
-        <section data-slot="search-knowledgebase" className="mb-1 mt-1">
-          <h2 className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-            Knowledgebase
-          </h2>
-          <div className="mx-2 flex items-center gap-3 rounded-md border border-dashed border-neutral-200 bg-neutral-50/60 px-2 py-1.5">
-            <span
-              aria-hidden="true"
-              className="flex size-7 shrink-0 items-center justify-center rounded-md border border-dashed border-neutral-300 text-neutral-300"
-            >
-              <SearchIcon />
-            </span>
-            <span className="text-xs text-neutral-500">Not built yet, so nothing here is searched.</span>
-          </div>
-        </section>
       </div>
 
       {/* What the keys do, said once at the foot. The `kbd` badge is this
