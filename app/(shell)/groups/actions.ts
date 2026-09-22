@@ -594,25 +594,31 @@ export async function setPrimaryContact(
 }
 
 /**
- * Put a household in a user group (territory), or take it out with `null`.
+ * Set which user groups (territories) a household belongs to. Any number, and
+ * an empty list takes it out of all of them.
  *
- * One database function, `set_client_group_user_group`, governed by the same
+ * One database function, `set_client_group_user_groups`, governed by the same
  * policy that lets somebody edit the household at all — this adds no reach.
- * The refusals are its sentences, unrewritten: an archived group, a household
- * the caller may not change. The shape checks are the front-door rule.
+ * The refusals are its sentences, unrewritten: an archived group newly chosen,
+ * a household the caller may not change. The shape checks are the front-door
+ * rule, and the ids are de-duplicated so a repeated one is not an argument the
+ * database has to have an opinion about.
  *
- * Three revalidations: the household's own page (the pill), the groups index
- * (whose rows the territory may now hide from a limited colleague), and the
+ * Three revalidations: the household's own page (the pills), the groups index
+ * (whose rows a territory may now hide from a limited colleague), and the
  * admin page (the User groups tab counts households).
  */
-export async function setGroupUserGroup(groupId: string, userGroupId: string | null): Promise<RecordDetailState> {
+export async function setGroupUserGroups(groupId: string, userGroupIds: string[]): Promise<RecordDetailState> {
   if (!UUID_SHAPE.test(groupId)) return { error: 'No group selected.' }
-  if (userGroupId !== null && !UUID_SHAPE.test(userGroupId)) return { error: 'Choose a user group.' }
+  if (!userGroupIds.every((id) => UUID_SHAPE.test(id))) return { error: 'Choose user groups from the list.' }
 
   const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.rpc('set_client_group_user_group', {
+  /* SET-REPLACING: the array is the household's whole set, and an empty one
+     takes it out of every territory. That is the contract the database function
+     states, and the checkbox set in front of it submits exactly that. */
+  const { error } = await supabase.rpc('set_client_group_user_groups', {
     p_group_id: groupId,
-    p_user_group_id: userGroupId,
+    p_user_group_ids: [...new Set(userGroupIds)],
   })
   if (error) return { error: error.message }
 

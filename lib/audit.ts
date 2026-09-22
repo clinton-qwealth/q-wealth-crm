@@ -87,6 +87,10 @@ export const TABLE_LABEL: Record<string, string> = {
      tables became territories. The census follows `alter table … rename to`. */
   user_groups: 'User group',
   user_group_members: 'User group membership',
+  /* The household's side of the same relationship. Keyed by group_id and
+     labelled under the household, so the trail reads "Added · Smith Household"
+     rather than naming a row nobody can name. */
+  client_group_user_groups: 'Household user group',
   client_group_access: 'Group access grant',
   notes: 'File note',
   note_subjects: 'Note subject',

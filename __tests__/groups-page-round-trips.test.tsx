@@ -28,7 +28,7 @@ function stubClient() {
   // ids, so nothing returns early and every wave is actually reached.
   const fixtures: Record<string, unknown[]> = {
     group_summary: [{ group_id: 'g1', name: 'Testsmith Household', group_type: 'household', status: 'active' }],
-    client_groups: [{ primary_contact_party_id: 'p1', owner_staff_id: 's1', user_group_id: 'ug1', staff_users: { first_name: 'A', last_name: 'Adviser' }, user_groups: { id: 'ug1', name: 'North', status: 'active' } }],
+    client_groups: [{ primary_contact_party_id: 'p1', owner_staff_id: 's1', staff_users: { first_name: 'A', last_name: 'Adviser' }, client_group_user_groups: [{ user_groups: { id: 'ug1', name: 'North', status: 'active' } }, { user_groups: { id: 'ug2', name: 'South', status: 'active' } }] }],
     /* The territory picker's options, 20 Sep 2026 — on the first wave. */
     user_groups: [{ id: 'ug1', name: 'North', status: 'active' }],
     contact_points: [{ party_id: 'p1', kind: 'phone_mobile', value: '0412 555 901', is_preferred: true }],
