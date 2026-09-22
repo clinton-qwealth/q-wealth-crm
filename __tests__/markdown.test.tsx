@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import { Markdown } from '@/components/markdown'
+import { Markdown, outline } from '@/components/markdown'
 
 /**
  * The reader draws the converter's markdown as elements, never as HTML.
@@ -66,5 +66,43 @@ describe('Markdown', () => {
     expect(document.querySelector('b')).toBeNull()
     expect(document.body.textContent).toContain('<img src=x onerror=alert(1)>')
     expect(document.body.textContent).toContain('<script>1</script>')
+  })
+})
+
+/**
+ * The reader's "On this page" column. Its whole value is that every entry
+ * links to a heading that exists, so each test pairs the outline against what
+ * the renderer actually put in the document.
+ */
+describe('outline', () => {
+  test('every entry’s id is a heading the renderer drew', () => {
+    const md = '## The seven steps\n\nBody.\n\n### Step 1 — scope\n\nMore.\n\n## Review\n\nEnd.'
+    render(<Markdown source={md} />)
+    const entries = outline(md)
+    expect(entries.map((e) => e.text)).toEqual(['The seven steps', 'Step 1 — scope', 'Review'])
+    expect(entries.map((e) => e.depth)).toEqual([0, 1, 0])
+    for (const e of entries) expect(document.getElementById(e.id)).not.toBeNull()
+  })
+
+  /**
+   * The reason it shares the renderer's fence handling rather than scanning
+   * for `/^## /`. Mutation: drop the FENCE branch → 'Not a heading' is listed
+   * and links nowhere.
+   */
+  test('a ## inside a fenced block is not a heading', () => {
+    const md = '## Real\n\n```\n## Not a heading\n```\n\n## Also real'
+    expect(outline(md).map((e) => e.text)).toEqual(['Real', 'Also real'])
+  })
+
+  test('marks are stripped so the id matches the rendered heading', () => {
+    const md = '## **Breach** reporting'
+    render(<Markdown source={md} />)
+    const [entry] = outline(md)
+    expect(entry.text).toBe('Breach reporting')
+    expect(document.getElementById(entry.id)).not.toBeNull()
+  })
+
+  test('nothing below h3 clutters the column', () => {
+    expect(outline('## A\n\n#### Too deep').map((e) => e.text)).toEqual(['A'])
   })
 })

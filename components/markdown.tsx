@@ -295,3 +295,38 @@ function pairedMark(text: string, i: number): { mark: string; end: number } | nu
   }
   return null
 }
+
+/**
+ * The headings of a document, for the reader's "On this page" column.
+ *
+ * It walks the source with the SAME regexes and the same fence handling as
+ * `renderBlocks`, and slugifies through the same `stripMarks`, because the
+ * whole value of the list is that every entry's `#id` lands on a heading that
+ * exists. A second, looser scanner — `/^#{2,3} /` over the raw string, say —
+ * would silently list a `## ` inside a fenced block and link nowhere.
+ *
+ * Levels 1 and 2 are both top-level: the chunker's breadcrumb treats them that
+ * way, and a policy converted from ADF opens at `##` with no `#` above it.
+ */
+export function outline(md: string): { id: string; text: string; depth: 0 | 1 }[] {
+  const lines = md.replace(/\r\n?/g, '\n').split('\n')
+  const out: { id: string; text: string; depth: 0 | 1 }[] = []
+  let i = 0
+  while (i < lines.length) {
+    const fence = lines[i].match(FENCE)
+    if (fence) {
+      const open = fence[1]
+      i += 1
+      while (i < lines.length && !(lines[i].startsWith(open) && lines[i].trim().length === open.length)) i += 1
+      i += 1
+      continue
+    }
+    const h = lines[i].match(HEADING)
+    if (h && h[1].length <= 3) {
+      const text = stripMarks(h[2]).trim()
+      if (text) out.push({ id: slugify(text), text, depth: h[1].length <= 2 ? 0 : 1 })
+    }
+    i += 1
+  }
+  return out
+}
