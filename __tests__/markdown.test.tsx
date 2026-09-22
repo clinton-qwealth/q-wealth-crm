@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
-import { Markdown, outline } from '@/components/markdown'
+import { Markdown, outline, safeHref } from '@/components/markdown'
 
 /**
  * The reader draws the converter's markdown as elements, never as HTML.
@@ -104,5 +104,43 @@ describe('outline', () => {
 
   test('nothing below h3 clutters the column', () => {
     expect(outline('## A\n\n#### Too deep').map((e) => e.text)).toEqual(['A'])
+  })
+})
+
+/**
+ * Link targets. React 19 neutralises `javascript:` in an href by itself — that
+ * was confirmed against this exact version, not assumed — but it is the
+ * framework's protection and it covers one scheme, so the renderer keeps its
+ * own allow-list.
+ */
+describe('safeHref', () => {
+  test.each([
+    ['https://example.com/x', 'https://example.com/x'],
+    ['http://example.com', 'http://example.com'],
+    ['mailto:someone@qwealth.com.au', 'mailto:someone@qwealth.com.au'],
+    ['tel:+61299999999', 'tel:+61299999999'],
+    ['/help/123', '/help/123'],
+    ['#the-seven-steps', '#the-seven-steps'],
+    ['?q=complaints', '?q=complaints'],
+  ])('keeps %s', (input, expected) => {
+    expect(safeHref(input)).toBe(expected)
+  })
+
+  test.each([
+    'javascript:alert(1)',
+    '  JaVaScRiPt:alert(1)',
+    'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+    'vbscript:msgbox(1)',
+    'file:///etc/passwd',
+    // A protocol-relative URL is an absolute one to another host wearing a
+    // relative URL's clothes — the same trick `safeNext` rejects.
+    '//evil.example.com/steal',
+  ])('refuses %s', (input) => {
+    expect(safeHref(input)).toBe('#')
+  })
+
+  test('the renderer uses it, so a policy page cannot ship a live javascript: link', () => {
+    render(<Markdown source={'[click me](javascript:alert(1))'} />)
+    expect(document.querySelector('a')!.getAttribute('href')).toBe('#')
   })
 })

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
+import { AUTH_COOKIE_OPTIONS } from '@/lib/supabase/cookies'
+import { contentSecurityPolicy } from '@/lib/csp'
 
 /**
  * Proxy — called Middleware before Next.js 16.
@@ -11,6 +13,19 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
  *     Server Components cannot write cookies, so without this the session dies
  *     mid-visit.
  *  2. An optimistic redirect for visitors with no VERIFIABLE session at all.
+ *  3. A per-request CSP nonce. This is the only place it can be made: the
+ *     policy has to differ on every response, and a config file is read once at
+ *     build.
+ *
+ *     NEXT READS THE NONCE OFF THE RESPONSE HEADER SET HERE, and stamps it onto
+ *     every script tag it emits. That was MEASURED on 16.3.4, not taken from
+ *     the documentation: the widely-copied recipe also copies the policy onto
+ *     the REQUEST headers, and on this version that copy changes nothing — the
+ *     nonce in the header and the nonce on the tags match either way. So it is
+ *     not done, because a line that does nothing is a line the next reader has
+ *     to disprove. If a future version ever stops matching them the page breaks
+ *     loudly rather than silently, and `e2e/security-headers.spec.ts` compares
+ *     the two directly.
  *
  * It is NOT the authorisation boundary. Next's own guidance is that proxy runs
  * on every request including prefetches, so it should not make database calls;
@@ -33,12 +48,23 @@ const PUBLIC_PATHS = ['/login', '/auth', '/oauth/consent', '/request-access']
 
 export async function proxy(request: NextRequest) {
   const t0 = performance.now()
+
+  /* 128 bits from the platform CSPRNG, base64. A nonce that repeats, or that an
+     attacker can predict, is a nonce that authorises their injected script. */
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))))
+  const csp = contentSecurityPolicy({
+    nonce,
+    supabaseUrl: SUPABASE_URL(),
+    production: process.env.NODE_ENV === 'production',
+  })
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
     SUPABASE_URL(),
     SUPABASE_PUBLISHABLE_KEY(),
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -100,10 +126,12 @@ export async function proxy(request: NextRequest) {
     url.searchParams.set('next', path + request.nextUrl.search)
     const redirect = NextResponse.redirect(url)
     redirect.headers.set('Server-Timing', timing)
+    redirect.headers.set('Content-Security-Policy', csp)
     return redirect
   }
 
   response.headers.set('Server-Timing', timing)
+  response.headers.set('Content-Security-Policy', csp)
   return response
 }
 

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
+import { AUTH_COOKIE_OPTIONS } from '@/lib/supabase/cookies'
 
 /**
  * Server Supabase client, bound to the request's cookies.
@@ -19,6 +20,7 @@ export async function createSupabaseServerClient({ writable = true } = {}) {
     SUPABASE_URL(),
     SUPABASE_PUBLISHABLE_KEY(),
     {
+      cookieOptions: AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll() {
           return cookieStore.getAll()

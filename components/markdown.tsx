@@ -200,6 +200,29 @@ function renderCell(text: string): ReactNode {
   ))
 }
 
+/**
+ * A link target, or nothing.
+ *
+ * The markdown these pages render comes from Confluence, so a link's scheme is
+ * whatever an author typed. React 19 happens to neutralise `javascript:` in an
+ * href — it rewrites it to a throwing stub, which I confirmed rather than
+ * assumed — but that is the framework's protection, not this app's, and it
+ * covers exactly one scheme. An allow-list covers the rest and keeps working if
+ * that behaviour ever changes.
+ *
+ * `#anchor` and `/path` are how the reader links to its own headings and pages,
+ * so relative targets pass. Everything unrecognised becomes `#`, which is inert
+ * and still looks like the link the author meant to write.
+ */
+export function safeHref(href: string): string {
+  const trimmed = href.trim()
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed
+  // Relative: a path, an anchor, or a query. Never `//host`, which is a
+  // protocol-relative URL to somewhere else wearing a relative URL's clothes.
+  if (/^(#|\/(?!\/)|\?)/.test(trimmed)) return trimmed
+  return '#'
+}
+
 function stripMarks(s: string): string {
   return s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/(\*\*|\*|`|~~)/g, '').replace(/\\(.)/g, '$1')
 }
@@ -249,7 +272,7 @@ export function renderInline(text: string): ReactNode[] {
       const m = text.slice(i).match(/^\[((?:\\.|[^\]\\])*)\]\(([^)\s]+)\)/)
       if (m) {
         flush()
-        const href = m[2]
+        const href = safeHref(m[2])
         const external = /^https?:\/\//i.test(href) || /^mailto:/i.test(href)
         out.push(
           <a

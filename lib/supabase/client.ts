@@ -1,5 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
+import { AUTH_COOKIE_OPTIONS } from '@/lib/supabase/cookies'
 
 /**
  * Browser Supabase client.
@@ -12,6 +13,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '@/lib/env'
 export function createSupabaseBrowserClient() {
   return createBrowserClient(
     SUPABASE_URL(),
-    SUPABASE_PUBLISHABLE_KEY()
+    SUPABASE_PUBLISHABLE_KEY(),
+    { cookieOptions: AUTH_COOKIE_OPTIONS }
   )
 }

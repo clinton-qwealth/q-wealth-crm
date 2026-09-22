@@ -77,11 +77,15 @@ export function EnrolPanel({ enrolled }: { enrolled: boolean }) {
         <p className="text-sm text-neutral-600 dark:text-neutral-300">
           Scan this with your authenticator app, then enter the code it shows.
         </p>
-        <div
-          className="w-fit rounded-md bg-white p-2"
-          // qr_code is an SVG data URI produced by Supabase Auth.
-          dangerouslySetInnerHTML={{ __html: `<img alt="" src="${enrolling.qr}" width="180" height="180" />` }}
-        />
+        {/* An element, not an HTML string. The source is Supabase Auth's own
+            SVG data URI and was never attacker-controlled, so this was not a
+            live hole — but it was the ONLY dangerouslySetInnerHTML in the
+            repository, and a sink that exists is a sink someone later feeds
+            something else. React escapes the attribute; nothing is parsed. */}
+        <div className="w-fit rounded-md bg-white p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a data: URI has nothing for the image optimiser to fetch. */}
+          <img alt="" src={enrolling.qr} width={180} height={180} />
+        </div>
         <details className="text-xs text-neutral-500 dark:text-neutral-400">
           <summary className="cursor-pointer">Can’t scan the code?</summary>
           <p className="mt-1.5">
