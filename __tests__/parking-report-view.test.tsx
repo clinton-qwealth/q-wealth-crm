@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import React from 'react'
 import type { ParkingRow } from '@/lib/parking-report'
 
-const { ParkingReportTable } = await import('@/components/parking-report-table')
+const { ParkingReport } = await import('@/components/parking-report-view')
 
 const row = (over: Partial<ParkingRow>): ParkingRow => ({
   person_name: 'Clinton Hatcher',
@@ -27,16 +27,84 @@ const optionsOf = (name: string) =>
 
 const total = () => within(screen.getByRole('table')).getAllByRole('row').at(-1)!.textContent
 
-describe('the parking report table', () => {
+describe('the parking report', () => {
   test('unfiltered, it shows every receipt and no count', () => {
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     expect(screen.getAllByRole('row')).toHaveLength(5) // head + 3 + foot
     expect(screen.queryByText(/Showing/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
   })
 
+  /**
+   * The filters sit on the heading's OWN ROW, right-aligned — asked for
+   * 24 Sep 2026, and the reason this component owns the heading at all.
+   *
+   * Asserted structurally rather than by class name: the selects must be
+   * inside the container that holds the <h1>, which is what `PageHeading`'s
+   * `actions` slot gives and what a bar rendered as PageHeading's sibling
+   * would not.
+   *
+   * Mutation, and it was run: render the bar as a sibling after
+   * <PageHeading /> instead of passing it as `actions` — the selects leave the
+   * heading's container and this fails.
+   */
+  test('the filters share the heading’s row rather than taking one of their own', () => {
+    render(<ParkingReport rows={set} />)
+    const headingRow = screen.getByRole('heading', { level: 1 }).closest('.col-span-full')
+    expect(headingRow).not.toBeNull()
+    /* Plain DOM `contains`, not jest-dom's toContainElement — this project
+       registers no jest-dom matchers, which is why nothing here says
+       toBeInTheDocument either. */
+    expect(headingRow!.contains(screen.getByRole('combobox', { name: 'Filter by month' }))).toBe(true)
+    expect(headingRow!.contains(screen.getByRole('combobox', { name: 'Filter by person' }))).toBe(true)
+  })
+
+  /**
+   * Three columns, 3 / 6 / 3 — the layout `/admin` uses, asked for 24 Sep 2026.
+   *
+   * The whole report goes in the middle one, heading included. `/admin` puts
+   * its heading full width above the three; this does not, because the filters
+   * sit in the heading's row and a full-width heading would leave them at the
+   * far right of the window with their table six columns away.
+   *
+   * Pinned by class because the span IS the requirement here — there is no
+   * behaviour to observe instead.
+   */
+  test('the report sits in the middle of three columns, flanked by two reserved ones', () => {
+    const { container } = render(<ParkingReport rows={set} />)
+    const columns = [...container.children] as HTMLElement[]
+    expect(columns).toHaveLength(3)
+
+    const [left, centre, right] = columns
+    expect(left.className).toContain('lg:col-span-3')
+    expect(centre.className).toContain('lg:col-span-6')
+    expect(right.className).toContain('lg:col-span-3')
+
+    /* The outer two are reserved, and empty is what reserved means. */
+    expect(left.childElementCount).toBe(0)
+    expect(right.childElementCount).toBe(0)
+
+    /* Everything is in the middle: title, filters, table and the footnote. */
+    expect(centre.contains(screen.getByRole('heading', { level: 1 }))).toBe(true)
+    expect(centre.contains(screen.getByRole('combobox', { name: 'Filter by month' }))).toBe(true)
+    expect(centre.contains(screen.getByRole('table'))).toBe(true)
+    expect(centre.textContent).toContain('read-only and is shared by link')
+  })
+
+  test('the heading counts the whole report, not what the filter leaves', async () => {
+    const user = userEvent.setup()
+    render(<ParkingReport rows={set} />)
+    expect(screen.getByText('3 receipts, texted in and recorded automatically.')).toBeTruthy()
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '2026-08')
+    /* The description says what the LINK contains and must not move; the bar's
+       own "Showing 1 of 3" is what tracks the filter. */
+    expect(screen.getByText('3 receipts, texted in and recorded automatically.')).toBeTruthy()
+    expect(screen.getByText('Showing 1 of 3')).toBeTruthy()
+  })
+
   test('the months offered are the months that have receipts, newest first', () => {
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     expect(optionsOf('Filter by month')).toEqual(['All months', 'Sep 2026', 'Aug 2026'])
   })
 
@@ -52,7 +120,7 @@ describe('the parking report table', () => {
    */
   test('the total follows the filter', async () => {
     const user = userEvent.setup()
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     expect(total()).toContain('$40.08')
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '2026-08')
@@ -64,7 +132,7 @@ describe('the parking report table', () => {
 
   test('choosing a month narrows the people on offer', async () => {
     const user = userEvent.setup()
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     expect(optionsOf('Filter by person')).toEqual(['Anyone', 'Clinton Hatcher', 'Sarah Chen'])
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '2026-08')
@@ -73,7 +141,7 @@ describe('the parking report table', () => {
 
   test('a person the new month does not contain is cleared, not left stranded', async () => {
     const user = userEvent.setup()
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by person' }), 'Sarah Chen')
     expect(screen.getByText('Showing 1 of 3')).toBeTruthy()
 
@@ -88,7 +156,7 @@ describe('the parking report table', () => {
 
   test('Clear puts every receipt back', async () => {
     const user = userEvent.setup()
-    render(<ParkingReportTable rows={set} />)
+    render(<ParkingReport rows={set} />)
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '2026-08')
     await user.click(screen.getByRole('button', { name: 'Clear' }))
     expect(screen.queryByText(/Showing/)).toBeNull()
@@ -112,7 +180,7 @@ describe('the parking report table', () => {
   test('no combination the controls offer produces an empty table', async () => {
     const user = userEvent.setup()
     const withUndated = [...set, row({ ticket: 'd', payment_date: null, amount_cents: null })]
-    render(<ParkingReportTable rows={withUndated} />)
+    render(<ParkingReport rows={withUndated} />)
 
     const months = [...(screen.getByRole('combobox', { name: 'Filter by month' }) as HTMLSelectElement).options].map(
       (o) => o.value,
@@ -137,7 +205,7 @@ describe('the parking report table', () => {
   })
 
   test('a report with no receipts at all says come back later', () => {
-    render(<ParkingReportTable rows={[]} />)
+    render(<ParkingReport rows={[]} />)
     expect(screen.getByText('Nothing here yet')).toBeTruthy()
     expect(screen.queryByText('Nothing matches')).toBeNull()
     expect(screen.queryByRole('table')).toBeNull()
@@ -145,7 +213,7 @@ describe('the parking report table', () => {
 
   test('a receipt with no date is reachable under its own heading', async () => {
     const user = userEvent.setup()
-    render(<ParkingReportTable rows={[...set, row({ ticket: 'd', payment_date: null, amount_cents: null })]} />)
+    render(<ParkingReport rows={[...set, row({ ticket: 'd', payment_date: null, amount_cents: null })]} />)
     expect(optionsOf('Filter by month')).toEqual(['All months', 'Sep 2026', 'Aug 2026', 'No date'])
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '__no_date__')

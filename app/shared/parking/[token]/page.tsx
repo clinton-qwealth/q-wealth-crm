@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { PageHeading } from '@/components/ui'
-import { ParkingReportTable } from '@/components/parking-report-table'
+import { ParkingReport } from '@/components/parking-report-view'
 import type { ParkingRow } from '@/lib/parking-report'
 
 export const metadata = {
@@ -54,12 +53,14 @@ export const metadata = {
  * file returns grid items and nothing else — the same shape as any page under
  * `(shell)`. It sets no width and no background of its own.
  *
- * ## The table is a client component, and the reason is in the RPC
+ * ## The report body is a client component, and the reason is in the RPC
  *
  * `parking_report` increments `report_shares.view_count` on every call, so
  * re-running it for each filter change would record one visit as three.
- * `components/parking-report-table.tsx` takes these rows and narrows them in
+ * `components/parking-report-view.tsx` takes these rows and narrows them in
  * the browser; `lib/parking-report.ts` carries the whole of that reasoning.
+ * The heading travels with it, because the filters sit in the heading's own
+ * row and so must be built where the filter state is.
  */
 export default async function ParkingReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -73,20 +74,7 @@ export default async function ParkingReportPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <PageHeading
-        eyebrow="Q Wealth"
-        title="Parking expenses"
-        /* The whole report's count, not the filtered one: this describes what
-           the link contains, and it must not move when a reader picks a month
-           — the filter bar says "Showing N of M" for that. */
-        description={`${rows.length} ${rows.length === 1 ? 'receipt' : 'receipts'}, texted in and recorded automatically.`}
-      />
-
-      <ParkingReportTable rows={rows} />
-
-      <p className="col-span-full text-xs leading-relaxed text-neutral-400 lg:col-span-8">
-        This page is read-only and is shared by link. It shows nothing beyond what is above.
-      </p>
+      <ParkingReport rows={rows} />
     </>
   )
 }
