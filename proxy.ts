@@ -44,7 +44,22 @@ import { contentSecurityPolicy } from '@/lib/csp'
 // Reachable without a session. /oauth/consent is public on purpose: it needs to
 // receive Supabase's redirect and then bounce to login itself, preserving the
 // authorization_id it was called with.
-const PUBLIC_PATHS = ['/login', '/auth', '/oauth/consent', '/request-access']
+// /shared is the ONE part of this application a person can reach without
+// signing in: read-only report pages behind an unguessable token, checked in
+// the database rather than here. anon holds no grant on any table, so such a
+// page's whole reach is one function that refuses without a live token.
+//
+// ITS OWN NAMESPACE, AND THAT IS NOT COSMETIC. This list is matched by PREFIX,
+// so a path here silently covers everything beneath it. The first attempt put
+// the report under `/reports/parking/<token>` and added `/reports` — which is
+// an EXISTING CRM PAGE, and adding it took the proxy off that page's door.
+// Nothing leaked, because the shell layout refuses a visitor with no staff row,
+// but the outer layer was gone and the redirect lost its `next`. A public page
+// belongs on a prefix that nothing else will ever want.
+//
+// Adding a path to this list is the most consequential one-line change in the
+// file. Check first whether any route already starts with it.
+const PUBLIC_PATHS = ['/login', '/auth', '/oauth/consent', '/request-access', '/shared']
 
 export async function proxy(request: NextRequest) {
   const t0 = performance.now()
