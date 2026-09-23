@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation'
 import { formatCalendarDate } from '@/lib/note-date'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { Card, PageHeading, SHEET_SURFACE } from '@/components/ui'
 
 export const metadata = {
+  /* "Q Wealth", not "Q Wealth CRM" — the reader of this page is not in the CRM
+     and should not be told there is one. */
   title: 'Parking expenses · Q Wealth',
   /* Not indexed, and asked not to be followed either. The link is the only
      credential; a search engine that finds it in a crawled mailbox or a pasted
@@ -15,14 +18,15 @@ export const metadata = {
  *
  * ## The only page here that runs without a session
  *
- * It sits outside `(shell)` — no navigation, no MFA gate, no staff record — and
- * `/reports` is listed in the proxy's PUBLIC_PATHS. Everything else in this
- * application is unreachable without signing in, and that is deliberate, so
- * this file is the one place to look when asking "what can the public see".
+ * It sits under `/shared`, which `proxy.ts` lists in PUBLIC_PATHS. Everything
+ * else in this application is unreachable without signing in, and that is
+ * deliberate, so this directory is the one place to look when asking "what can
+ * the public see".
  *
- * It lives under `/shared`, not `/reports`. PUBLIC_PATHS is matched by prefix,
- * and `/reports` is already a CRM page — putting this there took the proxy off
- * that page's door. A public route belongs on a prefix nothing else wants.
+ * `/shared` is its own namespace on purpose. PUBLIC_PATHS is matched by PREFIX,
+ * and the first version of this page lived at `/reports/parking/<token>`, which
+ * meant listing `/reports` — an existing CRM page — and taking the proxy off
+ * its door. A public route belongs on a prefix nothing else wants.
  *
  * ## It reads through ONE function and holds no privilege
  *
@@ -42,6 +46,12 @@ export const metadata = {
  * Unknown, revoked, expired and "for another report" all look the same from
  * outside. Telling the holder of a wrong link which kind of wrong it is turns
  * the page into an oracle for guessing.
+ *
+ * ## The chrome is the layout's
+ *
+ * `app/shared/layout.tsx` supplies the bar, the ground and the grid, so this
+ * file returns grid items and nothing else — the same shape as any page under
+ * `(shell)`. It sets no width and no background of its own.
  */
 export default async function ParkingReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
@@ -58,24 +68,27 @@ export default async function ParkingReportPage({ params }: { params: Promise<{ 
   const total = rows.reduce((sum, r) => sum + (r.amount_cents ?? 0), 0)
 
   return (
-    <main className="mx-auto min-h-dvh w-full max-w-3xl px-4 py-10 sm:px-6">
-      <header>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-brand">Q Wealth</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">Parking expenses</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {rows.length} {rows.length === 1 ? 'receipt' : 'receipts'}, texted in and recorded automatically.
-        </p>
-      </header>
+    <>
+      <PageHeading
+        eyebrow="Q Wealth"
+        title="Parking expenses"
+        description={`${rows.length} ${rows.length === 1 ? 'receipt' : 'receipts'}, texted in and recorded automatically.`}
+      />
 
       {rows.length === 0 ? (
-        <div className="mt-8 rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-12">
+        <Card className="col-span-full lg:col-span-8">
           <p className="text-center text-sm font-medium text-neutral-700">Nothing here yet</p>
           <p className="mx-auto mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
             Receipts appear as they are texted in. The link keeps working — come back later.
           </p>
-        </div>
+        </Card>
       ) : (
-        <div className="mt-8 overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        /* SHEET_SURFACE rather than SHEET: SHEET bakes in `overflow-hidden` to
+           clip hairline rows to the rounded corner, and this table needs
+           `overflow-x-auto` to scroll on a phone. Stacking the two would leave
+           which one applies to whichever rule Tailwind emits last. SURFACE is
+           the same surface without the clip, which is the case it exists for. */
+        <div className={`${SHEET_SURFACE} col-span-full overflow-x-auto lg:col-span-8`}>
           <table className="w-full min-w-[34rem] border-collapse text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-widest text-neutral-400">
@@ -112,10 +125,10 @@ export default async function ParkingReportPage({ params }: { params: Promise<{ 
         </div>
       )}
 
-      <p className="mt-6 text-xs leading-relaxed text-neutral-400">
+      <p className="col-span-full text-xs leading-relaxed text-neutral-400 lg:col-span-8">
         This page is read-only and is shared by link. It shows nothing beyond what is above.
       </p>
-    </main>
+    </>
   )
 }
 

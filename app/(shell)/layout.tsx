@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentStaff, getRegistration } from '@/lib/staff'
 import { isAdmin } from '@/lib/admin'
 import { getMfaState } from '@/lib/mfa'
+import { PageGround } from '@/components/page-ground'
 import { TopNav } from '@/components/top-nav'
 
 /**
@@ -42,13 +43,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (mfa.stepUpRequired) redirect('/mfa?next=%2F')
 
   return (
-    /* No background colour on this container, deliberately. A negative
-       z-index child paints after the STACKING CONTEXT ROOT's background but
-       before its parent's, and this div creates no stacking context — so a
-       bg-white here painted straight over the artwork below. The image had been
-       in the markup and invisible; the login and MFA screens showed it only
-       because their container has no background of its own. The layer below
-       carries its own fallback colour, so nothing is lost. */
+    /* No background colour on this container, deliberately: it would paint
+       straight over PageGround below, and the artwork would be in the markup
+       and invisible. The paint order, and the day it cost, are written up in
+       the component. */
     <div className="flex min-h-dvh flex-col">
       <TopNav
         staffFirstName={staff.first_name}
@@ -59,25 +57,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         avatarPath={staff.avatar_path}
       />
 
-      {/*
-        A fixed, cover-positioned layer rather than `bg-fixed` on the container.
-        `background-attachment: fixed` is unreliable on iOS Safari and interacts
-        badly with the backdrop-filter on the navbar; a fixed element behind the
-        content gives the same effect predictably.
-
-        bg-blend-multiply is what makes the colour beneath the image matter.
-        investing.png is an OPAQUE WHITE image with faint grey marks, so on its
-        own it painted the page white and the bg-neutral-100 under it was never
-        seen — white cards on a white page, which is why the layout read flat
-        however the cards were styled. Multiplying lets the white take the
-        ground colour and the marks darken it slightly, so the page is a real
-        desk for the cards to sit on. Measured after the change: the ground
-        samples at #f5f5f5, not #ffffff.
-      */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-neutral-100 bg-[url('/investing.png')] bg-cover bg-center bg-no-repeat bg-blend-multiply"
-      />
+      {/* Why it is a fixed layer, why it multiplies, and why the container
+          above must stay transparent: see the component. Extracted 24 Sep 2026
+          so the public share layout could have the same ground without a third
+          copy of it. */}
+      <PageGround />
 
       <main className="grid flex-1 auto-rows-min grid-cols-4 gap-4 px-3 py-5 sm:grid-cols-8 sm:px-5 lg:grid-cols-12 lg:gap-6 lg:py-7">
         {children}

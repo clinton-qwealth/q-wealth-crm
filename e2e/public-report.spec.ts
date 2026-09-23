@@ -55,6 +55,39 @@ test.describe('the public report', () => {
     }
   })
 
+  /**
+   * The chrome added 24 Sep 2026 is the CRM's bar and the CRM's ground, and the
+   * temptation it creates is to reuse `TopNav` — whose staff props are all
+   * optional, so it renders perfectly well with none of them.
+   *
+   * It must not be. Every destination in that bar is protected: the four nav
+   * links, the Help icon, and each item of the account menu. A visitor holding
+   * a share link would get a row of controls that each bounce to a sign-in
+   * screen, and a map of an application they have no business in.
+   *
+   * Mutation, and it was run: swap `<PublicNav />` for `<TopNav />` in
+   * `app/shared/layout.tsx` — this fails on the nav landmark and on six hrefs.
+   */
+  test('offers no way into the application', async ({ page }) => {
+    await page.goto(`/shared/parking/${NOT_A_TOKEN}`)
+
+    /* The bar IS there — this is not passing because the page is blank. */
+    await expect(page.getByRole('img', { name: 'Q Wealth' })).toBeVisible()
+
+    await expect(page.locator('nav[aria-label="Main"]')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /account|profile|search/i })).toHaveCount(0)
+
+    /* Nothing anywhere on the page points at a route that would demand a
+       session. Read off the DOM rather than from a list of link names, so a
+       control added later is covered without anyone remembering this test. */
+    const hrefs = await page.locator('a[href^="/"]').evaluateAll((links) =>
+      links.map((l) => l.getAttribute('href') ?? ''),
+    )
+    for (const href of hrefs) {
+      expect(href, `the public page links to ${href}`).toMatch(/^\/shared(\/|$)/)
+    }
+  })
+
   test('is asked not to be indexed', async ({ page }) => {
     await page.goto(`/shared/parking/${NOT_A_TOKEN}`)
     /* The link is the only credential. A search engine that finds it in a

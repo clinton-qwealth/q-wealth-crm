@@ -12,6 +12,14 @@ import type { ReactNode } from 'react'
  * The artwork is a fixed, cover-positioned layer behind the card rather than a
  * `bg-fixed` utility on the container: `background-attachment: fixed` is
  * unreliable on iOS Safari. Same approach as the authenticated shell.
+ *
+ * **It is NOT `<PageGround />`, and that is a difference, not an oversight.**
+ * This copy omits `bg-blend-multiply`, so its ground is white rather than the
+ * app's #f5f5f5 — which is what these screens have always looked like. Adopting
+ * the component would unify the duplication and visibly restyle sign-in, the
+ * MFA challenge, enrolment and request-access all at once. Worth doing as its
+ * own decision, with someone looking at the result; not worth doing as a
+ * side-effect of a refactor.
  */
 export function AuthShell({
   title,
