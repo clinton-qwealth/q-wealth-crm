@@ -90,6 +90,40 @@ export function formatCalendarDate(iso: string) {
 }
 
 /**
+ * The month a calendar date falls in, as `YYYY-MM` — "2026-09".
+ *
+ * `slice`, not `new Date()`, for the reason the whole of this file is about: a
+ * `YYYY-MM-DD` is a calendar date with no timezone, and putting one through
+ * Date makes it an instant at UTC midnight, which is the previous MONTH for the
+ * first eleven hours of every 1st of the month west of Greenwich. A parking
+ * receipt dated the 1st would file itself under August for a reader in London.
+ *
+ * The keys sort lexicographically, which is the same property `dueState` leans
+ * on — so grouping and ordering months needs no date arithmetic at all.
+ *
+ * Returns null for anything that is not a calendar date, so a row with no date
+ * can be given its own bucket rather than silently joining one.
+ */
+export function monthKey(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  return /^\d{4}-\d{2}/.test(iso) ? iso.slice(0, 7) : null
+}
+
+/**
+ * A `YYYY-MM` key as a person reads it — "Sep 2026".
+ *
+ * Month name from the fixed list above rather than `toLocaleDateString`, for
+ * the reason given on formatNoteDate: `month: 'short'` gives "Jul" in a browser
+ * and "July" under Node's ICU, so a test and a screen would disagree.
+ */
+export function monthLabel(key: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(key)
+  if (!m) return key
+  const month = MONTHS[Number(m[2]) - 1]
+  return month ? `${month} ${m[1]}` : key
+}
+
+/**
  * Today, in the reader's own calendar, as `YYYY-MM-DD`.
  *
  * Deliberately built from the LOCAL parts of the instant, because that is what
