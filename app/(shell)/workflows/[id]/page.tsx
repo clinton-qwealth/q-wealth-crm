@@ -7,6 +7,7 @@ import {
   getWorkflowPosts,
   getWorkflowRecipient,
   getWorkflowTaskActions,
+  getDeployableTemplates,
   getWorkflowTasks,
 } from '@/lib/workflows'
 import { getWorkflowNotes } from '@/lib/notes'
@@ -38,7 +39,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
      by WORKFLOW rather than by group: filtering on the group would mean knowing
      the workflow's group first, and the workflow row is in this same wave. See
      getWorkflowNotes for what that costs instead. */
-  const [workflow, staffChoices, tasks, posts, entityChoices, actions, recipient, notes] =
+  const [workflow, staffChoices, tasks, posts, entityChoices, actions, recipient, notes, templates] =
     await Promise.all([
       getWorkflow(id),
       getStaffChoices(),
@@ -48,6 +49,11 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       getWorkflowTaskActions(id),
       getWorkflowRecipient(id),
       getWorkflowNotes(id),
+      /* ONE more loader, in the SAME wave. The deployed template's own name and
+         the tasks' dependency edges are NOT loaders: the first came by widening
+         this page's existing workflow select, the second by widening the tasks
+         view. Either as a loader of its own would have made this two waves. */
+      getDeployableTemplates(),
     ])
   if (!workflow) notFound()
 
@@ -56,6 +62,7 @@ export default async function WorkflowPage({ params }: { params: Promise<{ id: s
       workflow={workflow}
       staff={staffChoices}
       tasks={tasks}
+      templates={templates}
       posts={posts}
       actions={actions}
       recipient={recipient}

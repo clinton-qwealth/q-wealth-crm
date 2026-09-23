@@ -8,6 +8,7 @@ import { WorkflowDetails } from './workflow-details'
 import { WorkflowTasks } from './workflow-tasks'
 import { WorkflowNotes } from './workflow-notes'
 import { AddNoteModal } from './add-note-modal'
+import type { DeployableTemplate } from '@/lib/templates'
 
 const SPAN: Record<3 | 4 | 5, string> = {
   3: 'lg:col-span-3',
@@ -39,6 +40,7 @@ export function WorkflowWorkspace({
   workflow: w,
   staff,
   tasks,
+  templates,
   posts,
   actions,
   recipient,
@@ -50,6 +52,8 @@ export function WorkflowWorkspace({
   /** Active staff, for the owner and assignee pickers and the @ menu. Empty in a preview. */
   staff: { id: string; name: string }[]
   tasks: WorkflowTask[]
+  /** The published templates somebody may deploy into this workflow. */
+  templates: DeployableTemplate[]
   /** Every post on the workflow, newest first. */
   posts: WorkflowPost[]
   /** Every recorded action on the workflow, newest first. */
@@ -142,6 +146,7 @@ export function WorkflowWorkspace({
       {/* Centre — the work itself: the tasks under this workflow */}
       <Column span={5}>
         <WorkflowTasks
+          templates={templates}
           workflowId={w.id}
           workflowName={w.name}
           groupName={w.group_name}

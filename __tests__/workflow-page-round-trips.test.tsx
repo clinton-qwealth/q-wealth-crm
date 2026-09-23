@@ -104,11 +104,17 @@ describe('/workflows/[id] round-trip depth', () => {
     )
     expect(error).toBeUndefined()
 
-    /* Eight loaders, eight reads. The recipient and the entity choices each
-       used to be three chained reads; now each is one embedded read of the
-       workflow row, so the same two tables are hit twice and nothing else is
-       reached in a second wave. */
-    expect(calls).toHaveLength(8)
+    /* NINE loaders, nine reads, still ONE wave. The recipient and the entity
+       choices each used to be three chained reads; now each is one embedded
+       read of the workflow row, so the same two tables are hit twice and
+       nothing else is reached in a second wave.
+       
+       The ninth is the deployable templates, added 23 Sep. Note what did NOT
+       become a loader: the deployed template's name came from widening the
+       existing workflow select, and the tasks' dependency edges from widening
+       the tasks view. Either as a query of its own would have made this two
+       waves, which is the change this test exists to refuse. */
+    expect(calls).toHaveLength(9)
     expect(calls.filter((c) => c === 'workflows')).toHaveLength(2)
     expect(calls).toContain('workflow_board')
     expect(calls).toContain('group_notes_summary')

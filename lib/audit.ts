@@ -100,6 +100,15 @@ export const TABLE_LABEL: Record<string, string> = {
   financial_account_valuations: 'Account valuation',
   staff_access_assignments: 'Staff access assignment',
   workflow_post_media: 'Post attachment',
+  /* The four template tables, added 23 Sep 2026. They are administrator-authored
+     configuration that silently changes what every future workflow does — the
+     class user_groups is in, and the reason that class is audited. The three
+     children are keyed by template_id, so the trail reads "Changed · Annual
+     review" rather than naming a row nobody could name. */
+  workflow_templates: 'Workflow template',
+  workflow_template_roles: 'Template role',
+  workflow_template_tasks: 'Template task',
+  workflow_template_task_dependencies: 'Template task dependency',
   assets_liabilities: 'Asset or liability',
   asset_liability_owners: 'Asset or liability owner',
   insurance_policies: 'Insurance policy',

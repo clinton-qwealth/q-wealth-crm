@@ -1659,3 +1659,83 @@ function emailBodyProblem(doc: PostDoc): string | null {
   walk(doc)
   return problem
 }
+
+/* -------------------------------------------------------------------------- */
+/* Workflow templates                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Deploy a published template into this workflow.
+ *
+ * The role map arrives as a plain object from the dialog's selects, keyed by
+ * role id. Validated only for shape here — that every role a task uses has a
+ * person, that nobody named is inactive, and that the template is published are
+ * all the database's answers, and its sentences pass through unrewritten.
+ */
+export async function deployWorkflowTemplate(
+  _prev: NoteState,
+  formData: FormData,
+): Promise<NoteState> {
+  const templateId = String(formData.get('template_id') ?? '')
+  const workflowId = String(formData.get('workflow_id') ?? '')
+  const startDate = String(formData.get('start_date') ?? '').trim()
+  if (!templateId) return { error: 'Choose a template.' }
+  if (!workflowId) return { error: 'No workflow selected.' }
+
+  /* One select per role, named `role:<uuid>`. A map rather than two parallel
+     lists: the pairing is then visible at the call site and cannot slip. */
+  const roleStaff: Record<string, string> = {}
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith('role:')) continue
+    const person = String(value).trim()
+    if (person) roleStaff[key.slice(5)] = person
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('deploy_workflow_template', {
+    p_template_id: templateId,
+    p_workflow_id: workflowId,
+    p_start_date: startDate || null,
+    p_role_staff: roleStaff,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}
+
+/**
+ * Complete a task whose prerequisites are not done.
+ *
+ * The SAME RPC as an ordinary completion — `set_workflow_task_status` — because
+ * the override record is written by a database trigger in the same transaction
+ * as the status change. That is the whole guarantee: a blocked completion
+ * cannot happen without its record, and no client can produce one without the
+ * other. This action exists as a separate name only so the component's confirm
+ * step reads as what it is, and so the reason is recorded as a comment on the
+ * task where a person will actually find it.
+ */
+export async function completeWorkflowTaskEarly(
+  taskId: string,
+  workflowId: string,
+  reason: string,
+): Promise<NoteState> {
+  if (!taskId) return { error: 'No task selected.' }
+  const supabase = await createSupabaseServerClient()
+
+  const note = reason.trim()
+  if (note) {
+    const { error } = await supabase.rpc('set_workflow_task_details', {
+      p_id: taskId,
+      p_patch: { comment: note },
+    })
+    if (error) return { error: error.message }
+  }
+
+  const { error } = await supabase.rpc('set_workflow_task_status', {
+    p_id: taskId,
+    p_status: 'done',
+  })
+  if (error) return { error: error.message }
+  revalidatePath(`/workflows/${workflowId}`)
+  return { ok: true }
+}

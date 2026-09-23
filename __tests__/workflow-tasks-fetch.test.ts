@@ -47,14 +47,41 @@ describe('getWorkflowTasks', () => {
     expect(filtered).toEqual(['workflow_id', 'w1'])
   })
 
-  test('soonest due first, undated last, created_at breaking the tie', async () => {
+  /**
+   * PLAN ORDER FIRST — changed 23 Sep 2026, when templates arrived.
+   *
+   * This used to lead with `due_at` and break ties on `created_at`, and the
+   * comment beside it said that tasks sharing a due date, "which
+   * template-generated tasks will", would keep the order they were made in.
+   * They would not: `now()` is the TRANSACTION timestamp, so every task one
+   * deploy creates carries the identical `created_at` and the tie-break does
+   * nothing at all. Since a task waiting on another has no due date until that
+   * other is done, most of a deployed plan would have sorted into one
+   * undifferentiated block in whatever order the heap returned.
+   *
+   * Mutation: drop the plan_position order → this fails, and a deployed plan
+   * renders scrambled.
+   */
+  test('plan order first, then soonest due, then the order they were made', async () => {
     await getWorkflowTasks('w1')
     expect(ordered).toEqual([
-      // Ascending puts the closest date at the top...
+      { column: 'plan_position', options: { ascending: true, nullsFirst: false } },
       { column: 'due_at', options: { ascending: true, nullsFirst: false } },
-      // ...and the tie-break keeps same-day tasks in the order they were made.
       { column: 'created_at', options: { ascending: true } },
     ])
+  })
+
+  /**
+   * `nullsFirst: false` on plan_position is what keeps a workflow with no
+   * template looking exactly as it did before templates existed: a hand-made
+   * task has no position, sorts after the plan, and then falls through to the
+   * due-date ordering this function has always used.
+   *
+   * Mutation: nullsFirst: true → every hand-added task jumps above the plan.
+   */
+  test('a task with no plan position sorts after the plan, not before it', async () => {
+    await getWorkflowTasks('w1')
+    expect(ordered.find((o) => o.column === 'plan_position')!.options?.nullsFirst).toBe(false)
   })
 
   test('a task with no due date is not treated as due soonest', async () => {

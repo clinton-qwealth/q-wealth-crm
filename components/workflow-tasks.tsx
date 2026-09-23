@@ -1,7 +1,10 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
+import { WorkflowTemplateChip } from '@/components/deploy-template-dialog'
+import type { DeployableTemplate } from '@/lib/templates'
 import {
+  completeWorkflowTaskEarly,
   createWorkflowTask,
   saveWorkflowTaskDetails,
   setWorkflowTaskPriority,
@@ -92,6 +95,7 @@ export function WorkflowTasks({
   workflowName,
   groupName,
   tasks: initial,
+  templates,
   posts,
   actions,
   recipient,
@@ -104,6 +108,8 @@ export function WorkflowTasks({
   workflowName: string
   groupName: string
   tasks: WorkflowTask[]
+  /** The published templates somebody may deploy into this workflow. */
+  templates: DeployableTemplate[]
   /** Every post on the workflow; the panel shows a task's own. */
   posts: WorkflowPost[]
   /** Every recorded action on the workflow; the panel's History shows a task's own. */
@@ -120,6 +126,7 @@ export function WorkflowTasks({
      this the list would go on showing the array it mounted with. */
   const [tasks, setTasks] = useServerState(initial)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<WorkflowTask | null>(null)
   const [, start] = useTransition()
 
   /* ONE panel for the whole list, not one per row. A closed <dialog> keeps its
@@ -136,7 +143,23 @@ export function WorkflowTasks({
      performs without telling React — so there is no element handle to keep in
      step with it here. */
 
+  /**
+   * Ticking a blocked task does NOT write straight through.
+   *
+   * Every other change on this list is optimistic and silent, because every
+   * other change is reversible. This one leaves a permanent mark on the task —
+   * the database records the override in the same transaction as the completion
+   * — so it asks first and says what is still open.
+   */
   function toggle(task: WorkflowTask) {
+    if (task.status !== 'done' && task.is_blocked) {
+      setConfirming(task)
+      return
+    }
+    return completeOrReopen(task)
+  }
+
+  function completeOrReopen(task: WorkflowTask) {
     const next = task.status === 'done' ? 'open' : 'done'
     const before = tasks
     setError(null)
@@ -169,18 +192,26 @@ export function WorkflowTasks({
 
   const done = tasks.filter((t) => t.status === 'done').length
   const live = tasks.filter((t) => t.status !== 'cancelled').length
+  /* Which template these tasks came from, read off the tasks themselves rather
+     than loaded: a task carries its template_task_id, and the published
+     templates are already here. Costs nothing and cannot disagree with the list
+     it is describing. */
+  const deployedTemplateName =
+    templates.find((tpl) => tpl.tasks.some((tt) => tasks.some((t) => t.template_task_id === tt.id)))?.name ??
+    (tasks.some((t) => t.template_task_id) ? 'A workflow template' : null)
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        {/* A placeholder that names what it is standing in for. Templates do
-            not exist yet; when they do, this is where the template's name goes. */}
-        <span
-          data-slot="placeholder"
-          className="inline-flex items-center rounded-md border border-dashed border-neutral-300 px-2 py-1 text-sm text-neutral-400"
-        >
-          Workflow template name
-        </span>
+        {/* This was a dashed placeholder reading "Workflow template name" from
+            6 September until 23 September, when templates arrived. The template
+            is the bulk action and sits left; Add task, the one-off, stays right. */}
+        <WorkflowTemplateChip
+          templates={templates}
+          deployed={deployedTemplateName}
+          workflowId={workflowId}
+          staff={staff}
+        />
         <AddTaskModal workflowId={workflowId} staff={staff} />
       </div>
 
@@ -273,6 +304,24 @@ export function WorkflowTasks({
                           one row from another. The enum stays in the data for
                           the second kind to arrive; the display waits for it. */}
                       <span className="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                        {!finished && t.is_blocked ? (
+                          /* Named, not just "Blocked": the next question is
+                             always "waiting for what". Amber is this app's
+                             "paused or needs attention — not wrong, not live",
+                             which is precisely this. */
+                          <Pill tone="warning" title={t.blocked_by.join(', ')}>
+                            {t.blocked_by.length === 1
+                              ? `Waiting on “${t.blocked_by[0]}”`
+                              : `Waiting on ${t.blocked_by.length} tasks`}
+                          </Pill>
+                        ) : null}
+                        {t.completed_while_blocked ? (
+                          /* Permanent, and one rule. The clever version goes
+                             quiet once the prerequisite catches up, which is two
+                             rules for one mark and defeats the point of keeping
+                             the record at all. */
+                          <Pill tone="warning">Completed early</Pill>
+                        ) : null}
                         {t.assigned_to_name ? (
                           <span>Assigned to {t.assigned_to_name}</span>
                         ) : (
@@ -297,6 +346,16 @@ export function WorkflowTasks({
                         /* A finished task is not late and is not due today; it
                            is finished. Its date is kept, in the quiet tone. */
                         <DueChip dueAt={t.due_at} state={finished ? null : dueState(t.due_at)} />
+                      ) : !finished && t.is_blocked ? (
+                        /* NEVER BLANK. Half a deployed plan has no due date at
+                           any moment — that is the rule, not missing data — and
+                           an empty right edge on half the rows reads as broken. */
+                        <Pill tone="neutral" title={`Waiting for ${t.blocked_by.join(', ')}`}>
+                          <HourglassIcon className="-ml-0.5 mr-1 h-3 w-3 shrink-0" />
+                          {t.due_offset_days
+                            ? `Due ${t.due_offset_days}d after it starts`
+                            : 'Due once it starts'}
+                        </Pill>
                       ) : null}
                       <PriorityPicker
                         value={t.priority}
@@ -322,10 +381,25 @@ export function WorkflowTasks({
           </span>
           <p className="mt-3 text-center text-sm font-medium text-neutral-700">No tasks yet</p>
           <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-neutral-500">
-            Tasks will be generated from the workflow template. Until then, add them here.
+            {templates.length > 0
+              ? 'Use a template to lay out the whole plan at once, or add a task on its own.'
+              : 'Add the first one, or publish a workflow template to lay out a whole plan at once.'}
           </p>
         </div>
       )}
+
+      {confirming ? (
+        <CompleteEarlyDialog
+          task={confirming}
+          workflowId={workflowId}
+          onClose={() => setConfirming(null)}
+          onError={setError}
+          onDone={(id) => {
+            setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status: 'done' as const } : t)))
+            setConfirming(null)
+          }}
+        />
+      ) : null}
 
       {/* The panel. The shared drawer, which this component's own dialog was one
           of the two originals of — see drawer.tsx for why it was extracted. */}
@@ -982,7 +1056,10 @@ function TaskHistory({ actions, viewerId }: { actions: TaskAction[]; viewerId: s
   )
 }
 
-const ACTION_LABEL: Record<TaskActionKind, string> = { email: 'Email' }
+const ACTION_LABEL: Record<TaskActionKind, string> = {
+  email: 'Email',
+  completed_while_blocked: 'Out of order',
+}
 
 /**
  * What each kind of action READS as under the subject.
@@ -1002,6 +1079,10 @@ const ACTION_LABEL: Record<TaskActionKind, string> = { email: 'Email' }
  */
 const ACTION_SENTENCE: Record<TaskActionKind, { verb: string; preposition: string }> = {
   email: { verb: 'sent an email', preposition: 'to' },
+  /* Written by the database beside the completion it records, never by a
+     client. No recipient, so the preposition never appears — which is what the
+     separate preposition was for. */
+  completed_while_blocked: { verb: 'completed this out of order', preposition: '' },
 }
 
 /**
@@ -1013,6 +1094,9 @@ const ACTION_SENTENCE: Record<TaskActionKind, { verb: string; preposition: strin
  */
 const ACTION_GLYPH: Record<TaskActionKind, (props: { className?: string }) => ReactNode> = {
   email: EnvelopeIcon,
+  /* The same hourglass a waiting task wears in the list, so the state and the
+     record of overriding it share one mark. */
+  completed_while_blocked: HourglassIcon,
 }
 
 /**
@@ -1285,5 +1369,102 @@ export function AddTaskModal({ workflowId, staff }: { workflowId: string; staff:
         </form>
       </dialog>
     </>
+  )
+}
+
+/**
+ * Completing a task before the thing it waits for is done.
+ *
+ * The decision was "blocked, but overridable, and the override is recorded".
+ * This is where the override is agreed to. The record itself is written by the
+ * database, in the same transaction as the status change, so there is no path
+ * that completes without recording and none that records without completing.
+ *
+ * The reason is PROMPTED but NOT REQUIRED. A mandatory justification field
+ * collects the word "asdf"; an optional one that asks plainly collects a
+ * sentence often enough to be worth reading.
+ */
+function CompleteEarlyDialog({
+  task,
+  workflowId,
+  onClose,
+  onError,
+  onDone,
+}: {
+  task: WorkflowTask
+  workflowId: string
+  onClose: () => void
+  onError: (message: string | null) => void
+  onDone: (taskId: string) => void
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const [reason, setReason] = useState('')
+  const [pending, start] = useTransition()
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (dialog && !dialog.open) dialog.showModal()
+  }, [])
+
+  const waiting =
+    task.blocked_by.length === 1
+      ? `“${task.blocked_by[0]}”, which is not done`
+      : `${task.blocked_by.length} tasks that are not done`
+
+  return (
+    <dialog
+      ref={dialogRef}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === dialogRef.current) onClose()
+      }}
+      className="w-[min(30rem,calc(100vw-2rem))] rounded-lg p-0 backdrop:bg-neutral-900/20"
+    >
+      <div data-slot="complete-early" className="flex flex-col gap-4 p-5">
+        <div>
+          <h2 className="text-base font-semibold text-neutral-900">Complete this out of order?</h2>
+          <p className="mt-1 text-sm leading-relaxed text-neutral-600">
+            “{task.subject}” is waiting on {waiting}. You can complete it anyway — it will be
+            recorded on the task.
+          </p>
+        </div>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-neutral-700">Why, for the record?</span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="Optional."
+            className="rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              onError(null)
+              start(async () => {
+                const result = await completeWorkflowTaskEarly(task.id, workflowId, reason)
+                if (result && 'error' in result) onError(result.error)
+                else onDone(task.id)
+              })
+            }}
+            className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {pending ? 'Completing…' : 'Complete anyway'}
+          </button>
+        </div>
+      </div>
+    </dialog>
   )
 }

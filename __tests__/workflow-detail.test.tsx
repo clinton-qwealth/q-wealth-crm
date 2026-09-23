@@ -105,6 +105,7 @@ const show = (workflow: WorkflowDetail = card) =>
     <WorkflowWorkspace
       workflow={workflow}
       staff={STAFF}
+      templates={[]}
       tasks={[]}
       posts={[]}
       actions={[]}
@@ -187,12 +188,15 @@ describe('the workflow detail page', () => {
         notes={[]}
         recipient={null}
         viewer={VIEWER}
-        tasks={[
+        templates={[]}
+      tasks={[
           {
             id: 't1', workflow_id: 'w1', task_type: 'checkbox', subject: 'Collect the authority',
             description: null, comment: null, due_at: null, status: 'open', priority: 'medium',
             assigned_to_staff_id: null, assigned_to_name: null, completed_at: null,
             created_at: '2026-09-07T00:00:00Z', updated_at: '2026-09-07T00:00:00Z',
+            template_task_id: null, plan_position: null, due_offset_days: null,
+            depends_on: [], blocked_by: [], is_blocked: false, completed_while_blocked: false,
           },
         ]}
       />,

@@ -32,6 +32,13 @@ const task = (o: Partial<WorkflowTask>): WorkflowTask => ({
   completed_at: null,
   created_at: '2026-09-07T00:00:00Z',
   updated_at: '2026-09-07T00:00:00Z',
+    template_task_id: null,
+    plan_position: null,
+    due_offset_days: null,
+    depends_on: [],
+    blocked_by: [],
+    is_blocked: false,
+    completed_while_blocked: false,
   ...o,
 })
 
@@ -95,6 +102,7 @@ const show = (tasks: WorkflowTask[]) =>
       workflowId="w1"
       workflowName="Annual review 2026"
       groupName="Testsmith Household"
+      templates={[]}
       tasks={tasks}
       posts={[]}
       actions={ACTIONS}
@@ -105,9 +113,16 @@ const show = (tasks: WorkflowTask[]) =>
   )
 
 describe('the workflow’s tasks', () => {
-  test('the header is the template name’s placeholder on the left and Add task on the right', () => {
+  /**
+   * The dashed chip said "Workflow template name" from 6 September until
+   * templates arrived on 23 September. With NONE PUBLISHED the placeholder is
+   * still right — nothing can be deployed yet — but the words it stands in for
+   * have changed, and a placeholder that names something that now exists is
+   * worse than one that names what is missing.
+   */
+  test('with no template published, the header still says so, with Add task on the right', () => {
     show([])
-    const chip = screen.getByText('Workflow template name')
+    const chip = screen.getByText('No templates published yet')
     expect(chip.getAttribute('data-slot')).toBe('placeholder')
     expect(chip.className).toContain('border-dashed')
     const add = screen.getByRole('button', { name: /Add task/ })
@@ -279,7 +294,8 @@ describe('the workflow’s tasks', () => {
         workflowId="w1"
         workflowName="Annual review 2026"
         groupName="Testsmith Household"
-        tasks={[open]}
+        templates={[]}
+      tasks={[open]}
         posts={[]}
         actions={ACTIONS}
         recipient={RECIPIENT}
@@ -295,7 +311,8 @@ describe('the workflow’s tasks', () => {
         workflowId="w1"
         workflowName="Annual review 2026"
         groupName="Testsmith Household"
-        tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
+        templates={[]}
+      tasks={[open, task({ id: 't4', subject: 'Lodge the claim' })]}
         posts={[]}
         actions={ACTIONS}
         recipient={RECIPIENT}
@@ -350,10 +367,16 @@ describe('the workflow’s tasks', () => {
     expect(screen.getByText('1 of 2 done · 1 cancelled')).toBeTruthy()
   })
 
-  test('no tasks shows the empty state, and says where tasks will come from', () => {
+  /**
+   * The empty state carried a promissory note — "tasks WILL be generated from
+   * the workflow template" — from the day it was written until the day that
+   * became true. With nothing published it now tells you what would make it
+   * possible instead of describing a feature that is not there.
+   */
+  test('no tasks shows the empty state, and offers the way out of it', () => {
     show([])
     expect(screen.getByText('No tasks yet')).toBeTruthy()
-    expect(screen.getByText(/generated from the workflow template/)).toBeTruthy()
+    expect(screen.getByText(/publish a workflow template/)).toBeTruthy()
   })
 
   test('a due date is a calendar date and does not slip a day west of Greenwich', () => {

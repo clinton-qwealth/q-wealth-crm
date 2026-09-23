@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { AuditTrail } from '@/components/audit-trail'
 import { StaffList } from '@/components/staff-list'
 import { Tabs } from '@/components/tabs'
+import { TemplateList } from '@/components/template-list'
 import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
 import { UserGroupList } from '@/components/user-group-list'
 import {
@@ -10,6 +11,7 @@ import {
   getAuditActors,
   getAuditEntries,
   getStaffForAdmin,
+  getTemplatesForAdmin,
   getUserGroupsForAdmin,
   isAdmin,
 } from '@/lib/admin'
@@ -43,6 +45,12 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  * the toggle on a person restricts it. "User groups" rather than "groups"
  * because a group is already a client household everywhere else here.
  *
+ * **Templates sits third**, from 23 September: a third thing to USE, so it goes
+ * with the other two and ahead of the trail. Unlike them it is a LIST ONLY — a
+ * template opens at `/admin/templates/[id]`, because a fifteen-task editor with
+ * a panel per task does not fit a drawer, and because putting its read here
+ * would charge every administrator for it on every visit.
+ *
  * ## The gate comes before the wave
  *
  * `isAdmin` is `manage_staff`, the same flag `audit_log`'s own read policy
@@ -60,12 +68,13 @@ export default async function AdminPage() {
   if (!staff) redirect('/login')
   if (!isAdmin(staff)) notFound()
 
-  const [page, actors, staffRows, profiles, userGroups] = await Promise.all([
+  const [page, actors, staffRows, profiles, userGroups, templates] = await Promise.all([
     getAuditEntries({ limit: AUDIT_PAGE_SIZE }),
     getAuditActors(),
     getStaffForAdmin(),
     getAccessProfiles(),
     getUserGroupsForAdmin(),
+    getTemplatesForAdmin(),
   ])
 
   /* Derived from the rows already in the wave, not a second count query. */
@@ -111,6 +120,11 @@ export default async function AdminPage() {
                 id: 'user-groups',
                 label: 'User groups',
                 panel: <UserGroupList groups={userGroups} staff={staffChoices} />,
+              },
+              {
+                id: 'templates',
+                label: 'Templates',
+                panel: <TemplateList templates={templates} />,
               },
               {
                 id: 'audit',

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { PlusIcon } from './icons'
 import { QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } from './ui'
@@ -197,6 +198,13 @@ export function DataSection({
  * colour and a place to land. Still wraps: in the narrow file-notes column the
  * meta drops below the text rather than truncating the byline.
  */
+/* The ring is INSET. `SHEET` is `overflow-hidden`, so an outer ring on the
+   first or last row is shaved by the sheet's own clip — the same reason the
+   member rows carry one. Named once because a link and a button rendering the
+   same row must be indistinguishable to look at. */
+const TRIGGER_SURFACE =
+  '-m-1 flex min-w-0 flex-1 basis-40 items-center gap-3 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30'
+
 export function DataRow({
   leading,
   select,
@@ -252,7 +260,17 @@ export function DataRow({
    * the accounts row already carries `AccountValue` on the right, which is
    * where a valuation picker is the obvious next thing to land.
    */
-  trigger?: { label: string; onClick: () => void }
+  /**
+   * What opening the row does. A discriminated union rather than two props, so
+   * the accessible name and the thing it opens cannot be given separately and
+   * disagree.
+   *
+   * `href` renders a real link, which is what a row leading to its own ROUTE
+   * has to be: a button loses middle-click, ⌘-click, the browser's own pending
+   * indication and the address bar. `onClick` stays for the rows that open a
+   * drawer beside the list, which is most of them.
+   */
+  trigger?: { label: string; onClick: () => void } | { label: string; href: string }
   /*
    * A `badge` prop sat here until 11 September, holding a status pill to the
    * right of the name. It was removed rather than left unused, the same call
@@ -294,15 +312,21 @@ export function DataRow({
       }`}
     >
       {select ? <span className="shrink-0">{select}</span> : null}
-      {trigger ? (
+      {trigger && 'href' in trigger ? (
+        <Link
+          href={trigger.href}
+          aria-label={trigger.label}
+          className={TRIGGER_SURFACE}
+        >
+          {leading}
+          {text}
+        </Link>
+      ) : trigger ? (
         <button
           type="button"
           onClick={trigger.onClick}
           aria-label={trigger.label}
-          /* The ring is INSET. `SHEET` is `overflow-hidden`, so an outer ring on
-             the first or last row is shaved by the sheet's own clip — the same
-             reason the member rows carry one. */
-          className="-m-1 flex min-w-0 flex-1 basis-40 items-center gap-3 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+          className={TRIGGER_SURFACE}
         >
           {leading}
           {text}

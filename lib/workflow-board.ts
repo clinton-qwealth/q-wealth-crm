@@ -257,6 +257,21 @@ export type WorkflowTask = {
   completed_at: string | null
   created_at: string
   updated_at: string
+  /* ---- The plan, for a task that came from a workflow template ---------- */
+  /** Which template step this came from; null for a task typed in by hand. */
+  template_task_id: string | null
+  /** Where it sits in the workflow's plan. Null sorts after the plan. */
+  plan_position: number | null
+  /** Days after its prerequisites settle. Null once somebody types a due date,
+   *  which takes the task out of the rule for good. */
+  due_offset_days: number | null
+  /** Every task this one waits for. */
+  depends_on: string[]
+  /** Only the ones still OPEN — so an empty array means ready to start. */
+  blocked_by: string[]
+  is_blocked: boolean
+  /** Ticked while something it waited for was still open. Permanent. */
+  completed_while_blocked: boolean
 }
 
 /* ------------------------------------------------------------------------ */
@@ -411,7 +426,12 @@ export function isEmailFont(value: unknown): value is string {
 export const EMAIL_HEADING_LEVELS = [1] as const
 
 /** What a task's Tools and Actions tab can record. One today; the check constraint holds the same set. */
-export const TASK_ACTION_KINDS = ['email'] as const
+/* 'completed_while_blocked' is written by the database, in the same transaction
+   as the completion it records — never by a client. It appears here because the
+   History tab renders it, and because the three label maps in the task panel are
+   `Record<TaskActionKind, …>`, so adding it there is type-checked into all
+   three rather than remembered. */
+export const TASK_ACTION_KINDS = ['email', 'completed_while_blocked'] as const
 export type TaskActionKind = (typeof TASK_ACTION_KINDS)[number]
 
 /** A closed set, checked before any call — so a bad kind is a sentence, not a constraint name. */

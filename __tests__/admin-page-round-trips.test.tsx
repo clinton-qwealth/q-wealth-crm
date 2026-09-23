@@ -33,6 +33,9 @@ function stubClient() {
     /* The User groups tab's one read, 20 Sep 2026 — members and households
        both arrive as embeds, so it joins the wave rather than adding one. */
     user_groups: [{ id: 'ug1', name: 'North', status: 'active', created_at: '2026-09-20T00:00:00+00:00', user_group_members: [{ staff_users: { id: 's1', first_name: 'A', last_name: 'Adviser' } }], client_groups: [{ id: 'g1' }, { id: 'g2' }] }],
+    /* The Templates tab, 23 Sep 2026: one read, on the first wave. Its counts
+       arrive as embeds of ids, so the tab costs one query rather than four. */
+    workflow_templates: [{ id: 'tpl1', name: 'Onboarding', description: null, status: 'published', workflow_type: null, published_at: '2026-09-23T00:00:00+00:00', workflow_template_tasks: [{ id: 'tt1' }], workflow_template_roles: [{ id: 'r1' }], workflow_template_deployments: [] }],
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }
@@ -95,9 +98,13 @@ describe('/admin round-trip depth', () => {
     /* The User groups tab, 20 Sep 2026: one read, on the first wave. */
     expect(calls).toContain('user_groups')
     expect(calls, 'members and households come as embeds, not their own reads').not.toContain('user_group_members')
+    /* The Templates tab, 23 Sep 2026. Its tasks, roles and deployments are
+       embeds; a count query for any of them would show up here. */
+    expect(calls).toContain('workflow_templates')
+    expect(calls, 'the tasks come as an embed, not their own read').not.toContain('workflow_template_tasks')
     /* The view, not the table beneath it. */
     expect(calls).not.toContain('audit_log')
-    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles', 'user_groups']) {
+    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles', 'user_groups', 'workflow_templates']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })

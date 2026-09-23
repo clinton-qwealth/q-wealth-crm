@@ -3,6 +3,14 @@ import { privateDateOfBirth } from '@/lib/staff-private'
 import { fullName } from '@/lib/staff-name'
 import type { Staff } from '@/lib/staff'
 import type { AuditActor, AuditCursor, AuditEntry, AuditFilters } from '@/lib/audit'
+import {
+  TEMPLATE_STATUS_ORDER,
+  type TemplateDetail,
+  type TemplateRole,
+  type TemplateStatus,
+  type TemplateSummary,
+  type TemplateTask,
+} from '@/lib/templates'
 
 /**
  * The Administration page's readers.
@@ -277,4 +285,135 @@ export async function getAccessProfiles(): Promise<AccessProfileChoice[]> {
     .order('name')
   if (error) throw new Error(`The access profiles could not be read: ${error.message}`)
   return (data ?? []) as unknown as AccessProfileChoice[]
+}
+
+/* -------------------------------------------------------------------------- */
+/* Workflow templates                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every template, for the Templates tab.
+ *
+ * ONE read, with the counts as embeds of ids rather than aggregates — PostgREST
+ * does not serve an aggregate here, and `getUserGroupsForAdmin` above counts
+ * households the same way. So the tab joins the admin page's single wave.
+ *
+ * Archived templates are listed on purpose: restoring one is done from here,
+ * and a workflow deployed from it is still running.
+ */
+export async function getTemplatesForAdmin(): Promise<TemplateSummary[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_templates')
+    .select('id, name, description, status, workflow_type, published_at, workflow_template_tasks(id), workflow_template_roles(id), workflow_template_deployments(id)')
+    .order('name')
+  if (error) throw new Error(`The workflow templates could not be read: ${error.message}`)
+
+  const count = (v: unknown) => (Array.isArray(v) ? v.length : 0)
+  return (data ?? [])
+    .map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        id: row.id as string,
+        name: row.name as string,
+        description: (row.description as string | null) ?? null,
+        status: row.status as TemplateStatus,
+        workflow_type: (row.workflow_type as string | null) ?? null,
+        published_at: (row.published_at as string | null) ?? null,
+        task_count: count(row.workflow_template_tasks),
+        role_count: count(row.workflow_template_roles),
+        deployment_count: count(row.workflow_template_deployments),
+      }
+    })
+    .sort(
+      (a, b) =>
+        TEMPLATE_STATUS_ORDER[a.status] - TEMPLATE_STATUS_ORDER[b.status] ||
+        a.name.localeCompare(b.name),
+    )
+}
+
+/**
+ * One template with everything the editor draws: its roles, its tasks in order,
+ * and what each task waits for.
+ *
+ * ONE read, rooted on the template row, so the editor route is depth 1. The
+ * dependency edges arrive embedded on each task rather than as a second query —
+ * the same decision the workflow page makes for real tasks, and for the same
+ * reason.
+ *
+ * Returns null rather than throwing when the row is not there: to a
+ * non-administrator the RLS policy makes it invisible, and the route answers
+ * not-found, which is what a route you may not use should look like.
+ */
+export async function getTemplate(id: string): Promise<TemplateDetail | null> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_templates')
+    .select('id, name, description, status, workflow_type, published_at, workflow_template_roles(id, name), workflow_template_tasks(id, ordinal, subject, description, priority, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id), workflow_template_deployments(id)')
+    .eq('id', id)
+    .maybeSingle()
+  if (error || !data) return null
+
+  const row = data as Record<string, unknown>
+  const roleRows = Array.isArray(row.workflow_template_roles)
+    ? (row.workflow_template_roles as { id: string; name: string }[])
+    : []
+  const taskRows = Array.isArray(row.workflow_template_tasks)
+    ? (row.workflow_template_tasks as Record<string, unknown>[])
+    : []
+  /* The edges come embedded on the TEMPLATE, not nested under each task: there
+     are two foreign keys from an edge to a task and PostgREST cannot choose
+     between them without a hint, while the template's own key is unambiguous.
+     Grouped here, which costs one pass over a handful of rows. */
+  const edgeRows = Array.isArray(row.workflow_template_task_dependencies)
+    ? (row.workflow_template_task_dependencies as { task_id: string; depends_on_task_id: string }[])
+    : []
+  const prerequisites = new Map<string, string[]>()
+  for (const e of edgeRows) {
+    prerequisites.set(e.task_id, [...(prerequisites.get(e.task_id) ?? []), e.depends_on_task_id])
+  }
+
+  const roleName = new Map(roleRows.map((r) => [r.id, r.name]))
+  const tasks: TemplateTask[] = taskRows
+    .map((t) => {
+      return {
+        id: t.id as string,
+        ordinal: t.ordinal as number,
+        subject: t.subject as string,
+        description: (t.description as string | null) ?? null,
+        priority: t.priority as string,
+        role_id: t.role_id as string,
+        role_name: roleName.get(t.role_id as string) ?? '',
+        due_offset_days: t.due_offset_days as number,
+        depends_on: prerequisites.get(t.id as string) ?? [],
+      }
+    })
+    /* Ordering an embedded to-many in the query is the one thing PostgREST will
+       not do for us, so it is done here — documented where it happens, as
+       `embeddedUserGroups` is. */
+    .sort((a, b) => a.ordinal - b.ordinal)
+
+  const roles: TemplateRole[] = roleRows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      task_count: tasks.filter((t) => t.role_id === r.id).length,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    description: (row.description as string | null) ?? null,
+    status: row.status as TemplateStatus,
+    workflow_type: (row.workflow_type as string | null) ?? null,
+    published_at: (row.published_at as string | null) ?? null,
+    task_count: tasks.length,
+    role_count: roles.length,
+    deployment_count: Array.isArray(row.workflow_template_deployments)
+      ? row.workflow_template_deployments.length
+      : 0,
+    roles,
+    tasks,
+  }
 }

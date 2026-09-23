@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { fullName } from '@/lib/staff-name'
+import type { DeployableTemplate } from '@/lib/templates'
 import type {
   WorkflowPost, BoardCard, EntityChoice, TaskAction, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
 
@@ -79,29 +80,91 @@ export async function getStaffChoices(): Promise<{ id: string; name: string }[]>
 }
 
 /**
- * A workflow's tasks, **soonest due first**. Through the security_invoker view,
- * so a task is visible exactly when its workflow is.
+ * A workflow's tasks: **in plan order, then soonest due first**. Through the
+ * security_invoker view, so a task is visible exactly when its workflow is.
  *
- * `nullsFirst: false` puts the undated tasks after the dated ones rather than
- * before: Postgres would sort NULLs last for an ascending order anyway, but
- * saying so means the order does not depend on knowing that. A task with no
- * deadline is not due sooner than every task that has one.
+ * ## The order, and a comment here that used to be wrong
  *
- * `created_at` breaks the tie, so tasks sharing a due date — which
- * template-generated tasks will — keep the order they were made in rather than
- * shuffling between renders.
+ * This function used to lead with `due_at` and break ties on `created_at`,
+ * saying that tasks sharing a due date — "which template-generated tasks will"
+ * — would keep the order they were made in. **They would not.** `now()` is the
+ * TRANSACTION timestamp, so every task one deploy creates carries the identical
+ * `created_at` and the tie-break does nothing. Add the rule that a task waiting
+ * on another has no due date at all until that other is done, and a ten-task
+ * plan would have rendered in whatever order the heap returned.
+ *
+ * So `plan_position` leads, copied onto each task at deploy. `nullsFirst: false`
+ * is doing real work: a task somebody typed in by hand has no position, sorts
+ * after the plan, and then falls through to exactly the ordering this function
+ * has always used — which is why a workflow with no template looks the same as
+ * it did before templates existed.
  */
 export async function getWorkflowTasks(workflowId: string): Promise<WorkflowTask[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data } = await supabase
     .from('workflow_tasks_summary')
-    .select(
-      'id, workflow_id, task_type, subject, description, comment, due_at, status, priority, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at',
-    )
+    .select('id, workflow_id, task_type, subject, description, comment, due_at, status, priority, assigned_to_staff_id, assigned_to_name, completed_at, created_at, updated_at, template_task_id, plan_position, due_offset_days, depends_on, blocked_by, is_blocked, completed_while_blocked')
     .eq('workflow_id', workflowId)
+    .order('plan_position', { ascending: true, nullsFirst: false })
     .order('due_at', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
   return (data ?? []) as WorkflowTask[]
+}
+
+/**
+ * The published templates somebody may deploy into a workflow, with everything
+ * the deploy dialog needs to preview one.
+ *
+ * ONE read, joining the workflow page's existing wave. The roles and the tasks
+ * come as embeds because the dialog recomputes its preview on every change to a
+ * select — a round trip per keystroke would be absurd, and a loader per
+ * template would break the page's depth test.
+ *
+ * Archived and draft templates are absent: only a published one can be
+ * deployed, and the database refuses anything else anyway.
+ */
+export async function getDeployableTemplates(): Promise<DeployableTemplate[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_templates')
+    .select('id, name, description, workflow_type, workflow_template_roles(id, name), workflow_template_tasks(id, ordinal, subject, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id)')
+    .eq('status', 'published')
+    .order('name')
+  if (error) throw new Error(`The workflow templates could not be read: ${error.message}`)
+
+  return (data ?? []).map((r) => {
+    const row = r as Record<string, unknown>
+    const roles = Array.isArray(row.workflow_template_roles)
+      ? (row.workflow_template_roles as { id: string; name: string }[])
+      : []
+    const taskRows = Array.isArray(row.workflow_template_tasks)
+      ? (row.workflow_template_tasks as Record<string, unknown>[])
+      : []
+    const edges = Array.isArray(row.workflow_template_task_dependencies)
+      ? (row.workflow_template_task_dependencies as { task_id: string; depends_on_task_id: string }[])
+      : []
+    const prerequisites = new Map<string, string[]>()
+    for (const e of edges) {
+      prerequisites.set(e.task_id, [...(prerequisites.get(e.task_id) ?? []), e.depends_on_task_id])
+    }
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      description: (row.description as string | null) ?? null,
+      workflow_type: (row.workflow_type as string | null) ?? null,
+      roles: [...roles].sort((a, b) => a.name.localeCompare(b.name)),
+      // Plan order, sorted here: PostgREST will not order an embedded to-many.
+      tasks: taskRows
+        .sort((a, b) => (a.ordinal as number) - (b.ordinal as number))
+        .map((t) => ({
+          id: t.id as string,
+          subject: t.subject as string,
+          role_id: t.role_id as string,
+          due_offset_days: t.due_offset_days as number,
+          depends_on: prerequisites.get(t.id as string) ?? [],
+        })),
+    }
+  })
 }
 
 /**

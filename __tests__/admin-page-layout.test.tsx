@@ -28,12 +28,14 @@ vi.mock('@/lib/admin', () => ({
   getStaffForAdmin: async () => [],
   getAccessProfiles: async () => [],
   getUserGroupsForAdmin: async () => [],
+  getTemplatesForAdmin: async () => [],
 }))
 /* The two panels are stubbed: this file is about where they sit, not what they
    render, and both drag in the whole drawer and feed machinery otherwise. */
 vi.mock('@/components/audit-trail', () => ({ AuditTrail: () => <div data-slot="audit-panel" /> }))
 vi.mock('@/components/staff-list', () => ({ StaffList: () => <div data-slot="staff-panel" /> }))
 vi.mock('@/components/user-group-list', () => ({ UserGroupList: () => <div data-slot="user-groups-panel" /> }))
+vi.mock('@/components/template-list', () => ({ TemplateList: () => <div data-slot="templates-panel" /> }))
 
 const { default: AdminPage } = await import('@/app/(shell)/admin/page')
 const page = async () => render(await AdminPage())
@@ -45,9 +47,17 @@ beforeEach(() => {
 describe('the Administration page', () => {
   /* User groups between them since the evening of 20 September: another
      thing to use, so it sits with Users rather than after the trail. */
-  test('Users is the first tab, User groups the second, the audit trail last', async () => {
+  test('Users first, then User groups and Templates, the audit trail last', async () => {
     const { getAllByRole } = await page()
-    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Users', 'User groups', 'Audit trail'])
+    /* Templates joined on 23 Sep, THIRD: another thing an administrator comes
+       here to use, so it goes with Users and User groups rather than after the
+       trail, which stays last as the rarer errand. */
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Users',
+      'User groups',
+      'Templates',
+      'Audit trail',
+    ])
   })
 
   test('the first tab is the one selected, so Users is what opens', async () => {

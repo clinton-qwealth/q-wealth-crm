@@ -260,6 +260,7 @@ export type UserGroupState = { error: string } | { ok: true } | null
 const GROUP_PAGE = '/groups/[id]' as const
 
 const USER_GROUP_STATUSES = new Set(['active', 'archived'])
+const TEMPLATE_STATUSES = new Set(['draft', 'published', 'archived'])
 
 /**
  * Create a user group (territory) from the one-field dialog on the User groups
@@ -402,4 +403,249 @@ export async function addUsersToUserGroups(
      person already being a member, changes nothing for anybody to re-read. */
   if (results.some((r) => r.added > 0)) revalidatePath('/admin')
   return { ok: true, results }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Workflow templates                                                          */
+/* -------------------------------------------------------------------------- */
+
+const TEMPLATE_PAGE = '/admin/templates/[id]' as const
+
+/**
+ * Creating a template returns its ID, which is a deliberate widening of the
+ * house `{ ok: true }` shape. The dialog navigates straight into the editor on
+ * success; creating a template and then hunting for it in the list would be a
+ * wasted step for the one action that always has a next step.
+ */
+export type TemplateCreateState = { error: string } | { ok: true; id: string } | null
+
+export async function createWorkflowTemplate(
+  _prev: TemplateCreateState,
+  formData: FormData,
+): Promise<TemplateCreateState> {
+  const name = String(formData.get('name') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim()
+  if (!name) return { error: 'Give the template a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('create_workflow_template', {
+    p_name: name,
+    p_description: description || null,
+    p_workflow_type: null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return { ok: true, id: data as string }
+}
+
+export async function saveWorkflowTemplate(
+  _prev: UserGroupState,
+  formData: FormData,
+): Promise<UserGroupState> {
+  const id = String(formData.get('template_id') ?? '')
+  if (!UUID.test(id)) return { error: 'Choose a template.' }
+
+  // Key presence is the meaning: a form carrying only a name leaves the rest
+  // alone, exactly as saveUserGroupDetails does.
+  const patch: Record<string, unknown> = {}
+  for (const key of ['name', 'description'] as const) {
+    if (formData.has(key)) patch[key] = String(formData.get(key) ?? '').trim() || null
+  }
+  if (Object.keys(patch).length === 0) return { error: 'Nothing to save.' }
+  if (patch.name === null) return { error: 'Give the template a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('update_workflow_template_patch', {
+    p_template_id: id,
+    p_patch: patch,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function setWorkflowTemplateStatus(
+  templateId: string,
+  status: 'draft' | 'published' | 'archived',
+): Promise<UserGroupState> {
+  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
+  if (!TEMPLATE_STATUSES.has(status)) return { error: 'That is not a status.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_template_status', {
+    p_template_id: templateId,
+    p_status: status,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+/* ---- Roles: immediate actions, not a form -------------------------------- */
+
+export async function addTemplateRole(templateId: string, name: string): Promise<UserGroupState> {
+  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
+  if (!name.trim()) return { error: 'Give the role a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('create_workflow_template_role', {
+    p_template_id: templateId,
+    p_name: name.trim(),
+  })
+  if (error) return { error: error.message }
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function renameTemplateRole(roleId: string, name: string): Promise<UserGroupState> {
+  if (!UUID.test(roleId)) return { error: 'Choose a role.' }
+  if (!name.trim()) return { error: 'Give the role a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('rename_workflow_template_role', {
+    p_role_id: roleId,
+    p_name: name.trim(),
+  })
+  if (error) return { error: error.message }
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function removeTemplateRole(roleId: string): Promise<UserGroupState> {
+  if (!UUID.test(roleId)) return { error: 'Choose a role.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('remove_workflow_template_role', { p_role_id: roleId })
+  if (error) return { error: error.message }
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+/* ---- Tasks --------------------------------------------------------------- */
+
+export async function addTemplateTask(
+  _prev: UserGroupState,
+  formData: FormData,
+): Promise<UserGroupState> {
+  const templateId = String(formData.get('template_id') ?? '')
+  const roleId = String(formData.get('role_id') ?? '')
+  const subject = String(formData.get('subject') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim()
+  const offset = Number(formData.get('due_offset_days') ?? 0)
+
+  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
+  if (!subject) return { error: 'Give the task a subject.' }
+  if (!UUID.test(roleId)) return { error: 'Say who does this task.' }
+  if (!Number.isInteger(offset) || offset < 0) return { error: 'The offset is a whole number of days, or zero.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('add_workflow_template_task', {
+    p_template_id: templateId,
+    p_subject: subject,
+    p_role_id: roleId,
+    p_due_offset_days: offset,
+    p_description: description || null,
+    p_priority: 'medium',
+  })
+  if (error) return { error: error.message }
+
+  // A new task is appended last, so every existing task is a legal
+  // prerequisite; the form may send some.
+  const prerequisites = formData.getAll('depends_on').map(String).filter((v) => UUID.test(v))
+  if (prerequisites.length > 0) {
+    const { error: depError } = await supabase.rpc('set_workflow_template_dependencies', {
+      p_task_id: data as string,
+      p_depends_on_task_ids: prerequisites,
+    })
+    if (depError) return { error: depError.message }
+  }
+
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+export async function saveTemplateTask(
+  _prev: UserGroupState,
+  formData: FormData,
+): Promise<UserGroupState> {
+  const taskId = String(formData.get('task_id') ?? '')
+  if (!UUID.test(taskId)) return { error: 'Choose a task.' }
+
+  const patch: Record<string, unknown> = {}
+  if (formData.has('subject')) patch.subject = String(formData.get('subject') ?? '').trim()
+  if (formData.has('description')) patch.description = String(formData.get('description') ?? '').trim() || null
+  if (formData.has('role_id')) patch.role_id = String(formData.get('role_id') ?? '')
+  if (formData.has('due_offset_days')) {
+    const offset = Number(formData.get('due_offset_days') ?? 0)
+    if (!Number.isInteger(offset) || offset < 0) {
+      return { error: 'The offset is a whole number of days, or zero.' }
+    }
+    patch.due_offset_days = offset
+  }
+  if (patch.subject === '') return { error: 'Give the task a subject.' }
+
+  const supabase = await createSupabaseServerClient()
+  if (Object.keys(patch).length > 0) {
+    const { error } = await supabase.rpc('update_workflow_template_task_patch', {
+      p_task_id: taskId,
+      p_patch: patch,
+    })
+    if (error) return { error: error.message }
+  }
+
+  /* The sentinel is what makes "nothing ticked" mean "waits for nothing"
+     rather than "leave alone" — the same device CheckboxSet uses everywhere
+     else. Without it, a task's prerequisites could never be cleared. */
+  if (formData.has('depends_on_set')) {
+    const prerequisites = formData.getAll('depends_on').map(String).filter((v) => UUID.test(v))
+    const { error } = await supabase.rpc('set_workflow_template_dependencies', {
+      p_task_id: taskId,
+      p_depends_on_task_ids: prerequisites,
+    })
+    if (error) return { error: error.message }
+  }
+
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function removeTemplateTask(taskId: string): Promise<UserGroupState> {
+  if (!UUID.test(taskId)) return { error: 'Choose a task.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('remove_workflow_template_task', { p_task_id: taskId })
+  if (error) return { error: error.message }
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  revalidatePath('/admin')
+  return { ok: true }
+}
+
+/**
+ * The whole list, in its new order.
+ *
+ * One action for both the nudge buttons and the Move-to menu, so two controls
+ * for one value cannot disagree — the component computes the new order with
+ * `reordered()` and sends it here. The database refuses a partial list, which
+ * is what stops a stale client leaving a gap.
+ */
+export async function reorderTemplateTasks(
+  templateId: string,
+  taskIds: string[],
+): Promise<UserGroupState> {
+  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
+  if (taskIds.length === 0 || !taskIds.every((id) => UUID.test(id))) {
+    return { error: 'That is not an order.' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('reorder_workflow_template_tasks', {
+    p_template_id: templateId,
+    p_task_ids: taskIds,
+  })
+  if (error) return { error: error.message }
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
 }

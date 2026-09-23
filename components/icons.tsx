@@ -583,3 +583,27 @@ export function BoxIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/**
+ * Move up and move down, for reordering a template's tasks.
+ *
+ * A real arrow, not a rotated `ChevronDownIcon`: a chevron is this app's
+ * disclosure mark — it opens a menu, a drawer or a details block — and reusing
+ * it for "move this row" would make the two gestures look alike on the one
+ * screen that has both.
+ */
+export function ArrowUpIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} className={className} aria-hidden>
+      <path d="M10 15.5V4.5M10 4.5L5.5 9M10 4.5L14.5 9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function ArrowDownIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={1.6} className={className} aria-hidden>
+      <path d="M10 4.5v11M10 15.5L5.5 11M10 15.5L14.5 11" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
