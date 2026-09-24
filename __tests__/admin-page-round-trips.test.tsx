@@ -4,15 +4,22 @@ import { createRoundTripHarness } from './helpers/round-trips'
 /**
  * How deep is the chain of Supabase round trips behind /admin, and who pays it?
  *
- * Depth is counted, not timed — see `helpers/round-trips.ts`. The page is held
- * to ONE wave: the audit entries, the actor list, the staff and the profiles
- * are issued together, and a later tab's loader must join that `Promise.all`
- * rather than follow it.
+ * Depth is counted, not timed — see `helpers/round-trips.ts`. Each section is
+ * held to ONE wave: its reads are issued together, and a later tab's loader
+ * must join its section's `Promise.all` rather than follow it.
+ *
+ * And, since the menu of 24 September 2026, each section pays ONLY for itself.
+ * Before it, every visit to /admin issued all seven reads, the audit trail's
+ * two among them, because the page could not know which tab would be opened.
+ * The section is now in the URL, so a visit to User management that also
+ * fetched the audit log would be a regression — and the "not.toContain"
+ * assertions below are what catch it. They are as load-bearing as the depth.
  *
  * And the gate runs BEFORE the wave. A non-administrator must reach
  * `notFound()` having issued no query at all — not because RLS would leak
  * (it returns nothing), but because a page that spends round trips on rows it
- * will not show is a page that looks slow for the people it refuses.
+ * will not show is a page that looks slow for the people it refuses. A section
+ * that does not exist gets the same treatment.
  */
 const { wait, calls, issuedIn, measure } = createRoundTripHarness()
 
@@ -36,6 +43,9 @@ function stubClient() {
     /* The Templates tab, 23 Sep 2026: one read, on the first wave. Its counts
        arrive as embeds of ids, so the tab costs one query rather than four. */
     workflow_templates: [{ id: 'tpl1', name: 'Onboarding', description: null, status: 'published', workflow_type: null, published_at: '2026-09-23T00:00:00+00:00', workflow_template_tasks: [{ id: 'tt1' }], workflow_template_roles: [{ id: 'r1' }], workflow_template_deployments: [] }],
+    /* The Roles tab, 24 Sep 2026: the firm's list, with its template count as
+       an embed, so it too is one read on its section's wave. */
+    workflow_roles: [{ id: 'w1', name: 'Adviser', status: 'active', workflow_template_roles: [{ template_id: 'tpl1' }] }],
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }
@@ -83,28 +93,59 @@ beforeEach(() => {
   manageStaff = true
 })
 
+const section = (id: string) => () => AdminPage({ searchParams: Promise.resolve({ section: id }) })
+
 describe('/admin round-trip depth', () => {
-  test('an administrator gets the page in one wave', async () => {
+  test('User management — where /admin opens — is one wave, and only its own reads', async () => {
     const { depth, error } = await measure(() => AdminPage())
     expect(error).toBeUndefined()
     expect(depth).toBe(1)
-    expect(calls).toContain('audit_entries')
-    expect(calls).toContain('staff_directory')
     expect(calls).toContain('staff_users')
     expect(calls).toContain('access_profiles')
     /* In the SAME wave, not after it — the depth assertion above is what says
        so, and this says the call happened at all. */
     expect(calls).toContain('staff_last_seen')
-    /* The User groups tab, 20 Sep 2026: one read, on the first wave. */
+    /* The User groups tab: one read, members and households as embeds. */
     expect(calls).toContain('user_groups')
     expect(calls, 'members and households come as embeds, not their own reads').not.toContain('user_group_members')
-    /* The Templates tab, 23 Sep 2026. Its tasks, roles and deployments are
-       embeds; a count query for any of them would show up here. */
+    /* Nobody here asked for these. */
+    expect(calls, 'the audit trail is another section').not.toContain('audit_entries')
+    expect(calls, 'the actor list is another section').not.toContain('staff_directory')
+    expect(calls, 'templates are another section').not.toContain('workflow_templates')
+    expect(calls, 'roles are another section').not.toContain('workflow_roles')
+    for (const first of ['staff_users', 'access_profiles', 'user_groups', 'staff_last_seen']) {
+      expect(issuedIn[first], `${first} issued in wave`).toBe(0)
+    }
+  })
+
+  test('Workflow management is one wave: templates and the firm’s roles together', async () => {
+    const { depth, error } = await measure(section('workflows'))
+    expect(error).toBeUndefined()
+    expect(depth).toBe(1)
     expect(calls).toContain('workflow_templates')
+    expect(calls).toContain('workflow_roles')
+    /* Its tasks, roles and deployments are embeds; a count query for any of
+       them would show up here. */
     expect(calls, 'the tasks come as an embed, not their own read').not.toContain('workflow_template_tasks')
+    expect(calls, 'the junction comes as an embed, not its own read').not.toContain('workflow_template_roles')
+    expect(calls, 'the staff list is another section').not.toContain('staff_users')
+    expect(calls, 'the audit trail is another section').not.toContain('audit_entries')
+    for (const first of ['workflow_templates', 'workflow_roles']) {
+      expect(issuedIn[first], `${first} issued in wave`).toBe(0)
+    }
+  })
+
+  test('Observability is one wave: the entries and the actor list together', async () => {
+    const { depth, error } = await measure(section('observability'))
+    expect(error).toBeUndefined()
+    expect(depth).toBe(1)
+    expect(calls).toContain('audit_entries')
+    expect(calls).toContain('staff_directory')
     /* The view, not the table beneath it. */
     expect(calls).not.toContain('audit_log')
-    for (const first of ['audit_entries', 'staff_directory', 'staff_users', 'access_profiles', 'user_groups', 'workflow_templates']) {
+    expect(calls, 'the staff list is another section').not.toContain('staff_users')
+    expect(calls, 'templates are another section').not.toContain('workflow_templates')
+    for (const first of ['audit_entries', 'staff_directory']) {
       expect(issuedIn[first], `${first} issued in wave`).toBe(0)
     }
   })
@@ -112,6 +153,12 @@ describe('/admin round-trip depth', () => {
   test('anyone else is told the page does not exist, before a single query', async () => {
     manageStaff = false
     const { error } = await measure(() => AdminPage())
+    expect((error as Error | undefined)?.message).toBe('notFound')
+    expect(calls).toEqual([])
+  })
+
+  test('a section that does not exist is refused before a single query, too', async () => {
+    const { error } = await measure(section('nope'))
     expect((error as Error | undefined)?.message).toBe('notFound')
     expect(calls).toEqual([])
   })

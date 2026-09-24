@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { ADMIN_SECTIONS } from '@/lib/admin-sections'
 import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM, NAV_ITEMS } from '@/lib/nav'
 
 /**
@@ -83,6 +84,17 @@ describe('internal links', () => {
   test('every account-menu destination points at a route that exists', () => {
     for (const { href } of [...ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM]) {
       expect(routes.has(href), `${href} is in the account menu but is not a route`).toBe(true)
+    }
+  })
+
+  /* The Administration menu, 24 Sep 2026, rendered from a list the same way.
+     Its hrefs carry a `?section=` query, which is not part of the route — the
+     scan above strips it, and so does this. */
+  test('every Administration section points at a route that exists', () => {
+    expect(ADMIN_SECTIONS.length).toBeGreaterThan(0)
+    for (const { href } of ADMIN_SECTIONS) {
+      const path = href.split(/[?#]/)[0]
+      expect(routes.has(path), `${href} is on the Administration menu but is not a route`).toBe(true)
     }
   })
 })

@@ -607,3 +607,17 @@ export function ArrowDownIcon({ className = 'h-4 w-4' }: { className?: string })
     </svg>
   )
 }
+
+/**
+ * A heartbeat trace: the signal a running system gives off. The mark for
+ * Observability on the Administration menu, where the audit trail is that
+ * signal. Deliberately NOT EyeIcon, which already means "show the password"
+ * on the sign-in screens, nor GaugeIcon, which is a risk profile's rating.
+ */
+export function PulseIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M2.5 10.5h3.25l2-5 3.5 9 2.25-5.5 1.25 1.5h2.75" />
+    </svg>
+  )
+}

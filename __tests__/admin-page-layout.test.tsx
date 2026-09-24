@@ -2,14 +2,26 @@ import { render } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 /**
- * The Administration page's shape, asked for on 20 September 2026: three
- * columns like the group page, the working area in the middle, and **Users as
- * the first tab**, User groups second, the audit trail last.
+ * The Administration page's shape: three columns like the group page, a menu
+ * of sections on the left, the chosen section's tabs in the middle, and the
+ * right column reserved.
  *
- * Both are the kind of change that looks like nothing in a diff and is noticed
- * only by whoever opens the page expecting the old arrangement — so both are
- * pinned. The flanking columns are deliberately empty and stay in the markup:
- * they are the reserved space Clinton asked to keep, not placeholders.
+ * Asked for on 20 September 2026 as three columns with Users first; regrouped
+ * on 24 September behind a vertical menu — User management, Workflow
+ * management, Observability — with the section carried in `?section=`.
+ *
+ * Every assertion here is the kind of change that looks like nothing in a diff
+ * and is noticed only by whoever opens the page expecting the old arrangement,
+ * so each is pinned. What a plausible implementation gets wrong:
+ *
+ * - **The menu is buttons.** It renders, it switches, and nobody can send a
+ *   colleague to the roles list or use the back button to leave it.
+ * - **A bad `?section=` falls back to the first one.** A mistyped bookmark
+ *   silently opens User management and the roles look like they have vanished.
+ * - **The tabs remember the previous section's selection.** `Tabs` holds its
+ *   selected id in state; a move between sections that reuses the instance
+ *   leaves "templates" selected in a set that has no such tab. Only a key on
+ *   the section prevents it, and only a re-render across sections shows it.
  */
 let manageStaff = true
 
@@ -31,68 +43,144 @@ vi.mock('@/lib/admin', () => ({
   getTemplatesForAdmin: async () => [],
   getWorkflowRoles: async () => [],
 }))
-/* The two panels are stubbed: this file is about where they sit, not what they
-   render, and both drag in the whole drawer and feed machinery otherwise. */
+/* The panels are stubbed: this file is about where they sit, not what they
+   render, and each drags in the whole drawer and feed machinery otherwise. */
 vi.mock('@/components/audit-trail', () => ({ AuditTrail: () => <div data-slot="audit-panel" /> }))
 vi.mock('@/components/staff-list', () => ({ StaffList: () => <div data-slot="staff-panel" /> }))
 vi.mock('@/components/user-group-list', () => ({ UserGroupList: () => <div data-slot="user-groups-panel" /> }))
 vi.mock('@/components/template-list', () => ({ TemplateList: () => <div data-slot="templates-panel" /> }))
+vi.mock('@/components/workflow-role-list', () => ({ WorkflowRoleList: () => <div data-slot="roles-panel" /> }))
 
 const { default: AdminPage } = await import('@/app/(shell)/admin/page')
-const page = async () => render(await AdminPage())
+
+/** `/admin` with no section, or `/admin?section=<section>`. */
+const page = async (section?: string) =>
+  render(await AdminPage(section === undefined ? undefined : { searchParams: Promise.resolve({ section }) }))
+
+const columns = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
 
 beforeEach(() => {
   manageStaff = true
 })
 
-describe('the Administration page', () => {
-  /* User groups between them since the evening of 20 September: another
-     thing to use, so it sits with Users rather than after the trail. */
-  test('Users first, then User groups and Templates, the audit trail last', async () => {
-    const { getAllByRole } = await page()
-    /* Templates joined on 23 Sep, THIRD: another thing an administrator comes
-       here to use, so it goes with Users and User groups rather than after the
-       trail, which stays last as the rarer errand.
-
-       Roles joined on 24 Sep and sits IMMEDIATELY AFTER Templates, because it
-       holds the names a template picks from. The order is the assertion: a
-       role list parked after the audit trail, or ahead of the templates it
-       serves, would separate the two things read together. */
-    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual([
-      'Users',
-      'User groups',
-      'Templates',
-      'Roles',
-      'Audit trail',
+describe('the Administration menu', () => {
+  test('lists User management, Workflow management and Observability, in that order, as links', async () => {
+    const { getByRole } = await page()
+    const menu = getByRole('navigation', { name: 'Administration sections' })
+    const links = Array.from(menu.querySelectorAll('a'))
+    /* Links, with hrefs — not buttons. The menu is navigation, and a bookmark
+       to the roles list has to be possible. */
+    expect(links.map((a) => a.textContent)).toEqual([
+      'User management',
+      'Workflow management',
+      'Observability',
+    ])
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/admin',
+      '/admin?section=workflows',
+      '/admin?section=observability',
     ])
   })
 
-  test('the first tab is the one selected, so Users is what opens', async () => {
-    const { getAllByRole } = await page()
-    const selected = getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true')
-    expect(selected.map((t) => t.textContent)).toEqual(['Users'])
+  test('marks the section you are on, and only that one', async () => {
+    const { getByRole } = await page('workflows')
+    const menu = getByRole('navigation', { name: 'Administration sections' })
+    const current = Array.from(menu.querySelectorAll('a[aria-current="page"]'))
+    expect(current.map((a) => a.textContent)).toEqual(['Workflow management'])
   })
 
+  test('a section that does not exist is not found, the same as any other wrong URL', async () => {
+    await expect(page('nope')).rejects.toThrow('notFound')
+  })
+
+  /* Next hands a repeated key over as an array. Two sections is not a request
+     this page can honour, and picking the first would be guessing. */
+  test('two sections at once is not a request it will guess at', async () => {
+    await expect(
+      AdminPage({ searchParams: Promise.resolve({ section: ['users', 'workflows'] }) }),
+    ).rejects.toThrow('notFound')
+  })
+})
+
+describe('the sections', () => {
+  test('/admin opens on User management: Users first, then User groups', async () => {
+    const { getAllByRole, getByRole } = await page()
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Users', 'User groups'])
+    const menu = getByRole('navigation', { name: 'Administration sections' })
+    expect(menu.querySelector('a[aria-current="page"]')?.textContent).toBe('User management')
+  })
+
+  test('Workflow management holds Templates, then the Roles they pick from', async () => {
+    const { getAllByRole } = await page('workflows')
+    /* Roles after Templates, because it holds the names a template picks
+       from. The order is the assertion: a role list ahead of the templates
+       it serves would separate the two things read together. */
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Templates', 'Roles'])
+  })
+
+  test('Observability holds the audit trail', async () => {
+    const { getAllByRole } = await page('observability')
+    expect(getAllByRole('tab').map((t) => t.textContent)).toEqual(['Audit trail'])
+  })
+
+  test('the first tab is the one selected, so each section opens on something', async () => {
+    for (const section of [undefined, 'workflows', 'observability']) {
+      const { getAllByRole, unmount } = await page(section)
+      const selected = getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true')
+      expect(selected.length, `section ${section ?? 'users'} has one selected tab`).toBe(1)
+      unmount()
+    }
+  })
+
+  test('the heading names the section, not the page', async () => {
+    const { getByRole, unmount } = await page('workflows')
+    expect(getByRole('heading', { level: 1 }).textContent).toBe('Workflow management')
+    unmount()
+    const second = await page()
+    expect(second.getByRole('heading', { level: 1 }).textContent).toBe('User management')
+  })
+
+  /**
+   * The tab strip must not carry a selection across sections.
+   *
+   * Rendered as a re-render of ONE React root — first Workflow management,
+   * then User management into the same container — because that is what a
+   * client-side navigation does, and it is the only way the bug shows: a
+   * fresh render per section always starts clean. Mutation, and it was run:
+   * remove `key={section.id}` from `<Tabs>` in the page — this fails with
+   * zero selected tabs.
+   */
+  test('moving between sections does not carry the old selection over', async () => {
+    const first = await AdminPage({ searchParams: Promise.resolve({ section: 'workflows' }) })
+    const { rerender, getAllByRole } = render(first)
+    expect(getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent)).toEqual(['Templates'])
+
+    rerender(await AdminPage())
+    expect(getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent)).toEqual(['Users'])
+  })
+})
+
+describe('the columns', () => {
   /* 3 / 6 / 3 over the shell's twelve columns — the group page's split, so the
      two pages an administrator moves between do not rearrange themselves. */
-  test('three columns, with the working area in the middle', async () => {
+  test('three columns: the menu on the left, the working area in the middle', async () => {
     const { container } = await page()
     /* Only the three that carry a column span — the page heading is also
        `col-span-full` and is not one of the columns. */
-    const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
+    const cols = columns(container)
     expect(cols.map((c) => (c.className.match(/lg:col-span-\d+/) ?? [''])[0])).toEqual([
       'lg:col-span-3',
       'lg:col-span-6',
       'lg:col-span-3',
     ])
+    expect(cols[0]!.querySelector('nav'), 'the menu sits on the left').toBeTruthy()
     expect(cols[1]!.querySelector('[data-slot="staff-panel"]'), 'the work sits in the centre').toBeTruthy()
   })
 
-  test('the flanking columns are reserved and empty, not filled with placeholders', async () => {
+  test('the right column is reserved and empty, not filled with a placeholder', async () => {
     const { container } = await page()
-    const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
-    expect(cols[0]!.textContent).toBe('')
-    expect(cols[2]!.textContent).toBe('')
+    expect(columns(container)[2]!.textContent).toBe('')
   })
 
   test('somebody without manage_staff still gets not-found, before any of this', async () => {

@@ -1,7 +1,8 @@
 import { notFound, redirect } from 'next/navigation'
+import { AdminNav } from '@/components/admin-nav'
 import { AuditTrail } from '@/components/audit-trail'
 import { StaffList } from '@/components/staff-list'
-import { Tabs } from '@/components/tabs'
+import { Tabs, type TabItem } from '@/components/tabs'
 import { TemplateList } from '@/components/template-list'
 import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
 import { UserGroupList } from '@/components/user-group-list'
@@ -17,48 +18,37 @@ import {
   getWorkflowRoles,
   isAdmin,
 } from '@/lib/admin'
+import { resolveAdminSection, type AdminSectionId } from '@/lib/admin-sections'
 import { getCurrentStaff } from '@/lib/staff'
 import { fullName } from '@/lib/staff-name'
 
 export const metadata = { title: 'Administration · Q Wealth CRM' }
 
 /**
- * The Administration page: one page, tabs, for the people allowed to change
- * things. Asked for on 19 September; more will follow as tabs rather than pages.
+ * The Administration page: a menu of sections on the left, and the chosen
+ * section's tabs in the middle. For the people allowed to change things.
+ *
+ * ## The menu, since 24 September 2026
+ *
+ * Until then this was one card of five tabs, and the left column was reserved.
+ * Clinton asked for a vertical menu there, with the tabs regrouped beneath it:
+ *
+ *   User management       Users · User groups
+ *   Workflow management   Templates · Roles
+ *   Observability         Audit trail
+ *
+ * The sections are `ADMIN_SECTIONS` in `lib/admin-sections.ts`, which is where
+ * the menu grows. The chosen one travels in the URL as `?section=`, because a
+ * menu is navigation and navigation here is links — see that file for why.
  *
  * ## Three columns since 20 September, matching the group page
  *
- * The same 3 / 6 / 9 split over the shell's twelve-column grid, so the two
- * pages an administrator moves between do not rearrange themselves. The
- * flanking columns are **deliberately empty for now** — Clinton asked for the
- * shape first and will decide what goes in them. They are not placeholders
- * pretending to be content: nothing is rendered, and the working area simply
- * sits in the middle where the group page's does.
- *
- * **Users is the first tab**, also since 20 September. It is the one an
- * administrator comes here to use; the audit trail is what they consult when
- * something looks wrong, which is the rarer errand. The tab was called Staff
- * until later that day; the underlying table is still `staff_users`, and that
- * is deliberate — renaming a label is not renaming a schema.
- *
- * **User groups sits between them**, from the evening of the same day: another
- * thing to USE, so it goes with Users rather than after the trail. Territories
- * — a person belongs to many, a household to one; membership grants sight and
- * the toggle on a person restricts it. "User groups" rather than "groups"
- * because a group is already a client household everywhere else here.
- *
- * **Templates sits third**, from 23 September: a third thing to USE, so it goes
- * with the other two and ahead of the trail. Unlike them it is a LIST ONLY — a
- * template opens at `/admin/templates/[id]`, because a fifteen-task editor with
- * a panel per task does not fit a drawer, and because putting its read here
- * would charge every administrator for it on every visit.
- *
- * **Roles sits immediately after Templates**, from 24 September, because it is
- * where the names a template picks from are kept. It is a tab rather than a
- * section inside the template editor precisely because the list is NOT the
- * template's: a role belongs to the firm, is shared by every template, and
- * renaming one here reaches all of them. Putting it inside one template's page
- * would say the opposite.
+ * The same 3 / 6 / 3 split over the shell's twelve-column grid, so the two
+ * pages an administrator moves between do not rearrange themselves. The left
+ * column now holds the menu; the right is **still deliberately empty** —
+ * Clinton asked for the shape first and will decide what goes in it. Nothing
+ * is rendered there, and the working area sits in the middle where the group
+ * page's does.
  *
  * ## The gate comes before the wave
  *
@@ -67,92 +57,141 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  * the layout already fetched, so a non-administrator spends no round trip on
  * queries that RLS would return empty anyway — and answers `notFound()`, the
  * house rule: a route you may not use is indistinguishable from one that does
- * not exist.
+ * not exist. A section that does not exist gets the same answer, also before
+ * any query.
  *
- * One wave. The round-trip test asserts depth 1 exactly; a later tab's loader
- * joins this `Promise.all`, never a second `await`.
+ * ## One wave, and only the section's own
+ *
+ * Each section issues its reads together in a single `Promise.all` — the
+ * round-trip test asserts depth 1 exactly — and issues ONLY its own. Before
+ * the menu, every visit to `/admin` paid for all seven reads, the audit
+ * trail's two among them, because the page could not know which tab would be
+ * opened. Now it knows, and someone here to approve a user no longer waits on
+ * the audit log to do it. A later tab joins its section's `Promise.all`, never
+ * a second `await`.
  */
-export default async function AdminPage() {
+export default async function AdminPage(
+  { searchParams }: { searchParams?: Promise<{ section?: string | string[] }> } = {},
+) {
   const staff = await getCurrentStaff()
   if (!staff) redirect('/login')
   if (!isAdmin(staff)) notFound()
 
-  const [page, actors, staffRows, profiles, userGroups, templates, workflowRoles] = await Promise.all([
-    getAuditEntries({ limit: AUDIT_PAGE_SIZE }),
-    getAuditActors(),
-    getStaffForAdmin(),
-    getAccessProfiles(),
-    getUserGroupsForAdmin(),
-    getTemplatesForAdmin(),
-    getWorkflowRoles(),
-  ])
+  const section = resolveAdminSection((await searchParams)?.section)
+  if (!section) notFound()
 
-  /* Derived from the rows already in the wave, not a second count query. */
-  const pending = staffRows.filter((s) => s.status === 'pending').length
-  /* The members picker offers active people only; derived from the same rows. */
-  const staffChoices = staffRows.filter((s) => s.status === 'active').map((s) => ({ id: s.id, name: fullName(s) }))
+  const tabs = await sectionTabs(section.id, staff.id)
 
   return (
     <>
-      <PageHeading
-        eyebrow="Administration"
-        title="Administration"
-        description="Who changed what, who works here, and who may sign in. Administrators only."
-      />
+      <PageHeading eyebrow="Administration" title={section.label} description={section.description} />
 
-      {/* Left — reserved. See the note above. */}
-      <div className="col-span-full flex flex-col gap-4 lg:col-span-3" />
+      {/* Left — the menu */}
+      <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
+        <Card>
+          <AdminNav current={section.id} />
+        </Card>
+      </div>
 
       {/* Centre — the working area */}
       <div className="col-span-full lg:col-span-6">
         <Card>
           <Tabs
+            /* KEYED BY SECTION. `Tabs` keeps its selected tab in state, and
+               without the key the same instance would survive a move from
+               Workflow management to User management still believing
+               "templates" is selected — a tab set with nothing selected and
+               no panel showing. The key makes a new section a new instance. */
+            key={section.id}
             ground
             /* A floor under the working area, so switching to a quiet tab does
                not collapse the middle column. Same reasoning as the group
                page's. */
             minPanel={WORKING_AREA}
             label="Administration"
-            items={[
-              {
-                id: 'staff',
-                label: pending > 0 ? `Users (${pending} awaiting approval)` : 'Users',
-                panel: (
-                  <StaffList
-                    staff={staffRows}
-                    profiles={profiles}
-                    userGroups={userGroups.map((g) => ({ id: g.id, name: g.name, status: g.status }))}
-                    viewer={{ id: staff.id }}
-                  />
-                ),
-              },
-              {
-                id: 'user-groups',
-                label: 'User groups',
-                panel: <UserGroupList groups={userGroups} staff={staffChoices} />,
-              },
-              {
-                id: 'templates',
-                label: 'Templates',
-                panel: <TemplateList templates={templates} />,
-              },
-              {
-                id: 'workflow-roles',
-                label: 'Roles',
-                panel: <WorkflowRoleList roles={workflowRoles} />,
-              },
-              {
-                id: 'audit',
-                label: 'Audit trail',
-                panel: <AuditTrail initial={page.entries} initialHasMore={page.hasMore} actors={actors} />,
-              },
-            ]}
+            items={tabs}
           />
         </Card>
       </div>
 
-      {/* Right — reserved. */}
+      {/* Right — reserved. See the note above. */}
       <div className="col-span-full lg:col-span-3" />
     </>
   )
+}
+
+/**
+ * The tabs a section shows, with their data loaded — every read for the
+ * section in ONE `Promise.all`, and none for any other section.
+ *
+ * A `switch` with no `default`, on purpose: `AdminSectionId` is a closed union,
+ * so adding a section to `ADMIN_SECTIONS` without a case here is a type error
+ * rather than a blank page.
+ */
+async function sectionTabs(section: AdminSectionId, viewerId: string): Promise<TabItem[]> {
+  switch (section) {
+    case 'users': {
+      const [staffRows, profiles, userGroups] = await Promise.all([
+        getStaffForAdmin(),
+        getAccessProfiles(),
+        getUserGroupsForAdmin(),
+      ])
+      /* Derived from the rows already in the wave, not a second count query. */
+      const pending = staffRows.filter((s) => s.status === 'pending').length
+      /* The members picker offers active people only; derived from the same rows. */
+      const staffChoices = staffRows
+        .filter((s) => s.status === 'active')
+        .map((s) => ({ id: s.id, name: fullName(s) }))
+
+      return [
+        {
+          id: 'staff',
+          label: pending > 0 ? `Users (${pending} awaiting approval)` : 'Users',
+          panel: (
+            <StaffList
+              staff={staffRows}
+              profiles={profiles}
+              userGroups={userGroups.map((g) => ({ id: g.id, name: g.name, status: g.status }))}
+              viewer={{ id: viewerId }}
+            />
+          ),
+        },
+        {
+          id: 'user-groups',
+          label: 'User groups',
+          panel: <UserGroupList groups={userGroups} staff={staffChoices} />,
+        },
+      ]
+    }
+
+    case 'workflows': {
+      const [templates, workflowRoles] = await Promise.all([getTemplatesForAdmin(), getWorkflowRoles()])
+      return [
+        {
+          id: 'templates',
+          label: 'Templates',
+          panel: <TemplateList templates={templates} />,
+        },
+        /* Roles after Templates, because it holds the names a template picks
+           from — and here rather than inside a template's editor because the
+           list is the firm's, shared by every template. */
+        {
+          id: 'workflow-roles',
+          label: 'Roles',
+          panel: <WorkflowRoleList roles={workflowRoles} />,
+        },
+      ]
+    }
+
+    case 'observability': {
+      const [page, actors] = await Promise.all([getAuditEntries({ limit: AUDIT_PAGE_SIZE }), getAuditActors()])
+      return [
+        {
+          id: 'audit',
+          label: 'Audit trail',
+          panel: <AuditTrail initial={page.entries} initialHasMore={page.hasMore} actors={actors} />,
+        },
+      ]
+    }
+  }
 }

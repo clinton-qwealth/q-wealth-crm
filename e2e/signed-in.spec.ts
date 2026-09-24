@@ -160,21 +160,38 @@ test.describe('authenticated staff access', () => {
   })
 
   /**
-   * The Administration page's tabs, 20 Sep 2026: Users, User groups, Audit
-   * trail, in that order. Read-only — nothing here writes to the shared
-   * database — and skipped when the fixture account is not an administrator,
-   * because a non-administrator is told the page does not exist.
+   * The Administration page, since 24 Sep 2026: a menu of sections on the
+   * left, the chosen section's tabs in the middle, the section in the URL.
+   * Read-only — nothing here writes to the shared database — and skipped when
+   * the fixture account is not an administrator, because a non-administrator
+   * is told the page does not exist.
+   *
+   * The menu is walked by CLICKING, not by `goto`, because the links are what
+   * is under test: a menu of buttons would pass a `goto` for every section
+   * and still leave nobody able to bookmark the roles list.
    */
-  test('the administration page lists Users, User groups and the audit trail in that order', async ({ page }) => {
+  test('the administration page opens on User management, and its menu reaches the other sections', async ({ page }) => {
     const response = await page.goto('/admin')
     test.skip(response?.status() === 404, 'The fixture account is not an administrator.')
+
+    const menu = page.getByRole('navigation', { name: 'Administration sections' })
+    await expect(menu.getByRole('link')).toHaveText(['User management', 'Workflow management', 'Observability'])
+
     await expect(page.getByRole('tablist', { name: 'Administration' })).toBeVisible()
-    await expect(page.getByRole('tab')).toHaveText(['Users', 'User groups', 'Audit trail'])
+    await expect(page.getByRole('tab')).toHaveText(['Users', 'User groups'])
     await page.getByRole('tab', { name: 'User groups' }).click()
     /* Either state is legitimate on a live database; what is not is neither. */
     await expect(
       page.getByText('No user groups yet').or(page.getByRole('heading', { level: 3, name: 'User groups' })),
     ).toBeVisible()
+
+    await menu.getByRole('link', { name: 'Workflow management' }).click()
+    await expect(page).toHaveURL(/\/admin\?section=workflows$/)
+    await expect(page.getByRole('tab')).toHaveText(['Templates', 'Roles'])
+    await expect(menu.getByRole('link', { name: 'Workflow management' })).toHaveAttribute('aria-current', 'page')
+
+    await menu.getByRole('link', { name: 'Observability' }).click()
+    await expect(page.getByRole('tab')).toHaveText(['Audit trail'])
   })
 
   /**
