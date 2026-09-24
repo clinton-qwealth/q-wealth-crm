@@ -10,7 +10,11 @@ import { expect, test } from '@playwright/test'
  * silently, because a signed-in developer never sees it.
  */
 
-const PROTECTED = ['/', '/groups', '/profile', '/preferences', '/workflows', '/reports', '/admin']
+/* Every top-level route under (shell). `/help` was missing until the 24 Sep
+   2026 security review: it was protected -- proxy and shell layout both bounced
+   it -- but nothing here would have said so if that ever stopped being true.
+   When a route is added under (shell), add it here. */
+const PROTECTED = ['/', '/groups', '/profile', '/preferences', '/workflows', '/reports', '/admin', '/help']
 
 test.describe('unauthenticated access', () => {
   for (const path of PROTECTED) {
