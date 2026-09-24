@@ -1414,15 +1414,16 @@ function CompleteEarlyDialog({
   return (
     <dialog
       ref={dialogRef}
+      aria-labelledby="complete-early-title"
       onClose={onClose}
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose()
       }}
-      className="w-[min(30rem,calc(100vw-2rem))] rounded-lg p-0 backdrop:bg-neutral-900/20"
+      className="qw-modal m-auto w-[min(30rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
     >
       <div data-slot="complete-early" className="flex flex-col gap-4 p-5">
         <div>
-          <h2 className="text-base font-semibold text-neutral-900">Complete this out of order?</h2>
+          <h2 id="complete-early-title" className="text-base font-semibold text-neutral-900">Complete this out of order?</h2>
           <p className="mt-1 text-sm leading-relaxed text-neutral-600">
             “{task.subject}” is waiting on {waiting}. You can complete it anyway — it will be
             recorded on the task.

@@ -5,6 +5,7 @@ import { Tabs } from '@/components/tabs'
 import { TemplateList } from '@/components/template-list'
 import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
 import { UserGroupList } from '@/components/user-group-list'
+import { WorkflowRoleList } from '@/components/workflow-role-list'
 import {
   AUDIT_PAGE_SIZE,
   getAccessProfiles,
@@ -13,6 +14,7 @@ import {
   getStaffForAdmin,
   getTemplatesForAdmin,
   getUserGroupsForAdmin,
+  getWorkflowRoles,
   isAdmin,
 } from '@/lib/admin'
 import { getCurrentStaff } from '@/lib/staff'
@@ -51,6 +53,13 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  * a panel per task does not fit a drawer, and because putting its read here
  * would charge every administrator for it on every visit.
  *
+ * **Roles sits immediately after Templates**, from 24 September, because it is
+ * where the names a template picks from are kept. It is a tab rather than a
+ * section inside the template editor precisely because the list is NOT the
+ * template's: a role belongs to the firm, is shared by every template, and
+ * renaming one here reaches all of them. Putting it inside one template's page
+ * would say the opposite.
+ *
  * ## The gate comes before the wave
  *
  * `isAdmin` is `manage_staff`, the same flag `audit_log`'s own read policy
@@ -68,13 +77,14 @@ export default async function AdminPage() {
   if (!staff) redirect('/login')
   if (!isAdmin(staff)) notFound()
 
-  const [page, actors, staffRows, profiles, userGroups, templates] = await Promise.all([
+  const [page, actors, staffRows, profiles, userGroups, templates, workflowRoles] = await Promise.all([
     getAuditEntries({ limit: AUDIT_PAGE_SIZE }),
     getAuditActors(),
     getStaffForAdmin(),
     getAccessProfiles(),
     getUserGroupsForAdmin(),
     getTemplatesForAdmin(),
+    getWorkflowRoles(),
   ])
 
   /* Derived from the rows already in the wave, not a second count query. */
@@ -125,6 +135,11 @@ export default async function AdminPage() {
                 id: 'templates',
                 label: 'Templates',
                 panel: <TemplateList templates={templates} />,
+              },
+              {
+                id: 'workflow-roles',
+                label: 'Roles',
+                panel: <WorkflowRoleList roles={workflowRoles} />,
               },
               {
                 id: 'audit',

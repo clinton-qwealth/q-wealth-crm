@@ -10,8 +10,14 @@ import {
   type TemplateStatus,
   type TemplateSummary,
   type TemplateTask,
+  type WorkflowRole,
 } from '@/lib/templates'
-import { TEMPLATES_SELECT, USER_GROUPS_SELECT } from '@/lib/admin-selects'
+import {
+  TEMPLATE_DETAIL_SELECT,
+  TEMPLATES_SELECT,
+  USER_GROUPS_SELECT,
+  WORKFLOW_ROLES_SELECT,
+} from '@/lib/admin-selects'
 
 /**
  * The Administration page's readers.
@@ -306,6 +312,38 @@ export async function getUserGroupsForAdmin(): Promise<UserGroupRow[]> {
   })
 }
 
+/**
+ * The firm's workflow roles, with how many templates use each.
+ *
+ * Read for the Administration screen AND for the template builder's pickers,
+ * which is why it lives here rather than beside the template reads: the same
+ * list answers "what may I curate" and "what may I choose".
+ *
+ * Archived roles are returned. The screen needs them to offer a restore, and
+ * the pickers filter them out themselves — an archived role stays on a template
+ * already using it, so hiding it here would leave that template naming
+ * something the list denies exists.
+ */
+export async function getWorkflowRoles(): Promise<WorkflowRole[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('workflow_roles')
+    .select(WORKFLOW_ROLES_SELECT)
+    .order('name')
+  if (error) throw new Error(`The firm's roles could not be read: ${error.message}`)
+  return (data ?? []).map((r) => {
+    const row = r as Record<string, unknown>
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      status: row.status as string,
+      template_count: Array.isArray(row.workflow_template_roles)
+        ? row.workflow_template_roles.length
+        : 0,
+    }
+  })
+}
+
 /** The profiles an administrator may assign, with what each permits. */
 export async function getAccessProfiles(): Promise<AccessProfileChoice[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
@@ -379,15 +417,26 @@ export async function getTemplate(id: string): Promise<TemplateDetail | null> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('workflow_templates')
-    .select('id, name, description, status, workflow_type, published_at, workflow_template_roles(id, name), workflow_template_tasks(id, ordinal, subject, description, priority, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id), workflow_template_deployments(id)')
+    .select(TEMPLATE_DETAIL_SELECT)
     .eq('id', id)
     .maybeSingle()
   if (error || !data) return null
 
   const row = data as Record<string, unknown>
-  const roleRows = Array.isArray(row.workflow_template_roles)
-    ? (row.workflow_template_roles as { id: string; name: string }[])
-    : []
+  /* The name arrives nested, because it belongs to the firm's row rather than
+     to the template's. Flattened here so nothing downstream has to know. */
+  const roleRows = (
+    Array.isArray(row.workflow_template_roles)
+      ? (row.workflow_template_roles as {
+          id: string
+          workflow_role_id: string
+          workflow_roles?: { name?: string } | { name?: string }[] | null
+        }[])
+      : []
+  ).map((r) => {
+    const f = Array.isArray(r.workflow_roles) ? r.workflow_roles[0] : r.workflow_roles
+    return { id: r.id, workflow_role_id: r.workflow_role_id, name: f?.name ?? '' }
+  })
   const taskRows = Array.isArray(row.workflow_template_tasks)
     ? (row.workflow_template_tasks as Record<string, unknown>[])
     : []
@@ -404,6 +453,7 @@ export async function getTemplate(id: string): Promise<TemplateDetail | null> {
   }
 
   const roleName = new Map(roleRows.map((r) => [r.id, r.name]))
+  const firmRoleOf = new Map(roleRows.map((r) => [r.id, r.workflow_role_id]))
   const tasks: TemplateTask[] = taskRows
     .map((t) => {
       return {
@@ -413,6 +463,7 @@ export async function getTemplate(id: string): Promise<TemplateDetail | null> {
         description: (t.description as string | null) ?? null,
         priority: t.priority as string,
         role_id: t.role_id as string,
+        workflow_role_id: firmRoleOf.get(t.role_id as string) ?? '',
         role_name: roleName.get(t.role_id as string) ?? '',
         due_offset_days: t.due_offset_days as number,
         depends_on: prerequisites.get(t.id as string) ?? [],
@@ -426,6 +477,7 @@ export async function getTemplate(id: string): Promise<TemplateDetail | null> {
   const roles: TemplateRole[] = roleRows
     .map((r) => ({
       id: r.id,
+      workflow_role_id: r.workflow_role_id,
       name: r.name,
       task_count: tasks.filter((t) => t.role_id === r.id).length,
     }))

@@ -26,6 +26,9 @@ const task = (over: Partial<TemplateTask> & { id: string; ordinal: number }): Te
   description: null,
   priority: 'medium',
   role_id: 'r1',
+  /* The template's role row is `r1`; `w1` is the FIRM role behind it, which is
+     what the editor's pickers are keyed by. Two ids on purpose. */
+  workflow_role_id: 'w1',
   role_name: 'Adviser',
   due_offset_days: 0,
   depends_on: [],
@@ -153,8 +156,8 @@ describe('templateIssues', () => {
       detail({
         tasks: [task({ id: 'a', ordinal: 0 })],
         roles: [
-          { id: 'r1', name: 'Adviser', task_count: 1 },
-          { id: 'r2', name: 'Paraplanner', task_count: 0 },
+          { id: 'r1', workflow_role_id: 'w1', name: 'Adviser', task_count: 1 },
+          { id: 'r2', workflow_role_id: 'w2', name: 'Paraplanner', task_count: 0 },
         ],
       }),
     )
@@ -165,7 +168,7 @@ describe('templateIssues', () => {
   test('a complete template has nothing to fix', () => {
     expect(
       templateIssues(
-        detail({ tasks: [task({ id: 'a', ordinal: 0 })], roles: [{ id: 'r1', name: 'Adviser', task_count: 1 }] }),
+        detail({ tasks: [task({ id: 'a', ordinal: 0 })], roles: [{ id: 'r1', workflow_role_id: 'w1', name: 'Adviser', task_count: 1 }] }),
       ),
     ).toEqual([])
   })

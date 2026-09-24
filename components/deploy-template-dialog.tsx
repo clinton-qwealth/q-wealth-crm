@@ -121,13 +121,14 @@ export function DeployTemplateDialog({
 
       <dialog
         ref={dialogRef}
+        aria-labelledby="deploy-template-title"
         onClick={(e) => {
           if (e.target === dialogRef.current) hide()
         }}
-        className="w-[min(36rem,calc(100vw-2rem))] rounded-lg p-0 backdrop:bg-neutral-900/20"
+        className="qw-modal m-auto w-[min(36rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
       >
         <form ref={formRef} action={formAction} className="flex flex-col gap-4 p-5">
-          <h2 className="text-base font-semibold text-neutral-900">Use a workflow template</h2>
+          <h2 id="deploy-template-title" className="text-base font-semibold text-neutral-900">Use a workflow template</h2>
           <input type="hidden" name="workflow_id" value={workflowId} />
 
           <label className="flex flex-col gap-1 text-sm">

@@ -127,14 +127,15 @@ export function NewTemplateForm({ triggerVariant = 'primary' }: { triggerVariant
 
       <dialog
         ref={dialogRef}
+        aria-labelledby="new-template-title"
         onClick={(e) => {
           if (e.target === dialogRef.current) hide()
         }}
-        className="w-[min(28rem,calc(100vw-2rem))] rounded-lg p-0 backdrop:bg-neutral-900/20"
+        className="qw-modal m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
       >
         <form ref={formRef} action={formAction} className="flex flex-col gap-4 p-5">
           <div>
-            <h2 className="text-base font-semibold text-neutral-900">New workflow template</h2>
+            <h2 id="new-template-title" className="text-base font-semibold text-neutral-900">New workflow template</h2>
             <p className="mt-1 text-xs text-neutral-500">
               Name it now; the tasks, the roles and the order come next.
             </p>

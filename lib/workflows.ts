@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { fullName } from '@/lib/staff-name'
+import { DEPLOYABLE_TEMPLATES_SELECT } from '@/lib/admin-selects'
 import type { DeployableTemplate } from '@/lib/templates'
 import type {
   WorkflowPost, BoardCard, EntityChoice, TaskAction, WorkflowDetail, WorkflowTask } from '@/lib/workflow-board'
@@ -127,16 +128,27 @@ export async function getDeployableTemplates(): Promise<DeployableTemplate[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('workflow_templates')
-    .select('id, name, description, workflow_type, workflow_template_roles(id, name), workflow_template_tasks(id, ordinal, subject, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id)')
+    .select(DEPLOYABLE_TEMPLATES_SELECT)
     .eq('status', 'published')
     .order('name')
   if (error) throw new Error(`The workflow templates could not be read: ${error.message}`)
 
   return (data ?? []).map((r) => {
     const row = r as Record<string, unknown>
-    const roles = Array.isArray(row.workflow_template_roles)
-      ? (row.workflow_template_roles as { id: string; name: string }[])
+    /* The name now comes from the firm's list one level down, so it is
+       flattened here. PostgREST hands a to-one embed back as an object, but
+       will hand back an array if it ever decides the relationship is to-many —
+       both are accepted rather than assumed, as `getTemplate` does. */
+    const roleRows = Array.isArray(row.workflow_template_roles)
+      ? (row.workflow_template_roles as {
+          id: string
+          workflow_roles?: { name?: string } | { name?: string }[] | null
+        }[])
       : []
+    const roles = roleRows.map((r) => {
+      const firm = Array.isArray(r.workflow_roles) ? r.workflow_roles[0] : r.workflow_roles
+      return { id: r.id, name: firm?.name ?? '' }
+    })
     const taskRows = Array.isArray(row.workflow_template_tasks)
       ? (row.workflow_template_tasks as Record<string, unknown>[])
       : []

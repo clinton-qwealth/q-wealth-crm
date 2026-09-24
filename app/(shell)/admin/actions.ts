@@ -483,35 +483,96 @@ export async function setWorkflowTemplateStatus(
   return { ok: true }
 }
 
-/* ---- Roles: immediate actions, not a form -------------------------------- */
+/* ---- The firm's roles ---------------------------------------------------- */
 
-export async function addTemplateRole(templateId: string, name: string): Promise<UserGroupState> {
-  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
-  if (!name.trim()) return { error: 'Give the role a name.' }
+/*
+ * A role belongs to the FIRM, not to a template. These three curate that one
+ * list; the template actions below only say which of it a template uses.
+ *
+ * Both pages are revalidated by all three, because the list is read twice: the
+ * Administration screen manages it, and every template builder picks from it.
+ * A rename in particular reaches every template at once — which is the point
+ * of having one list, and the reason `renameTemplateRole` no longer exists.
+ */
+export async function createWorkflowRole(
+  _prev: UserGroupState,
+  formData: FormData,
+): Promise<UserGroupState> {
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) return { error: 'Give the role a name.' }
 
   const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.rpc('create_workflow_template_role', {
-    p_template_id: templateId,
-    p_name: name.trim(),
-  })
+  const { error } = await supabase.rpc('create_workflow_role', { p_name: name })
   if (error) return { error: error.message }
+  revalidatePath('/admin')
   revalidatePath(TEMPLATE_PAGE, 'page')
   return { ok: true }
 }
 
-export async function renameTemplateRole(roleId: string, name: string): Promise<UserGroupState> {
+export async function renameWorkflowRole(roleId: string, name: string): Promise<UserGroupState> {
   if (!UUID.test(roleId)) return { error: 'Choose a role.' }
   if (!name.trim()) return { error: 'Give the role a name.' }
 
   const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.rpc('rename_workflow_template_role', {
+  const { error } = await supabase.rpc('rename_workflow_role', {
     p_role_id: roleId,
     p_name: name.trim(),
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+/*
+ * Archived, not deleted. A role that is on a published template or a deployed
+ * workflow cannot be removed without taking the history with it, so the list
+ * hides it from the pickers instead and leaves every existing reference alone.
+ */
+export async function setWorkflowRoleStatus(
+  roleId: string,
+  status: 'active' | 'archived',
+): Promise<UserGroupState> {
+  if (!UUID.test(roleId)) return { error: 'Choose a role.' }
+  if (status !== 'active' && status !== 'archived') return { error: 'Choose a status.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('set_workflow_role_status', {
+    p_role_id: roleId,
+    p_status: status,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath(TEMPLATE_PAGE, 'page')
+  return { ok: true }
+}
+
+/* ---- Which of those roles a template uses -------------------------------- */
+
+/*
+ * Takes a role that already exists rather than a name to invent. The previous
+ * version called `create_workflow_template_role(template, name)`, which made a
+ * fresh role per template and left the firm with four spellings of "Adviser".
+ */
+export async function addTemplateRole(
+  templateId: string,
+  workflowRoleId: string,
+): Promise<UserGroupState> {
+  if (!UUID.test(templateId)) return { error: 'Choose a template.' }
+  if (!UUID.test(workflowRoleId)) return { error: 'Choose a role.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('add_workflow_template_role', {
+    p_template_id: templateId,
+    p_workflow_role_id: workflowRoleId,
   })
   if (error) return { error: error.message }
   revalidatePath(TEMPLATE_PAGE, 'page')
   return { ok: true }
 }
+
+/* There is no renameTemplateRole. See `renameWorkflowRole` above: a role has
+   one name, on the firm's list, and that is where it is changed. */
 
 export async function removeTemplateRole(roleId: string): Promise<UserGroupState> {
   if (!UUID.test(roleId)) return { error: 'Choose a role.' }
@@ -530,21 +591,21 @@ export async function addTemplateTask(
   formData: FormData,
 ): Promise<UserGroupState> {
   const templateId = String(formData.get('template_id') ?? '')
-  const roleId = String(formData.get('role_id') ?? '')
+  const workflowRoleId = String(formData.get('workflow_role_id') ?? '')
   const subject = String(formData.get('subject') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
   const offset = Number(formData.get('due_offset_days') ?? 0)
 
   if (!UUID.test(templateId)) return { error: 'Choose a template.' }
   if (!subject) return { error: 'Give the task a subject.' }
-  if (!UUID.test(roleId)) return { error: 'Say who does this task.' }
+  if (!UUID.test(workflowRoleId)) return { error: 'Say who does this task.' }
   if (!Number.isInteger(offset) || offset < 0) return { error: 'The offset is a whole number of days, or zero.' }
 
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase.rpc('add_workflow_template_task', {
     p_template_id: templateId,
     p_subject: subject,
-    p_role_id: roleId,
+    p_workflow_role_id: workflowRoleId,
     p_due_offset_days: offset,
     p_description: description || null,
     p_priority: 'medium',
@@ -577,7 +638,12 @@ export async function saveTemplateTask(
   const patch: Record<string, unknown> = {}
   if (formData.has('subject')) patch.subject = String(formData.get('subject') ?? '').trim()
   if (formData.has('description')) patch.description = String(formData.get('description') ?? '').trim() || null
-  if (formData.has('role_id')) patch.role_id = String(formData.get('role_id') ?? '')
+  /* `workflow_role_id`, not `role_id`. The patch function names the old key as
+     an explicit error rather than ignoring it, because a silently dropped key
+     would have looked like a save that worked. */
+  if (formData.has('workflow_role_id')) {
+    patch.workflow_role_id = String(formData.get('workflow_role_id') ?? '')
+  }
   if (formData.has('due_offset_days')) {
     const offset = Number(formData.get('due_offset_days') ?? 0)
     if (!Number.isInteger(offset) || offset < 0) {

@@ -29,6 +29,7 @@ vi.mock('@/lib/admin', () => ({
   getAccessProfiles: async () => [],
   getUserGroupsForAdmin: async () => [],
   getTemplatesForAdmin: async () => [],
+  getWorkflowRoles: async () => [],
 }))
 /* The two panels are stubbed: this file is about where they sit, not what they
    render, and both drag in the whole drawer and feed machinery otherwise. */
@@ -51,11 +52,17 @@ describe('the Administration page', () => {
     const { getAllByRole } = await page()
     /* Templates joined on 23 Sep, THIRD: another thing an administrator comes
        here to use, so it goes with Users and User groups rather than after the
-       trail, which stays last as the rarer errand. */
+       trail, which stays last as the rarer errand.
+
+       Roles joined on 24 Sep and sits IMMEDIATELY AFTER Templates, because it
+       holds the names a template picks from. The order is the assertion: a
+       role list parked after the audit trail, or ahead of the templates it
+       serves, would separate the two things read together. */
     expect(getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Users',
       'User groups',
       'Templates',
+      'Roles',
       'Audit trail',
     ])
   })

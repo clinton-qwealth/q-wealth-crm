@@ -38,8 +38,44 @@ export const USER_GROUPS_SELECT =
 export const TEMPLATES_SELECT =
   'id, name, description, status, workflow_type, published_at, workflow_template_tasks(id), workflow_template_roles(id), workflow_template_deployments(id)'
 
+/**
+ * One template, with everything the editor draws.
+ *
+ * `workflow_template_roles(... workflow_roles(name))` is a TWO-LEVEL embed, and
+ * the second level is new as of 24 September 2026 — the name moved off the
+ * junction row and onto the firm's list. That is exactly the shape of change
+ * that broke the user groups select: one migration, no TypeScript, a failure
+ * that appears when PostgREST next reloads. Hence its place here.
+ */
+export const TEMPLATE_DETAIL_SELECT =
+  'id, name, description, status, workflow_type, published_at, workflow_template_roles(id, workflow_role_id, workflow_roles(name)), workflow_template_tasks(id, ordinal, subject, description, priority, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id), workflow_template_deployments(id)'
+
+/**
+ * The firm's roles, with how many templates use each.
+ *
+ * The embed runs BACK down the same foreign key the select above runs up. One
+ * key, so it resolves — but it is the pair of them that makes that true, which
+ * is why both are probed rather than just the one that is read more often.
+ */
+export const WORKFLOW_ROLES_SELECT = 'id, name, status, workflow_template_roles(template_id)'
+
+/**
+ * The published templates the deploy dialog offers.
+ *
+ * Not on the Administration page — it is read by `/workflows` — but it lives
+ * here for the same reason the rest do, and because it names the SAME embed
+ * the template editor does. It was the last place still selecting
+ * `workflow_template_roles.name`, a column dropped on 24 September; nothing in
+ * TypeScript said so, and only a probe against the live schema would have.
+ */
+export const DEPLOYABLE_TEMPLATES_SELECT =
+  'id, name, description, workflow_type, workflow_template_roles(id, workflow_roles(name)), workflow_template_tasks(id, ordinal, subject, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id)'
+
 /** Every select above, named, so a test can walk them without repeating them. */
 export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: string }>> = {
   'user groups': { from: 'user_groups', select: USER_GROUPS_SELECT },
   'workflow templates': { from: 'workflow_templates', select: TEMPLATES_SELECT },
+  'one template': { from: 'workflow_templates', select: TEMPLATE_DETAIL_SELECT },
+  'the firm’s roles': { from: 'workflow_roles', select: WORKFLOW_ROLES_SELECT },
+  'deployable templates': { from: 'workflow_templates', select: DEPLOYABLE_TEMPLATES_SELECT },
 }

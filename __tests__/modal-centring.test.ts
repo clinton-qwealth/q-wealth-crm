@@ -26,14 +26,71 @@ import { describe, expect, test } from 'vitest'
 const dir = resolve(__dirname, '../components')
 const files = readdirSync(dir).filter((f) => f.endsWith('.tsx'))
 
-/** Every `className="..."` string in the components that carries `qw-modal`. */
-const modalClasses = files.flatMap((file) => {
-  const source = readFileSync(resolve(dir, file), 'utf8')
-  return [...source.matchAll(/className="([^"]*\bqw-modal\b[^"]*)"/g)].map((m) => ({
-    file,
-    classes: m[1],
-  }))
-})
+/**
+ * EVERY `<dialog>` IN THE COMPONENTS, not every dialog that already opted in.
+ *
+ * This scanned for `className="...qw-modal..."` until 24 September 2026, which
+ * made it blind to the only mistake it exists to catch. Three dialogs — the
+ * template builder's Add a task, Administration's New workflow template, and
+ * Use a workflow template — were written without `qw-modal` at all, so the scan
+ * never saw them, every assertion below passed, and all three opened hard
+ * against the top-left corner in production until somebody looked at one.
+ *
+ * A guard whose selector is the thing being forgotten cannot catch the
+ * forgetting. So the scan now starts from the element and works out, and a
+ * dialog carrying neither class is itself a failure.
+ */
+/** Source with comments removed, so a `<dialog>` written in prose is not scanned. */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+}
+
+/**
+ * The attributes of each real `<dialog>` opening tag.
+ *
+ * Walked brace-aware rather than matched with `[^>]*`, which was the first
+ * attempt and found NOTHING: every one of these tags contains
+ * `onClick={(e) => ...}`, and the `>` of the arrow ends that character class
+ * immediately. A scan that silently matches nothing is the same failure this
+ * file is about, one level up — so the count assertion below is what catches it.
+ */
+function dialogTags(source: string): string[] {
+  const src = code(source)
+  const tags: string[] = []
+  let i = 0
+  for (;;) {
+    i = src.indexOf('<dialog', i)
+    if (i === -1) break
+    i += '<dialog'.length
+    const next = src[i]
+    /* `<dialog>` with no attributes is not one of ours. */
+    if (next === undefined || !/\s/.test(next)) continue
+    let depth = 0
+    let j = i
+    for (; j < src.length; j += 1) {
+      const c = src[j]
+      if (c === '{') depth += 1
+      else if (c === '}') depth -= 1
+      else if (c === '>' && depth === 0) break
+    }
+    tags.push(src.slice(i, j))
+    i = j
+  }
+  return tags
+}
+
+const dialogs = files.flatMap((file) =>
+  dialogTags(readFileSync(resolve(dir, file), 'utf8')).map((attrs) => {
+    /* Handles both `className="…"` and `className={\`…\`}` — the drawer builds
+       its class from a template literal, and the first version of this regex
+       captured an empty string for it and reported it as unclassified. */
+    const cls = /className=\{?\s*["`]([^"`]*)/.exec(attrs)
+    return { file, attrs, classes: cls ? cls[1] : '', hasClassName: /className=/.test(attrs) }
+  }),
+)
+
+/** A centred modal. Drawers slide in from the edge and are a different thing. */
+const modalClasses = dialogs.filter((d) => /\bqw-modal\b/.test(d.classes))
 
 describe('every modal dialog', () => {
   /* If this finds nothing the assertions below are all vacuously true, which is
@@ -41,6 +98,36 @@ describe('every modal dialog', () => {
   test('there are modals to check, and the scan found them', () => {
     expect(modalClasses.length).toBeGreaterThanOrEqual(7)
     expect(new Set(modalClasses.map((m) => m.file)).size).toBeGreaterThanOrEqual(7)
+  })
+
+  /**
+   * THE ASSERTION THE OLD SCAN COULD NOT MAKE.
+   *
+   * Every `<dialog>` is one of two things: a centred modal (`qw-modal`) or a
+   * slide-in panel (`qw-drawer`). A dialog wearing neither has no transition, no
+   * backdrop and — because Tailwind's preflight zeroes its margin — no centring
+   * either. Naming both means a new kind of panel has to be a deliberate
+   * decision here rather than an omission over there.
+   *
+   * Mutation, and it was run: drop `qw-modal` from template-editor.tsx and this
+   * fails naming that file.
+   */
+  test('is a modal or a drawer, and says which', () => {
+    for (const { file, classes, hasClassName } of dialogs) {
+      expect(hasClassName, `${file} has a <dialog> with no className at all`).toBe(true)
+      const kind = /\bqw-modal\b/.test(classes) || /\bqw-drawer\b/.test(classes)
+      expect(kind, `${file} has a <dialog> that is neither qw-modal nor qw-drawer`).toBe(true)
+    }
+  })
+
+  /* A dialog that opens is a dialog somebody must be able to name. */
+  test('and carries an accessible name', () => {
+    for (const { file, attrs } of dialogs) {
+      expect(
+        /aria-labelledby=|aria-label=/.test(attrs),
+        `${file} opens a dialog with no accessible name`,
+      ).toBe(true)
+    }
   })
 
   /**

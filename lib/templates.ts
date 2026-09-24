@@ -27,7 +27,28 @@ export const TEMPLATE_STATUS_ORDER: Record<TemplateStatus, number> = {
   archived: 2,
 }
 
-export type TemplateRole = { id: string; name: string; task_count: number }
+/**
+ * A role a template uses.
+ *
+ * `id` is the template's own row — the thing a task points at and the key the
+ * deploy dialog maps to a person. `workflow_role_id` and `name` come from the
+ * FIRM's list, which is where the name now lives, so a firm-wide rename reaches
+ * every template using it.
+ */
+export type TemplateRole = {
+  id: string
+  workflow_role_id: string
+  name: string
+  task_count: number
+}
+
+/** One of the firm's roles, as the admin list and the pickers need it. */
+export type WorkflowRole = {
+  id: string
+  name: string
+  status: string
+  template_count: number
+}
 
 export type TemplateTask = {
   id: string
@@ -35,7 +56,10 @@ export type TemplateTask = {
   subject: string
   description: string | null
   priority: string
+  /** The template's own role row — what the task column actually holds. */
   role_id: string
+  /** The firm role behind it, which is what a picker's options are keyed by. */
+  workflow_role_id: string
   role_name: string
   due_offset_days: number
   /** Ids of the tasks this one waits for. Always earlier in the order. */

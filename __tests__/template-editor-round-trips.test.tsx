@@ -5,10 +5,17 @@ import { createRoundTripHarness } from './helpers/round-trips'
  * The template editor is its own route rather than a drawer on /admin, and the
  * reason is measured here twice over.
  *
- * ONE read. The roles, the tasks and the dependency edges all arrive embedded
+ * ONE WAVE. The roles, the tasks and the dependency edges all arrive embedded
  * on the template row; a second query for any of them would make this page two
  * waves, and the edges are the one most likely to be split out because two
  * foreign keys run from an edge to a task.
+ *
+ * The firm's role list joined on 24 Sep and is a SECOND TABLE in the SAME wave,
+ * which is why the assertion below names both tables and still demands depth 1.
+ * It cannot be an embed: it is the whole firm's list, including roles this
+ * template has never used, and that is exactly what the editor's pickers need.
+ * Awaiting it after `getTemplate` would be the regression — same two queries,
+ * twice the latency — and only the depth catches that, not the table names.
  *
  * And the gate runs BEFORE the read, as /admin's does: a route you may not use
  * must be indistinguishable from one that does not exist, and must cost
@@ -88,7 +95,7 @@ describe('/admin/templates/[id] round-trip depth', () => {
     )
     expect(error).toBeUndefined()
     expect(depth).toBe(1)
-    expect(calls).toEqual(['workflow_templates'])
+    expect([...calls].sort()).toEqual(['workflow_roles', 'workflow_templates'])
   })
 
   test('anyone but an administrator is told it does not exist, before a single query', async () => {

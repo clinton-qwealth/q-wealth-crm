@@ -25,6 +25,7 @@ import {
   templateIssues,
   type TemplateDetail,
   type TemplateTask,
+  type WorkflowRole,
 } from '@/lib/templates'
 
 type Result = { ok: true } | { error: string } | null
@@ -36,7 +37,21 @@ type Result = { ok: true } | { error: string } | null
  * screens do not rearrange themselves as you move between them — but the flanks
  * carry work here rather than being reserved space.
  */
-export function TemplateEditor({ template }: { template: TemplateDetail }) {
+/**
+ * `firmRoles` is the FIRM's list, not this template's. Every picker below reads
+ * from it, because a task now names one of the firm's roles rather than a name
+ * invented for this template; `ensure_workflow_template_role` attaches whichever
+ * one is picked, so choosing a role the template has not used yet just works.
+ * `template.roles` remains what this template uses, which is what the deploy
+ * dialog maps to people and what the Roles card reports on.
+ */
+export function TemplateEditor({
+  template,
+  firmRoles,
+}: {
+  template: TemplateDetail
+  firmRoles: WorkflowRole[]
+}) {
   /* Optimistic, via the house helper: a move has to show IMMEDIATELY. Without
      this the list only reorders when the server revalidates, so a click does
      nothing visible for a round trip — and, less obviously, the row never moves
@@ -81,7 +96,7 @@ export function TemplateEditor({ template }: { template: TemplateDetail }) {
         </Card>
 
         <Card>
-          <RoleManager template={template} />
+          <RoleManager template={template} firmRoles={firmRoles} />
         </Card>
       </div>
 
@@ -96,7 +111,7 @@ export function TemplateEditor({ template }: { template: TemplateDetail }) {
               In the order they are written. A task can only wait for one above it.
             </p>
           </div>
-          <NewTemplateTaskForm template={template} />
+          <NewTemplateTaskForm template={template} firmRoles={firmRoles} />
         </div>
 
         {error ? (
@@ -146,6 +161,7 @@ export function TemplateEditor({ template }: { template: TemplateDetail }) {
         {selected ? (
           <TemplateTaskPanel
             template={template}
+            firmRoles={firmRoles}
             tasks={tasks}
             task={selected}
             onClose={() => setSelectedId(null)}
@@ -373,16 +389,60 @@ export function offsetPhrase(task: Pick<TemplateTask, 'depends_on' | 'due_offset
 /* -------------------------------------------------------------------------- */
 
 /**
- * The roles a template names.
+ * The options both "who does it" pickers offer.
+ *
+ * Active firm roles, plus `keep` — the role this task already has — even when
+ * that one has since been archived. Without the exception, opening a task whose
+ * role was retired would show the select sitting on some other name, and saving
+ * anything else on the task would quietly reassign it.
+ */
+function RoleOptions({ firmRoles, keep }: { firmRoles: WorkflowRole[]; keep?: string }) {
+  return (
+    <>
+      {firmRoles
+        .filter((r) => r.status === 'active' || r.id === keep)
+        .map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.name}
+            {r.status === 'active' ? '' : ' (archived)'}
+          </option>
+        ))}
+    </>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Which of the firm's roles this template uses.
  *
  * A `FieldBox` with NO action and NO edit, so it has no pencil and no Save —
  * this is not a form, it is a set of immediate actions, which is exactly what
  * `MemberManager` says of itself for the same shape of problem.
+ *
+ * It used to hold a free-text box, and a template author typed a name into it
+ * every time. That gave the firm four spellings of "Adviser" and no way to say
+ * that two templates meant the same person, so the names moved to one list
+ * curated on /admin and this card picks from it.
+ *
+ * The card is now informational more than operational: a task's own picker
+ * attaches whatever role it names, so nothing here has to be done first. What
+ * it is still for is seeing what this plan expects of the firm, and taking a
+ * role back off when a task stops needing it.
  */
-export function RoleManager({ template }: { template: TemplateDetail }) {
-  const [name, setName] = useState('')
+export function RoleManager({
+  template,
+  firmRoles,
+}: {
+  template: TemplateDetail
+  firmRoles: WorkflowRole[]
+}) {
+  const [picked, setPicked] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, start] = useTransition()
+
+  const onTemplate = new Set(template.roles.map((r) => r.workflow_role_id))
+  const unused = firmRoles.filter((r) => r.status === 'active' && !onTemplate.has(r.id))
 
   function run(action: () => Promise<Result>, after?: () => void) {
     setError(null)
@@ -403,7 +463,9 @@ export function RoleManager({ template }: { template: TemplateDetail }) {
           </p>
 
           {template.roles.length === 0 ? (
-            <p className="text-xs text-neutral-400">None yet. Every task needs one, so add one first.</p>
+            <p className="text-xs text-neutral-400">
+              None yet. Adding a task names one, or add one here first.
+            </p>
           ) : (
             <ul className="flex flex-col gap-1">
               {template.roles.map((role) => (
@@ -440,23 +502,41 @@ export function RoleManager({ template }: { template: TemplateDetail }) {
             </ul>
           )}
 
-          <div className="flex gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Adviser"
-              aria-label="New role name"
-              className={FIELD_INPUT}
-            />
-            <button
-              type="button"
-              disabled={pending || !name.trim()}
-              onClick={() => run(() => addTemplateRole(template.id, name), () => setName(''))}
-              className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
-            >
-              Add
-            </button>
-          </div>
+          {/* Only roles this template does not already use, and only ones the
+              firm still offers — an archived role stays on the templates that
+              have it, but is not handed out again. `unused` being empty is a
+              statement, not a failure, so the picker is replaced by it. */}
+          {unused.length === 0 ? (
+            <p className="text-xs text-neutral-400">
+              {firmRoles.some((r) => r.status === 'active')
+                ? 'Every role the firm has is already on this plan.'
+                : 'The firm has no roles yet. Add one under Administration.'}
+            </p>
+          ) : (
+            <div className="flex gap-2">
+              <select
+                value={picked}
+                onChange={(e) => setPicked(e.target.value)}
+                aria-label="Add a role"
+                className={FIELD_INPUT}
+              >
+                <option value="">Add a role…</option>
+                {unused.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={pending || !picked}
+                onClick={() => run(() => addTemplateRole(template.id, picked), () => setPicked(''))}
+                className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+              >
+                Add
+              </button>
+            </div>
+          )}
 
           {error ? (
             <p role="alert" className="text-xs text-red-600">
@@ -570,10 +650,17 @@ export function TemplateLifecycle({ template, issues }: { template: TemplateDeta
  * move is one decision at a time, and it means every existing task is a legal
  * prerequisite at the moment of writing, so the picker needs no filtering.
  */
-function NewTemplateTaskForm({ template }: { template: TemplateDetail }) {
+function NewTemplateTaskForm({
+  template,
+  firmRoles,
+}: {
+  template: TemplateDetail
+  firmRoles: WorkflowRole[]
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [open, setOpen] = useState(false)
+  const active = firmRoles.filter((r) => r.status === 'active')
   const [waits, setWaits] = useState(false)
   const [state, formAction, pending] = useActionState<Result, FormData>(addTemplateTask, null)
 
@@ -608,8 +695,11 @@ function NewTemplateTaskForm({ template }: { template: TemplateDetail }) {
       <button
         type="button"
         onClick={show}
-        disabled={template.roles.length === 0}
-        title={template.roles.length === 0 ? 'Add a role first — every task needs somebody to do it' : undefined}
+        /* The FIRM's list, not this template's: a task may name any active
+           role and the template picks it up. What makes a task impossible is
+           the firm having nobody to hand it to. */
+        disabled={active.length === 0}
+        title={active.length === 0 ? 'The firm has no roles yet — add one under Administration' : undefined}
         className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
       >
         Add task
@@ -617,13 +707,14 @@ function NewTemplateTaskForm({ template }: { template: TemplateDetail }) {
 
       <dialog
         ref={dialogRef}
+        aria-labelledby="add-template-task-title"
         onClick={(e) => {
           if (e.target === dialogRef.current) hide()
         }}
-        className="w-[min(32rem,calc(100vw-2rem))] rounded-lg p-0 backdrop:bg-neutral-900/20"
+        className="qw-modal m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-0 shadow-2xl shadow-neutral-900/10"
       >
         <form ref={formRef} action={formAction} className="flex flex-col gap-4 p-5">
-          <h2 className="text-base font-semibold text-neutral-900">Add a task</h2>
+          <h2 id="add-template-task-title" className="text-base font-semibold text-neutral-900">Add a task</h2>
           <input type="hidden" name="template_id" value={template.id} />
 
           <label className="flex flex-col gap-1 text-sm">
@@ -633,15 +724,11 @@ function NewTemplateTaskForm({ template }: { template: TemplateDetail }) {
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-neutral-700">Who does it</span>
-            <select name="role_id" required defaultValue="" className={FIELD_INPUT}>
+            <select name="workflow_role_id" required defaultValue="" className={FIELD_INPUT}>
               <option value="" disabled>
                 Choose a role
               </option>
-              {template.roles.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
+              <RoleOptions firmRoles={firmRoles} />
             </select>
           </label>
 
@@ -732,12 +819,14 @@ function NewTemplateTaskForm({ template }: { template: TemplateDetail }) {
 /** One template task, open in the shared drawer. */
 function TemplateTaskPanel({
   template,
+  firmRoles,
   tasks,
   task,
   onClose,
   onError,
 }: {
   template: TemplateDetail
+  firmRoles: WorkflowRole[]
   /** The list as it is ON SCREEN, which during an optimistic move is not yet
    *  the list the server last sent. The panel's "earlier than me" set has to
    *  agree with what the author can see. */
@@ -820,12 +909,12 @@ function TemplateTaskPanel({
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
                   Who does it
                 </span>
-                <select name="role_id" defaultValue={task.role_id} className={FIELD_INPUT}>
-                  {template.roles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
+                <select
+                  name="workflow_role_id"
+                  defaultValue={task.workflow_role_id}
+                  className={FIELD_INPUT}
+                >
+                  <RoleOptions firmRoles={firmRoles} keep={task.workflow_role_id} />
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-sm">
