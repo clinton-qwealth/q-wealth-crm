@@ -63,7 +63,24 @@ describe('getUserGroupsForAdmin', () => {
     expect(log).toContain('order:name')
     const select = log.find((l) => l.startsWith('select:'))!
     expect(select).toMatch(/user_group_members\(staff_users\(id, first_name, last_name\)\)/)
-    expect(select).toMatch(/client_groups\(id\)/)
+    /*
+     * THE JUNCTION, NOT `client_groups`. This asserted `client_groups(id)`
+     * until 24 Sep 2026 and was wrong in two ways at once, neither of which a
+     * mocked client can see.
+     *
+     * It was AMBIGUOUS: three foreign keys connect user_groups and
+     * client_groups, so PostgREST answered 300/PGRST201 and the whole
+     * Administration page threw in production.
+     *
+     * And it counted the wrong thing: nothing writes
+     * `client_groups.user_group_id` any more, so even unambiguous it would
+     * have read zero for ever.
+     *
+     * `e2e/postgrest-embeds.spec.ts` is what actually proves the embed
+     * resolves — this only pins which relationship we meant.
+     */
+    expect(select).toMatch(/client_group_user_groups\(group_id\)/)
+    expect(select, 'the ambiguous embed must not come back').not.toMatch(/client_groups\(/)
   })
 
   test('names each member by the house rule and sorts them, tolerating both embed shapes', async () => {
@@ -84,7 +101,10 @@ describe('getUserGroupsForAdmin', () => {
   })
 
   test('counts households from the embedded ids, and reads zero when the embed is missing', async () => {
-    rows = [group({ client_groups: [{ id: 'g1' }, { id: 'g2' }, { id: 'g3' }] }), group({ id: 'ug2', name: 'South', client_groups: undefined })]
+    rows = [
+      group({ client_group_user_groups: [{ group_id: 'g1' }, { group_id: 'g2' }, { group_id: 'g3' }] }),
+      group({ id: 'ug2', name: 'South', client_group_user_groups: undefined }),
+    ]
     const out = await getUserGroupsForAdmin()
     expect(out.map((r) => [r.id, r.household_count])).toEqual([
       ['ug1', 3],

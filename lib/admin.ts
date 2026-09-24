@@ -11,6 +11,7 @@ import {
   type TemplateSummary,
   type TemplateTask,
 } from '@/lib/templates'
+import { TEMPLATES_SELECT, USER_GROUPS_SELECT } from '@/lib/admin-selects'
 
 /**
  * The Administration page's readers.
@@ -250,7 +251,36 @@ export async function getUserGroupsForAdmin(): Promise<UserGroupRow[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('user_groups')
-    .select('id, name, status, created_at, user_group_members(staff_users(id, first_name, last_name)), client_groups(id)')
+    /*
+     * THE HOUSEHOLD COUNT COMES THROUGH `client_group_user_groups`, NOT
+     * THROUGH `client_groups` — and that is both a correctness fix and a
+     * crash fix.
+     *
+     * This read `client_groups(id)` until 24 Sep 2026 and threw in production:
+     *
+     *     Could not embed because more than one relationship was found
+     *     for 'user_groups' and 'client_groups'
+     *
+     * There are THREE foreign-key paths between the two tables — the legacy
+     * `client_groups.user_group_id`, the `client_group_user_groups` junction
+     * added on 22 September when a household became able to belong to several
+     * user groups, and `client_group_access`. PostgREST will not choose
+     * between them, so the whole Administration page failed to render, not
+     * only this tab.
+     *
+     * Naming the legacy foreign key would have silenced it and been WRONG:
+     * nothing in the application writes `client_groups.user_group_id` any
+     * more — the write path is `set_client_group_user_groups()` — so the count
+     * would have read zero for ever and looked like "no households assigned".
+     * The junction is the live model, and it is a single unambiguous
+     * relationship.
+     *
+     * NOTE FOR THE NEXT MIGRATION: no application code changed on 22 September
+     * and nothing failed until PostgREST reloaded its schema cache. An embed
+     * is a query against the schema, so adding a foreign key elsewhere can
+     * break a page that nobody touched.
+     */
+    .select(USER_GROUPS_SELECT)
     .order('name')
   if (error) throw new Error(`The user groups could not be read: ${error.message}`)
   return (data ?? []).map((r) => {
@@ -264,7 +294,7 @@ export async function getUserGroupsForAdmin(): Promise<UserGroupRow[]> {
       })
       .filter((m): m is { id: string; name: string } => m !== null)
       .sort((a, b) => a.name.localeCompare(b.name))
-    const households = Array.isArray(row.client_groups) ? row.client_groups.length : 0
+    const households = Array.isArray(row.client_group_user_groups) ? row.client_group_user_groups.length : 0
     return {
       id: row.id as string,
       name: row.name as string,
@@ -305,7 +335,7 @@ export async function getTemplatesForAdmin(): Promise<TemplateSummary[]> {
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('workflow_templates')
-    .select('id, name, description, status, workflow_type, published_at, workflow_template_tasks(id), workflow_template_roles(id), workflow_template_deployments(id)')
+    .select(TEMPLATES_SELECT)
     .order('name')
   if (error) throw new Error(`The workflow templates could not be read: ${error.message}`)
 
