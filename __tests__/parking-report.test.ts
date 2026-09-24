@@ -14,6 +14,7 @@ import { monthKey, monthLabel } from '@/lib/note-date'
 const row = (over: Partial<ParkingRow>): ParkingRow => ({
   person_name: 'Clinton Hatcher',
   payment_date: '2026-09-14',
+  submitted_on: '2026-09-15',
   ticket: '81000210953',
   amount_cents: 2508,
   ...over,
@@ -22,10 +23,10 @@ const row = (over: Partial<ParkingRow>): ParkingRow => ({
 /* Chosen so each filter partitions the set differently: two months, two
    people, and one receipt whose date could not be read. */
 const set: ParkingRow[] = [
-  row({ ticket: 'a', payment_date: '2026-09-14', person_name: 'Clinton Hatcher', amount_cents: 2508 }),
-  row({ ticket: 'b', payment_date: '2026-09-02', person_name: 'Sarah Chen', amount_cents: 1000 }),
-  row({ ticket: 'c', payment_date: '2026-08-30', person_name: 'Clinton Hatcher', amount_cents: 500 }),
-  row({ ticket: 'd', payment_date: null, person_name: 'Sarah Chen', amount_cents: null }),
+  row({ ticket: 'a', payment_date: '2026-09-14', submitted_on: '2026-10-02', person_name: 'Clinton Hatcher', amount_cents: 2508 }),
+  row({ ticket: 'b', payment_date: '2026-09-02', submitted_on: '2026-09-02', person_name: 'Sarah Chen', amount_cents: 1000 }),
+  row({ ticket: 'c', payment_date: '2026-08-30', submitted_on: '2026-10-02', person_name: 'Clinton Hatcher', amount_cents: 500 }),
+  row({ ticket: 'd', payment_date: null, submitted_on: '2026-10-02', person_name: 'Sarah Chen', amount_cents: null }),
 ]
 
 describe('month keys', () => {
@@ -129,6 +130,27 @@ describe('filters', () => {
       month: '2026-08',
       person: 'Clinton Hatcher',
     })
+  })
+})
+
+describe('which date the filters use', () => {
+  /**
+   * THE MONTH FILTER MEANS THE MONTH IT WAS PAID, not the month it was sent.
+   *
+   * Added 24 Sep 2026 with the Submitted column. Three of the four fixtures
+   * were submitted in October; only one was PAID in October, and that one is
+   * the undated row, which belongs to no month at all. So a filter that had
+   * quietly switched to the submission date would put three receipts under
+   * October and this fails.
+   *
+   * It is the payment date because that is what the expense is FOR -- a
+   * September receipt forwarded in October is September's cost. The card in
+   * Teams makes the same choice for the same reason.
+   */
+  test('a month means the month it was paid, not the month it was sent', () => {
+    expect(applyFilters(set, { month: '2026-10', person: null })).toEqual([])
+    expect(applyFilters(set, { month: '2026-09', person: null }).map((r) => r.ticket)).toEqual(['a', 'b'])
+    expect(filterOptions(set, NO_FILTERS).months).toEqual(['2026-09', '2026-08', NO_DATE])
   })
 })
 

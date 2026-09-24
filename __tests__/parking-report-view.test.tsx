@@ -9,15 +9,16 @@ const { ParkingReport } = await import('@/components/parking-report-view')
 const row = (over: Partial<ParkingRow>): ParkingRow => ({
   person_name: 'Clinton Hatcher',
   payment_date: '2026-09-14',
+  submitted_on: '2026-09-15',
   ticket: '81000210953',
   amount_cents: 2508,
   ...over,
 })
 
 const set: ParkingRow[] = [
-  row({ ticket: 'a', payment_date: '2026-09-14', person_name: 'Clinton Hatcher', amount_cents: 2508 }),
-  row({ ticket: 'b', payment_date: '2026-09-02', person_name: 'Sarah Chen', amount_cents: 1000 }),
-  row({ ticket: 'c', payment_date: '2026-08-30', person_name: 'Clinton Hatcher', amount_cents: 500 }),
+  row({ ticket: 'a', payment_date: '2026-09-14', submitted_on: '2026-10-02', person_name: 'Clinton Hatcher', amount_cents: 2508 }),
+  row({ ticket: 'b', payment_date: '2026-09-02', submitted_on: '2026-09-02', person_name: 'Sarah Chen', amount_cents: 1000 }),
+  row({ ticket: 'c', payment_date: '2026-08-30', submitted_on: '2026-10-02', person_name: 'Clinton Hatcher', amount_cents: 500 }),
 ]
 
 const optionsOf = (name: string) =>
@@ -76,9 +77,15 @@ describe('the parking report', () => {
     expect(columns).toHaveLength(3)
 
     const [left, centre, right] = columns
-    expect(left.className).toContain('lg:col-span-3')
-    expect(centre.className).toContain('lg:col-span-6')
-    expect(right.className).toContain('lg:col-span-3')
+    /* 3 / 6 / 3 from `xl` up. Between `lg` and `xl` the middle one widens to
+       2 / 8 / 2, because five columns do not fit 6/12 at 1024px and the Amount
+       was being clipped. Still three columns, still two reserved. */
+    expect(left.className).toContain('xl:col-span-3')
+    expect(centre.className).toContain('xl:col-span-6')
+    expect(right.className).toContain('xl:col-span-3')
+    expect(left.className).toContain('lg:col-span-2')
+    expect(centre.className).toContain('lg:col-span-8')
+    expect(right.className).toContain('lg:col-span-2')
 
     /* The outer two are reserved, and empty is what reserved means. */
     expect(left.childElementCount).toBe(0)
@@ -101,6 +108,49 @@ describe('the parking report', () => {
        own "Showing 1 of 3" is what tracks the filter. */
     expect(screen.getByText('3 receipts, texted in and recorded automatically.')).toBeTruthy()
     expect(screen.getByText('Showing 1 of 3')).toBeTruthy()
+  })
+
+  /**
+   * THE SUBMISSION DATE, added 24 Sep 2026.
+   *
+   * Receipt `a` was paid on 14 September and texted in on 2 October -- the
+   * common case, because people forward a month's parking in one go. The two
+   * dates must appear in their own columns and in that order, because a reader
+   * reimbursing these needs to tell a fresh receipt from a late one.
+   *
+   * Asserted by reading the row's cells in order rather than by searching for
+   * the text, so a version that rendered the submission date into the PAID
+   * column -- or swapped the two -- fails rather than passing on a substring.
+   *
+   * Mutation, and it was run: render {r.payment_date} in the submitted cell,
+   * and this fails on "14 Sep 2026" appearing where "2 Oct 2026" belongs.
+   */
+  test('a receipt shows when it was paid and, separately, when it was sent in', () => {
+    render(<ParkingReport rows={[set[0]]} />)
+
+    const headers = within(screen.getByRole('table'))
+      .getAllByRole('columnheader')
+      .map((h) => h.textContent)
+    expect(headers).toEqual(['Person', 'Paid', 'Submitted', 'Ticket', 'Amount'])
+
+    const cells = within(screen.getByRole('table')).getAllByRole('cell').map((c) => c.textContent)
+    expect(cells).toEqual(['Clinton Hatcher', '14 Sep 2026', '2 Oct 2026', 'a', '$25.08', 'Total', '$25.08'])
+  })
+
+  /**
+   * `submitted_on` arrives as a `YYYY-MM-DD` calendar date because the RPC
+   * already converted created_at in Australia/Sydney. It must be rendered by
+   * splitting that string, never by constructing a Date -- which is both the
+   * rule lib/note-date.ts exists for AND, since this table is a client
+   * component, what would make the server and the browser disagree.
+   *
+   * The 1st of a month is the case that exposes it: as an instant at UTC
+   * midnight it is the previous month anywhere west of Greenwich.
+   */
+  test('the first of a month is that month, whatever the runtime thinks', () => {
+    render(<ParkingReport rows={[row({ ticket: 'x', payment_date: '2026-10-01', submitted_on: '2026-10-01' })]} />)
+    const cells = within(screen.getByRole('table')).getAllByRole('cell').map((c) => c.textContent)
+    expect(cells.slice(0, 3)).toEqual(['Clinton Hatcher', '1 Oct 2026', '1 Oct 2026'])
   })
 
   test('the months offered are the months that have receipts, newest first', () => {
@@ -179,7 +229,7 @@ describe('the parking report', () => {
    */
   test('no combination the controls offer produces an empty table', async () => {
     const user = userEvent.setup()
-    const withUndated = [...set, row({ ticket: 'd', payment_date: null, amount_cents: null })]
+    const withUndated = [...set, row({ ticket: 'd', payment_date: null, submitted_on: '2026-10-02', amount_cents: null })]
     render(<ParkingReport rows={withUndated} />)
 
     const months = [...(screen.getByRole('combobox', { name: 'Filter by month' }) as HTMLSelectElement).options].map(
@@ -213,7 +263,7 @@ describe('the parking report', () => {
 
   test('a receipt with no date is reachable under its own heading', async () => {
     const user = userEvent.setup()
-    render(<ParkingReport rows={[...set, row({ ticket: 'd', payment_date: null, amount_cents: null })]} />)
+    render(<ParkingReport rows={[...set, row({ ticket: 'd', payment_date: null, submitted_on: '2026-10-02', amount_cents: null })]} />)
     expect(optionsOf('Filter by month')).toEqual(['All months', 'Sep 2026', 'Aug 2026', 'No date'])
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Filter by month' }), '__no_date__')
@@ -223,6 +273,6 @@ describe('the parking report', () => {
        than printing a wrong value. The row is still counted — one of four —
        and the total treats the missing figure as nothing. */
     const cells = within(screen.getByRole('table')).getAllByRole('cell').map((c) => c.textContent)
-    expect(cells).toEqual(['Clinton Hatcher', '—', 'd', '—', 'Total shown', '$0.00'])
+    expect(cells).toEqual(['Clinton Hatcher', '—', '2 Oct 2026', 'd', '—', 'Total shown', '$0.00'])
   })
 })

@@ -34,6 +34,17 @@ export type ParkingRow = {
   person_name: string
   /** Nullable. A receipt can arrive with an unparseable date. */
   payment_date: string | null
+  /**
+   * The day the receipt was texted in, as `YYYY-MM-DD`.
+   *
+   * A CALENDAR DATE, not an instant, and never null. `parking_receipts.created_at`
+   * is a timestamptz; the RPC converts it once, in `Australia/Sydney`, and hands
+   * over a date. That is deliberate — see the migration. Doing it here instead
+   * would render the server's UTC day during SSR and the reader's Sydney day
+   * after hydration, which React reports as a mismatch and a person sees as a
+   * date that changes while they look at it.
+   */
+  submitted_on: string
   ticket: string
   /** Nullable, and counted as zero in a total. */
   amount_cents: number | null

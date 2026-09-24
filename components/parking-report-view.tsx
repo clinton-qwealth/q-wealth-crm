@@ -135,12 +135,19 @@ export function ParkingReport({ rows }: { rows: ParkingRow[] }) {
 
   return (
     <>
-      {/* Left — reserved, as on /admin. */}
-      <div className="col-span-full lg:col-span-3" />
+      {/* Left — reserved, as on /admin.
+          3 / 6 / 3 from `xl` up, 2 / 8 / 2 between `lg` and `xl`. The fifth
+          column (Submitted, 24 Sep 2026) pushed the table's floor to 34rem,
+          and a 6/12 middle column is only ~480px at 1024px wide -- so the
+          AMOUNT ran off the right edge of the card, which on an expense report
+          is the one column nobody can afford to lose. Widening only at the
+          breakpoint that breaks keeps the reviewed 3/6/3 proportions wherever
+          they fit. */}
+      <div className="col-span-full lg:col-span-2 xl:col-span-3" />
 
       {/* Centre — the report. `gap` rather than margins, so the three children
           space themselves the way grid items did before they were nested. */}
-      <div className="col-span-full flex flex-col gap-4 lg:col-span-6 lg:gap-6">
+      <div className="col-span-full flex flex-col gap-4 lg:col-span-8 lg:gap-6 xl:col-span-6">
         <PageHeading
           eyebrow="Q Wealth"
           title="Parking expenses"
@@ -194,11 +201,16 @@ export function ParkingReport({ rows }: { rows: ParkingRow[] }) {
              which one applies to whichever rule Tailwind emits last. SURFACE is
              the same surface without the clip, which is the case it exists for. */
           <div className={`${SHEET_SURFACE} overflow-x-auto`}>
-            <table className="w-full min-w-[28rem] border-collapse text-sm">
+            <table className="w-full min-w-[34rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-widest text-neutral-400">
                   <th className="px-4 py-2.5 font-semibold">Person</th>
-                  <th className="px-4 py-2.5 font-semibold">Date</th>
+                  {/* "Paid" and "Submitted", not "Date" and "Submitted". Two date
+                      columns and only one of them named leaves the reader
+                      guessing which is which, and they routinely differ by
+                      weeks. */}
+                  <th className="px-4 py-2.5 font-semibold">Paid</th>
+                  <th className="px-4 py-2.5 font-semibold">Submitted</th>
                   <th className="px-4 py-2.5 font-semibold">Ticket</th>
                   <th className="px-4 py-2.5 text-right font-semibold">Amount</th>
                 </tr>
@@ -213,6 +225,15 @@ export function ParkingReport({ rows }: { rows: ParkingRow[] }) {
                     <td className="px-4 py-2.5 tabular-nums text-neutral-600">
                       {r.payment_date ? formatCalendarDate(r.payment_date) : '—'}
                     </td>
+                    {/* Also split from the string. `submitted_on` is ALREADY a
+                        calendar date by the time it arrives -- the RPC converted
+                        created_at in Australia/Sydney -- so it gets the same
+                        helper as the payment date and never touches new Date().
+                        A shade lighter, because what the expense is FOR leads
+                        and when it turned up supports. */}
+                    <td className="px-4 py-2.5 tabular-nums text-neutral-500">
+                      {formatCalendarDate(r.submitted_on)}
+                    </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-neutral-500">{r.ticket}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-neutral-800">
                       {money(r.amount_cents)}
@@ -222,7 +243,7 @@ export function ParkingReport({ rows }: { rows: ParkingRow[] }) {
               </tbody>
               <tfoot>
                 <tr className="border-t border-neutral-200 font-medium">
-                  <td className="px-4 py-2.5 text-neutral-500" colSpan={3}>
+                  <td className="px-4 py-2.5 text-neutral-500" colSpan={4}>
                     {filtering ? 'Total shown' : 'Total'}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-neutral-900">
@@ -242,7 +263,7 @@ export function ParkingReport({ rows }: { rows: ParkingRow[] }) {
       </div>
 
       {/* Right — reserved. */}
-      <div className="col-span-full lg:col-span-3" />
+      <div className="col-span-full lg:col-span-2 xl:col-span-3" />
     </>
   )
 }
