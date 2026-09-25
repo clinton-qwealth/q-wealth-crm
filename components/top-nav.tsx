@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AdminBadge } from './admin-badge'
+import { AreaBadge } from './area-badge'
 import { BrandMark } from './brand-mark'
 import { HelpIcon } from './icons'
 import { ProfileMenu } from './profile-menu'
@@ -66,7 +66,7 @@ export function TopNav({
           >
             <BrandMark className="h-7 w-7 text-neutral-900" />
           </Link>
-          <AdminBadge />
+          <AreaBadge />
         </div>
 
         {/* The slack lives HERE, and the nav floats on the middle of it —

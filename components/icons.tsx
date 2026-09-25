@@ -658,3 +658,17 @@ export function SignOutIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/**
+ * A four-point spark: intelligence at work. The mark for the Q-Intelligence
+ * area — the knowledge base and everything answered rather than shown.
+ * Deliberately not StarIcon, which the STAR calculator already owns.
+ */
+export function SparkIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M10 2.75c.7 3.6 3.65 6.55 7.25 7.25-3.6.7-6.55 3.65-7.25 7.25C9.3 13.65 6.35 10.7 2.75 10 6.35 9.3 9.3 6.35 10 2.75Z" />
+      <path d="M16.25 2.5v3M17.75 4h-3" />
+    </svg>
+  )
+}

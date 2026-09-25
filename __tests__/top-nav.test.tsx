@@ -70,11 +70,12 @@ describe('the bar', () => {
   })
 })
 
-describe('the Administration pill', () => {
-  test('is absent everywhere that is not the admin area', () => {
+describe('the area pill', () => {
+  test('is absent everywhere that is not a named area', () => {
     for (const path of ['/', '/groups', '/workflows', '/reports']) {
       const { unmount } = at(path)
       expect(screen.queryByText('Administration'), `no pill at ${path}`).toBeNull()
+      expect(screen.queryByText('Q-Intelligence'), `no pill at ${path}`).toBeNull()
       unmount()
     }
   })
@@ -87,11 +88,27 @@ describe('the Administration pill', () => {
     }
   })
 
+  /* ONE pill, saying where you are — never both. The find-first over the area
+     list is what a later overlapping prefix would silently break. */
+  test('names Q-Intelligence in the help area, and only that', () => {
+    for (const path of ['/help', '/help/fees-and-charging']) {
+      const { unmount } = at(path)
+      expect(screen.getByText('Q-Intelligence'), `pill at ${path}`).toBeTruthy()
+      expect(screen.queryByText('Administration'), `not the admin pill at ${path}`).toBeNull()
+      unmount()
+    }
+    at('/admin')
+    expect(screen.queryByText('Q-Intelligence')).toBeNull()
+  })
+
   /* The segment rule, not a prefix rule: isCurrentNavItem matches `/admin` and
      `/admin/…`, and nothing else that merely starts with the letters. */
   test('does not leak onto a route that only starts with the same letters', () => {
     at('/administrivia')
     expect(screen.queryByText('Administration')).toBeNull()
+    const { unmount } = at('/helpdesk')
+    expect(screen.queryByText('Q-Intelligence')).toBeNull()
+    unmount()
   })
 
   test('says where you are — it is not a link, and it sits beside the mark', () => {
