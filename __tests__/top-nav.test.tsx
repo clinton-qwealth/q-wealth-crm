@@ -8,10 +8,12 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
  *
  * What a plausible implementation gets wrong, and what each test pins:
  *
- * - **The nav is centred with spacers**, which centres it between its
- *   neighbours instead of on the bar — so the links shift sideways when the
- *   pill appears or the search grows. The grid's equal `minmax(0,1fr)` flanks
- *   are the fix, and the classes are the only place jsdom can see it.
+ * - **The nav drifts back against the mark.** It is centred in the gap
+ *   between the mark and the search box — deliberately NOT the bar's true
+ *   centre: that was built first, and Clinton preferred the gap on looking at
+ *   both, since the bar's heavy right flank made true centre read lopsided.
+ *   The middle wrapper's `flex-1 justify-center` is the whole mechanism, and
+ *   its classes are the only place jsdom can see it.
  * - **The pill renders everywhere**, and every page in the product claims to
  *   be Administration. Or it string-matches the pathname, and some future
  *   `/administrivia` page inherits the badge — `isCurrentNavItem` is a segment
@@ -43,17 +45,21 @@ beforeEach(() => {
 })
 
 describe('the bar', () => {
-  test('is three tracks with the navigation in the centre one', () => {
+  test('floats the navigation on the middle of the slack, between mark and search', () => {
     const { container } = at('/')
     const bar = container.querySelector('header > div') as HTMLElement
-    /* minmax(0,1fr), not 1fr: a bare 1fr track's minimum is its content, so
-       the search box would shove the nav off-centre exactly when the window
-       got narrow. */
-    expect(bar.className).toContain('grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
     expect(bar.children).toHaveLength(3)
-    /* The nav IS the centre track — not inside a flank, where it would be
-       centred relative to its neighbours rather than the bar. */
-    expect(bar.children[1]).toBe(screen.getByRole('navigation', { name: 'Main' }))
+    /* The middle child owns ALL the slack and centres the nav on it. `flex-1`
+       without `justify-center` parks the links back against the mark; a
+       spacer-less row does the same. Both are the drift this pins against. */
+    const middle = bar.children[1] as HTMLElement
+    expect(middle.contains(screen.getByRole('navigation', { name: 'Main' }))).toBe(true)
+    expect(middle.className).toContain('flex-1')
+    expect(middle.className).toContain('justify-center')
+    /* And the flanks hold their size rather than sharing it, or the nav's
+       centring would wander with the window. */
+    expect((bar.children[0] as HTMLElement).className).toContain('shrink-0')
+    expect((bar.children[2] as HTMLElement).className).toContain('shrink-0')
   })
 
   test('keeps the mark on the left flank and the account controls on the right', () => {
