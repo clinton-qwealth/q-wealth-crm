@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { ADMIN_SECTIONS } from '@/lib/admin-sections'
+import { GROUP_SECTIONS } from '@/lib/group-sections'
 import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM, NAV_ITEMS } from '@/lib/nav'
 
 /**
@@ -95,6 +96,15 @@ describe('internal links', () => {
     for (const { href } of ADMIN_SECTIONS) {
       const path = href.split(/[?#]/)[0]
       expect(routes.has(path), `${href} is on the Administration menu but is not a route`).toBe(true)
+    }
+  })
+
+  /* The client menu, 25 Sep 2026, rendered from a list the same way. */
+  test('every client section points at a route that exists', () => {
+    expect(GROUP_SECTIONS.length).toBeGreaterThan(0)
+    for (const { href } of GROUP_SECTIONS) {
+      const path = href.split(/[?#]/)[0]
+      expect(routes.has(path), `${href} is on the client menu but is not a route`).toBe(true)
     }
   })
 })

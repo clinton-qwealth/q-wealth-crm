@@ -1,3 +1,4 @@
+import { SERVICE_PROVIDERS_SELECT } from '@/lib/admin-selects'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type { UserGroupChoice } from '@/lib/user-groups'
 
@@ -48,6 +49,49 @@ export async function getVisibleGroups(): Promise<GroupListItem[]> {
     throw new Error(`The client groups could not be read: ${error.message}`)
   }
   return (data ?? []) as GroupListItem[]
+}
+
+/** One service provider, as the register lists it. */
+export type ServiceProviderItem = {
+  party_id: string
+  name: string
+  /** The role's start date, ISO `YYYY-MM-DD`, when one was recorded. */
+  since: string | null
+}
+
+/**
+ * Every party holding an active `product_provider` role.
+ *
+ * The first read of providers as a LIST anywhere in the product — until
+ * 25 September 2026 they existed only as search hits, and the search's own
+ * comment conceded the hit "goes nowhere useful". The embed is the search's
+ * exact shape (`parties!inner(display_name)`), which is the shape already
+ * proven against the live schema, plus the role's start date.
+ *
+ * Sorted here rather than in the query: PostgREST orders a parent by an
+ * embedded column reluctantly, and two rows do not earn the syntax.
+ */
+export async function getServiceProviders(): Promise<ServiceProviderItem[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('party_roles')
+    .select(SERVICE_PROVIDERS_SELECT)
+    .eq('role', 'product_provider')
+    .eq('status', 'active')
+    .is('end_date', null)
+  if (error) throw new Error(`The service providers could not be read: ${error.message}`)
+
+  return (data ?? [])
+    .map((r) => {
+      const row = r as Record<string, unknown>
+      const party = Array.isArray(row.parties) ? row.parties[0] : row.parties
+      return {
+        party_id: row.party_id as string,
+        name: ((party as { display_name?: string } | null)?.display_name ?? 'Unnamed') as string,
+        since: (row.start_date as string | null) ?? null,
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 /**

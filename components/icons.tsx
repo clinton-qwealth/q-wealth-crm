@@ -685,3 +685,27 @@ export function GridIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/** An organisation chart — one box holding two: a legal structure. The client
+ *  menu's mark for entities, where BuildingIcon already means a provider. */
+export function StructureIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="7" y="2.5" width="6" height="4.5" rx="1" />
+      <rect x="2.5" y="13" width="6" height="4.5" rx="1" />
+      <rect x="11.5" y="13" width="6" height="4.5" rx="1" />
+      <path d="M10 7v2M5.5 13v-1.5A1.5 1.5 0 0 1 7 10h6a1.5 1.5 0 0 1 1.5 1.5V13" />
+    </svg>
+  )
+}
+
+/** A person sending onward: a referral partner. */
+export function ReferralIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <circle cx="7.25" cy="6.5" r="2.75" />
+      <path d="M2.75 16.5c.8-2.4 2.55-3.6 4.5-3.6 1.1 0 2.1.37 2.9 1.1" />
+      <path d="M12.5 12.75h5M15.25 10.5l2.25 2.25-2.25 2.25" />
+    </svg>
+  )
+}

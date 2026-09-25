@@ -194,21 +194,47 @@ describe('/groups/[id] round-trip depth', () => {
 })
 
 /**
- * The index lists the groups, and **one query is the whole budget.**
+ * The index lists ONE register at a time, and **each pays only for itself** —
+ * the same budget rule the admin page's sections hold, since the client pages
+ * took its shape on 25 September 2026.
  *
- * This test asserted zero queries while the page was a placeholder, with a note
- * that the obvious way to get the list wrong is to fetch one row at a time. The
- * list landed the same day, so the assertion is now the real one: exactly one
- * read, of the view that decides visibility, and nothing per row.
+ * This began as "one query is the whole budget" for a single flat list. The
+ * households and entities registers still hold that line (one read of the view
+ * that decides visibility, nothing per row); providers read their own table
+ * instead; and referrers read NOTHING, because no data model exists behind
+ * them — a section that queried on the way to saying "not built yet" would be
+ * paying for its own apology.
  */
+const indexSection = (id: string) => () =>
+  GroupsIndexPage({ searchParams: Promise.resolve({ section: id }) })
+
 describe('/groups index', () => {
-  test('the index reads the group view exactly once, and nothing per row', async () => {
-    await measure(() => GroupsIndexPage())
+  test('the household register reads the group view exactly once, and nothing per row', async () => {
+    const { depth } = await measure(() => GroupsIndexPage())
     expect(calls).toEqual(['group_summary'])
+    expect(depth).toBe(1)
   })
 
-  test('its depth is one wave, so the list costs one round trip', async () => {
-    const { depth } = await measure(() => GroupsIndexPage())
+  test('the entities register is the same single read, split in memory', async () => {
+    const { depth } = await measure(indexSection('entities'))
+    expect(calls).toEqual(['group_summary'])
     expect(depth).toBe(1)
+  })
+
+  test('the provider register reads its own table, and not the groups', async () => {
+    const { depth } = await measure(indexSection('providers'))
+    expect(calls).toEqual(['party_roles'])
+    expect(depth).toBe(1)
+  })
+
+  test('the referrers register reads nothing — there is nothing to read', async () => {
+    await measure(indexSection('referrers'))
+    expect(calls).toEqual([])
+  })
+
+  test('a section that does not exist is refused before a single query', async () => {
+    const { error } = await measure(indexSection('nope'))
+    expect((error as Error | undefined)?.message).toBe('notFound')
+    expect(calls).toEqual([])
   })
 })

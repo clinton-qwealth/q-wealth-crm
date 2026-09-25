@@ -77,6 +77,16 @@ export const WORKFLOW_ROLES_SELECT =
 export const DEPLOYABLE_TEMPLATES_SELECT =
   'id, name, description, workflow_type, workflow_template_roles(id, workflow_roles(name)), workflow_template_tasks(id, ordinal, subject, role_id, due_offset_days), workflow_template_task_dependencies(task_id, depends_on_task_id)'
 
+/**
+ * The provider register's read — `/groups?section=providers`, 25 Sep 2026.
+ *
+ * Not an Administration select either, but held to the same discipline for the
+ * same reason: `parties!inner(...)` is a relationship the schema has to keep
+ * resolving to exactly one FK. It is the search page's own provider embed with
+ * `start_date` added, so the two screens stay one query shape.
+ */
+export const SERVICE_PROVIDERS_SELECT = 'party_id, start_date, parties!inner(display_name)'
+
 /** Every select above, named, so a test can walk them without repeating them. */
 export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: string }>> = {
   'user groups': { from: 'user_groups', select: USER_GROUPS_SELECT },
@@ -84,4 +94,5 @@ export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: stri
   'one template': { from: 'workflow_templates', select: TEMPLATE_DETAIL_SELECT },
   'the firm’s roles': { from: 'workflow_roles', select: WORKFLOW_ROLES_SELECT },
   'deployable templates': { from: 'workflow_templates', select: DEPLOYABLE_TEMPLATES_SELECT },
+  'service providers': { from: 'party_roles', select: SERVICE_PROVIDERS_SELECT },
 }
