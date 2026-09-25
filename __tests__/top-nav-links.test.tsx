@@ -152,6 +152,10 @@ describe('the top nav marks where you are', () => {
     expect(mark).not.toContain('opacity-0')
     expect(mark).toContain('h-0.5')
     expect(mark).toContain('bg-brand')
+    /* ON the bar's bottom border — the 25 Sep review's fix for a mark that
+       floated two pixels above nothing. The 8px is the slack under a 32px item
+       centred in the 48px bar; see the component for the arithmetic. */
+    expect(mark).toContain('-bottom-2')
     expect(mark).toContain('motion-reduce:transition-none')
     /* The fill does NOT move early: pending is not "here". The current item is
        still Home and only Home. */

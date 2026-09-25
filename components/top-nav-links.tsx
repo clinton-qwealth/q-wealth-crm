@@ -23,9 +23,10 @@ import { NAV_ITEMS, isCurrentNavItem } from '@/lib/nav'
  * modifier-click navigation. So this is the tabs component's own "here" idiom
  * instead — a 2px brand bar — always rendered and toggled by opacity, so it can
  * never shift layout. `aria-hidden` and empty, so the link's accessible name
- * stays exactly its label: the e2e suite looks these up by name. On the current
- * item it is brand on brand and invisible, which is right — that click goes
- * nowhere.
+ * stays exactly its label: the e2e suite looks these up by name. Since it moved
+ * onto the bar's edge (25 Sep) it sits OUTSIDE the current item's fill, so a
+ * click on the page you are already on can flash it briefly under the block —
+ * accepted: that click does re-run the navigation, and the flash says so.
  *
  * Must be a descendant of the Link it reports on; that is the hook's contract.
  */
@@ -35,7 +36,17 @@ function PendingMark() {
     <span
       aria-hidden="true"
       className={[
-        'pointer-events-none absolute inset-x-2.5 bottom-0.5 h-0.5 rounded-full bg-brand',
+        /* `-bottom-2` puts the mark ON the bar's bottom border rather than
+           floating inside the label's padding box: the item is 32px tall
+           (20px of text-sm line plus py-1.5 twice) centred in the 48px bar,
+           so 8px of bar lies below the link and the mark's 2px land flush on
+           the edge. THE ARITHMETIC IS LOAD-BEARING — change the bar's height
+           or the item's padding and this number moves with them. Reviewed
+           25 Sep 2026: the mark used to sit at bottom-0.5, two pixels above
+           nothing, which was one of the things making the bar look
+           unconsidered. Nothing clips it: no ancestor between here and the
+           header hides overflow. */
+        'pointer-events-none absolute inset-x-2.5 -bottom-2 h-0.5 rounded-full bg-brand',
         'transition-opacity duration-150 motion-reduce:transition-none',
         pending ? 'opacity-100' : 'opacity-0',
       ].join(' ')}
@@ -82,7 +93,9 @@ export function TopNavLinks() {
   const pathname = usePathname()
 
   return (
-    <nav aria-label="Main" className="hidden items-center gap-1 sm:flex">
+    /* gap-2, not gap-1: at 4px the items' grey hover pills nearly touched and
+       the run read as one control. Widened in the same 25 Sep review. */
+    <nav aria-label="Main" className="hidden items-center gap-2 sm:flex">
       {NAV_ITEMS.map((item) => {
         const current = isCurrentNavItem(pathname, item.href)
         return (
