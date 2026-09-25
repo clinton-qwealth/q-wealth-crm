@@ -45,7 +45,7 @@ function stubClient() {
     workflow_templates: [{ id: 'tpl1', name: 'Onboarding', description: null, status: 'published', workflow_type: null, published_at: '2026-09-23T00:00:00+00:00', workflow_template_tasks: [{ id: 'tt1' }], workflow_template_roles: [{ id: 'r1' }], workflow_template_deployments: [] }],
     /* The Roles tab, 24 Sep 2026: the firm's list, with its template count as
        an embed, so it too is one read on its section's wave. */
-    workflow_roles: [{ id: 'w1', name: 'Adviser', status: 'active', workflow_template_roles: [{ template_id: 'tpl1' }] }],
+    workflow_roles: [{ id: 'w1', name: 'Adviser', status: 'active', workflow_template_roles: [{ template_id: 'tpl1', workflow_template_tasks: [{ id: 'tt1' }] }] }],
     /* The table a regression might read directly instead of the view. */
     audit_log: [{ id: 1 }],
   }

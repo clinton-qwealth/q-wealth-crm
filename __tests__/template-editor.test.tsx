@@ -81,9 +81,9 @@ const TEMPLATE: TemplateDetail = {
  *  a role nothing on this template uses, so the pickers' options can be told
  *  apart from the template's own. */
 const FIRM_ROLES: WorkflowRole[] = [
-  { id: 'w1', name: 'Adviser', status: 'active', template_count: 1 },
-  { id: 'w2', name: 'Paraplanner', status: 'active', template_count: 0 },
-  { id: 'w3', name: 'Registry', status: 'archived', template_count: 0 },
+  { id: 'w1', name: 'Adviser', status: 'active', template_count: 1, task_count: 4 },
+  { id: 'w2', name: 'Paraplanner', status: 'active', template_count: 0, task_count: 0 },
+  { id: 'w3', name: 'Registry', status: 'archived', template_count: 0, task_count: 0 },
 ]
 
 const show = (template: TemplateDetail = TEMPLATE, firmRoles: WorkflowRole[] = FIRM_ROLES) =>
@@ -357,7 +357,7 @@ describe('the roles a template uses', () => {
   })
 
   test('says so plainly when the firm has no roles left to add', () => {
-    show(TEMPLATE, [{ id: 'w1', name: 'Adviser', status: 'active', template_count: 1 }])
+    show(TEMPLATE, [{ id: 'w1', name: 'Adviser', status: 'active', template_count: 1, task_count: 4 }])
     expect(screen.getByText('Every role the firm has is already on this plan.')).toBeTruthy()
   })
 })

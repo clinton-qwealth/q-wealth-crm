@@ -333,13 +333,20 @@ export async function getWorkflowRoles(): Promise<WorkflowRole[]> {
   if (error) throw new Error(`The firm's roles could not be read: ${error.message}`)
   return (data ?? []).map((r) => {
     const row = r as Record<string, unknown>
+    const junctions = Array.isArray(row.workflow_template_roles)
+      ? (row.workflow_template_roles as { template_id: string; workflow_template_tasks?: unknown[] }[])
+      : []
     return {
       id: row.id as string,
       name: row.name as string,
       status: row.status as string,
-      template_count: Array.isArray(row.workflow_template_roles)
-        ? row.workflow_template_roles.length
-        : 0,
+      template_count: junctions.length,
+      /* Summed over the junctions, because a task belongs to the role's row ON
+         a template — the same two-level shape the select rides down. */
+      task_count: junctions.reduce(
+        (sum, j) => sum + (Array.isArray(j.workflow_template_tasks) ? j.workflow_template_tasks.length : 0),
+        0,
+      ),
     }
   })
 }

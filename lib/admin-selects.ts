@@ -56,8 +56,14 @@ export const TEMPLATE_DETAIL_SELECT =
  * The embed runs BACK down the same foreign key the select above runs up. One
  * key, so it resolves — but it is the pair of them that makes that true, which
  * is why both are probed rather than just the one that is read more often.
+ *
+ * The nested `workflow_template_tasks(id)` rides the tasks' own key to the
+ * junction row, the same two-level shape as the template detail above, and is
+ * what lets the admin list say "7 tasks" beside "2 templates" without a second
+ * read.
  */
-export const WORKFLOW_ROLES_SELECT = 'id, name, status, workflow_template_roles(template_id)'
+export const WORKFLOW_ROLES_SELECT =
+  'id, name, status, workflow_template_roles(template_id, workflow_template_tasks(id))'
 
 /**
  * The published templates the deploy dialog offers.

@@ -48,6 +48,9 @@ export type WorkflowRole = {
   name: string
   status: string
   template_count: number
+  /** Tasks the role does across EVERY template — the weight behind the
+   *  template count, and the number that says what archiving it would strand. */
+  task_count: number
 }
 
 export type TemplateTask = {

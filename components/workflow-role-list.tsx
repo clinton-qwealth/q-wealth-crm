@@ -9,7 +9,7 @@ import {
 import { AddAction } from '@/components/add-action'
 import { DataRow, DataSection } from '@/components/data-section'
 import { FIELD_INPUT } from '@/components/field-box'
-import { Pill } from '@/components/ui'
+import { WorkflowRoleTile } from '@/components/ui'
 import type { WorkflowRole } from '@/lib/templates'
 
 /**
@@ -84,9 +84,15 @@ export function WorkflowRoleList({ roles }: { roles: WorkflowRole[] }) {
           ) : (
             <DataRow
               key={role.id}
+              /* The role's initials on the workflow family's violet — six roles
+                 get six different tiles, where a shared glyph would give the
+                 scanning eye nothing to land on. Archived takes the family's
+                 dormant grey, and the WORD moves into the second line: the pill
+                 it replaces sat against the name and lost every width contest,
+                 which is why `DataRow` retired its badge slot. */
+              leading={<WorkflowRoleTile name={role.name} status={role.status} />}
               primary={role.name}
               secondary={usageLine(role)}
-              indicator={role.status === 'archived' ? <Pill>Archived</Pill> : undefined}
               meta={
                 <span className="flex items-center gap-1">
                   <button
@@ -134,11 +140,24 @@ export function WorkflowRoleList({ roles }: { roles: WorkflowRole[] }) {
 const ROW_ACTION =
   'rounded px-1.5 py-0.5 text-xs font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent'
 
-/** What the row says under the name. Said in templates, because that is the
- *  number that decides whether archiving it is safe. */
+/**
+ * What the row says under the name.
+ *
+ * Templates AND tasks, because they answer different questions: the template
+ * count says how widely the role is used, and the task count says how much
+ * work archiving it would strand. "On 1 template · 14 tasks" and "On 3
+ * templates · 3 tasks" are different decisions wearing the same first number.
+ *
+ * "Archived" leads the line in words — on the tile it is only grey, and grey
+ * is not a word.
+ */
 function usageLine(role: WorkflowRole): string {
-  if (role.template_count === 0) return 'Not on any template yet'
-  return `On ${role.template_count} ${role.template_count === 1 ? 'template' : 'templates'}`
+  const state = role.status === 'archived' ? 'Archived · ' : ''
+  if (role.template_count === 0) return `${state}Not on any template yet`
+  return [
+    `${state}On ${role.template_count} ${role.template_count === 1 ? 'template' : 'templates'}`,
+    `${role.task_count} ${role.task_count === 1 ? 'task' : 'tasks'}`,
+  ].join(' · ')
 }
 
 function RenameRow({

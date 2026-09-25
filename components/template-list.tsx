@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createWorkflowTemplate, type TemplateCreateState } from '@/app/(shell)/admin/actions'
 import { AddAction } from '@/components/add-action'
 import { DataRow, DataSection } from '@/components/data-section'
-import { Pill } from '@/components/ui'
+import { WorkflowTemplateTile } from '@/components/ui'
 import { TEMPLATE_STATUS_LABEL, type TemplateSummary } from '@/lib/templates'
 
 /**
@@ -36,14 +36,23 @@ export function TemplateList({ templates }: { templates: TemplateSummary[] }) {
       {templates.map((t) => (
         <DataRow
           key={t.id}
+          /* The lifecycle rides the TILE, the way an account's status does —
+             violet and a workflow glyph when published, a pencil while it is
+             still being written, the archive when it is done with. The pill
+             that used to sit in `meta` gave the status the row's figure slot;
+             the figure a template is scanned for is how much it is USED. */
+          leading={<WorkflowTemplateTile status={t.status} />}
           primary={t.name}
           secondary={secondaryLine(t)}
           meta={
-            /* Published is the only live state, so it is the only one that
-               takes the "on" treatment. Draft and archived look alike on
-               purpose: the word carries the difference, and archived sorts to
-               the bottom anyway. */
-            <Pill on={t.status === 'published'}>{TEMPLATE_STATUS_LABEL[t.status]}</Pill>
+            t.deployment_count > 0 ? (
+              <span className="block text-right">
+                {t.deployment_count}
+                <span className="block text-[11px] font-normal leading-tight text-neutral-400">
+                  {t.deployment_count === 1 ? 'workflow' : 'workflows'}
+                </span>
+              </span>
+            ) : undefined
           }
           trigger={{ label: `Open ${t.name}`, href: `/admin/templates/${t.id}` }}
         />
@@ -52,16 +61,24 @@ export function TemplateList({ templates }: { templates: TemplateSummary[] }) {
   )
 }
 
-/** What the row says under the name. The deployment count only appears once
- *  there is one — "used by 0 workflows" is noise on every draft. */
+/**
+ * What the row says under the name.
+ *
+ * The state LEADS the line for anything not published, in words, because on
+ * the tile it is only a glyph and a tint — a reader who cannot tell violet
+ * from grey still gets "Draft" before the counts. Published rows do not say
+ * "Published", the same way an active account does not say "Active": the
+ * ordinary state is the unmarked one.
+ *
+ * The deployment count moved from this line to the row's figure slot, where a
+ * number the list is scanned for belongs.
+ */
 function secondaryLine(t: TemplateSummary): string {
   const parts = [
     `${t.task_count} ${t.task_count === 1 ? 'task' : 'tasks'}`,
     `${t.role_count} ${t.role_count === 1 ? 'role' : 'roles'}`,
   ]
-  if (t.deployment_count > 0) {
-    parts.push(`used by ${t.deployment_count} ${t.deployment_count === 1 ? 'workflow' : 'workflows'}`)
-  }
+  if (t.status !== 'published') parts.unshift(TEMPLATE_STATUS_LABEL[t.status])
   return parts.join(' · ')
 }
 

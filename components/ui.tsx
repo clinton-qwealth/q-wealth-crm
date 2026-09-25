@@ -17,12 +17,14 @@ import {
   MeetingIcon,
   NoteIcon,
   PauseIcon,
+  PencilIcon,
   PhoneIcon,
   ShieldTickIcon,
   StudyIcon,
   TaskIcon,
   TrendUpIcon,
   UmbrellaIcon,
+  WorkflowIcon,
 } from './icons'
 
 /**
@@ -923,6 +925,62 @@ export function PolicyTile({ status }: { status: string }) {
       tone={dormant ? TILE_DORMANT : 'bg-sky-50 text-sky-700 ring-sky-100'}
       glyph={dormant ? dormantGlyph(status) : <UmbrellaIcon className={GLYPH} />}
       label={dormant ? (POLICY_STATUS_LABEL[status] ?? status) : undefined}
+    />
+  )
+}
+
+/**
+ * A workflow template's tile, carrying its lifecycle the way an account's
+ * carries its status: the tile says it, and the words repeat it where words
+ * belong.
+ *
+ * A SQUARE — a template is a thing — in violet, the one hue the tile family
+ * had not spent: green is superannuation, gold is investment, sky is cover,
+ * and the charts' indigo ramp is close but two full steps darker at every
+ * grade this tile uses, so the two do not read as one system. Violet is now
+ * "the workflow section's colour"; `WorkflowRoleTile` below spends the same
+ * hue on purpose, so the two lists under Workflow management read as one
+ * family with two kinds in it.
+ *
+ * Only a PUBLISHED template gets the hue and the glyph. A draft is grey with a
+ * pencil — it is being written, and the pencil says so better than a paler
+ * violet would, since a tint of a tint is a distinction nobody can name. An
+ * archived one takes the family's dormant treatment. Both carry the word as
+ * `title` + `sr-only` through `Tile`, and both also say it in the row's own
+ * second line, because a state that exists only as a colour is a state a
+ * colour-blind reader does not have.
+ */
+export function WorkflowTemplateTile({ status }: { status: string }) {
+  if (status === 'published') {
+    return <Tile tone="bg-violet-50 text-violet-700 ring-violet-100" glyph={<WorkflowIcon className={GLYPH} />} />
+  }
+  return (
+    <Tile
+      tone={TILE_DORMANT}
+      glyph={status === 'draft' ? <PencilIcon className={GLYPH} /> : <ArchiveIcon className={GLYPH} />}
+      label={status === 'draft' ? 'Draft' : 'Archived'}
+    />
+  )
+}
+
+/**
+ * A firm role's tile: its initials on the workflow family's violet.
+ *
+ * Initials on a SQUARE, deliberately breaking the "letters mean a person"
+ * association half-way: a role is a job somebody will fill, so it earns the
+ * lettering, but people are circles here (`InitialsTile`) and a role is a
+ * thing, so it keeps the corner radius of every other thing. The initials give
+ * six roles six different tiles, which a shared glyph would not — this list is
+ * scanned by name, and the tile is the name's anchor.
+ */
+export function WorkflowRoleTile({ name, status }: { name: string; status: string }) {
+  if (status !== 'active') {
+    return <Tile tone={TILE_DORMANT} glyph={<ArchiveIcon className={GLYPH} />} label="Archived" />
+  }
+  return (
+    <Tile
+      tone="bg-violet-50 text-violet-700 ring-violet-100 text-[11px] font-semibold tracking-wide"
+      glyph={initialsOfString(name) || '·'}
     />
   )
 }
