@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createWorkflowTemplate, type TemplateCreateState } from '@/app/(shell)/admin/actions'
+import { AddAction } from '@/components/add-action'
 import { DataRow, DataSection } from '@/components/data-section'
 import { Pill } from '@/components/ui'
 import { TEMPLATE_STATUS_LABEL, type TemplateSummary } from '@/lib/templates'
@@ -113,17 +114,7 @@ export function NewTemplateForm({ triggerVariant = 'primary' }: { triggerVariant
 
   return (
     <>
-      <button
-        type="button"
-        onClick={show}
-        className={
-          triggerVariant === 'quiet'
-            ? 'rounded-md px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
-            : 'rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700'
-        }
-      >
-        New template
-      </button>
+      <AddAction label="New template" variant={triggerVariant} onClick={show} />
 
       <dialog
         ref={dialogRef}

@@ -605,23 +605,36 @@ dialog.qw-drawer[open]::backdrop {
  * halves of one action read as two events; a short fade ties them together.
  *
  * `both` so the first frame is the `from` state rather than a flash of the
- * finished layout. The rise is 4px — enough to give the fade a direction, small
- * enough that nothing appears to move. Deliberately NOT applied to the card
- * around it: fading the border and shadow too would read as the card blinking
- * rather than as its contents changing.
+ * finished layout. Deliberately NOT applied to the card around it: fading the
+ * border and shadow too would read as the card blinking rather than as its
+ * contents changing.
+ *
+ * **380ms on an expo-out curve, not 220ms on a plain ease-out.** The first
+ * version was reported as too fast on 25 September: at 220ms the section was
+ * effectively present by the time the eye arrived, so the fade registered as a
+ * flicker rather than as an arrival. The curve matters as much as the number —
+ * `cubic-bezier(0.16, 1, 0.3, 1)` is most of the way there in the first third
+ * and then settles slowly, so the section reads as quick to respond and calm
+ * to finish, where a symmetrical curve at the same duration would just feel
+ * slow. The rise went 4px to 6px with it: a longer fade with almost no travel
+ * reads as a delay rather than as movement.
+ *
+ * This is the one long transition on the site — the charts run on a 300ms
+ * clock and nothing else exceeds it — because it is the only one covering a
+ * network round trip rather than a hover.
  *
  * It replays because the element carries a `key` on the section id, so React
  * remounts it and the animation starts again. No key, no replay — a CSS
  * animation runs on mount, not on prop change.
  */
 .qw-section-in {
-  animation: qw-section-in 220ms cubic-bezier(0, 0, 0.2, 1) both;
+  animation: qw-section-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes qw-section-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;

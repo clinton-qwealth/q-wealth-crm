@@ -10,11 +10,11 @@ import {
 } from '@/app/(shell)/admin/actions'
 import type { UserGroupRow } from '@/lib/admin'
 import { USER_GROUP_STATUS_LABEL } from '@/lib/user-groups'
+import { AddAction } from './add-action'
 import { DataRow, DataSection } from './data-section'
 import { Drawer, DrawerBody, DrawerHeader } from './drawer'
 import { EditField, Field, FIELD_INPUT, FieldBox } from './field-box'
-import { PlusIcon } from './icons'
-import { Pill, QUIET_ACTION } from './ui'
+import { Pill } from './ui'
 
 /**
  * User groups — territories — and the one drawer that edits any of them.
@@ -323,22 +323,7 @@ function NewUserGroupForm({ triggerVariant = 'primary' }: { triggerVariant?: 'pr
     return () => el.removeEventListener('close', onClose)
   }, [])
 
-  const trigger =
-    triggerVariant === 'primary' ? (
-      <button
-        type="button"
-        onClick={show}
-        className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
-      >
-        <PlusIcon className="h-4 w-4" />
-        New user group
-      </button>
-    ) : (
-      <button type="button" onClick={show} className={QUIET_ACTION}>
-        <PlusIcon className="h-3.5 w-3.5" />
-        New user group
-      </button>
-    )
+  const trigger = <AddAction label="New user group" variant={triggerVariant} onClick={show} />
 
   return (
     <>

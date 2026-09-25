@@ -300,6 +300,18 @@ export const SECTION_TOOLBAR = 'mb-2.5 flex items-center gap-3'
  * well as its look, since a section's header row is as tall as this and the
  * mix chart's spacer is measured against it. See `SECTION_TOOLBAR`.
  */
+/**
+ * The primary action button: brand fill, white label, a glyph before it.
+ *
+ * Paired with QUIET_ACTION below — the same action at the two prominences a
+ * `DataSection` gives it. Named here rather than written out per caller
+ * because it HAD been written out per caller, four times, and they drifted:
+ * one hovered to `brand-700` instead of `brand-600` and carried no focus ring.
+ * `components/add-action.tsx` has the account of how that was found.
+ */
+export const PRIMARY_ACTION =
+  'inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40'
+
 export const QUIET_ACTION =
   'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
 

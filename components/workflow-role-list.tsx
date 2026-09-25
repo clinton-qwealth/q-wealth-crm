@@ -6,6 +6,7 @@ import {
   renameWorkflowRole,
   setWorkflowRoleStatus,
 } from '@/app/(shell)/admin/actions'
+import { AddAction } from '@/components/add-action'
 import { DataRow, DataSection } from '@/components/data-section'
 import { FIELD_INPUT } from '@/components/field-box'
 import { Pill } from '@/components/ui'
@@ -238,17 +239,7 @@ export function NewWorkflowRoleForm({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={show}
-        className={
-          triggerVariant === 'quiet'
-            ? 'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
-            : 'inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40'
-        }
-      >
-        New role
-      </button>
+      <AddAction label="New role" variant={triggerVariant} onClick={show} />
 
       <dialog
         ref={dialogRef}

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { PlusIcon } from './icons'
-import { QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } from './ui'
+import { PRIMARY_ACTION, QUIET_ACTION, SECTION_HEADING, SECTION_TOOLBAR, SHEET } from './ui'
 
 /**
  * The container pattern for a tab panel that holds records.
@@ -95,7 +95,7 @@ export function DataSection({
           {emptyAction ?? (
             <a
               href={addHref}
-              className="inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40"
+              className={PRIMARY_ACTION}
             >
               <PlusIcon className="h-4 w-4" />
               {addLabel}
