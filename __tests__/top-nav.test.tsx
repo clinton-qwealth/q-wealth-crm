@@ -133,6 +133,24 @@ describe('the area pill', () => {
     second.unmount()
   })
 
+  /**
+   * The slot is what anchors the NAV, not the pill: the pill's word changes
+   * width with the area, and the fixed room is what stops that reaching the
+   * flank — so the centred run's anchor chain (mark → slot → slack) is
+   * constant and the links hold still across pages. Mutation, and it was run:
+   * drop `w-36` from the slot in `top-nav.tsx` — this fails, and the drift is
+   * back on every area change.
+   */
+  test('sits in a fixed-width slot, so its word cannot move the nav', () => {
+    for (const [path, word] of [['/', 'CRM'], ['/admin', 'Administration'], ['/help', 'Q-Intelligence']] as const) {
+      const { unmount } = at(path)
+      const slot = screen.getByText(word).parentElement as HTMLElement
+      expect(slot.className, `a fixed slot at ${path}`).toContain('w-36')
+      expect(slot.className, `that cannot be squeezed at ${path}`).toContain('shrink-0')
+      unmount()
+    }
+  })
+
   test('says where you are — it is not a link, and it sits beside the mark', () => {
     const { container } = at('/admin')
     const pill = screen.getByText('Administration')

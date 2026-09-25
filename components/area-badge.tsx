@@ -39,8 +39,12 @@ import { isCurrentNavItem } from '@/lib/nav'
  * pathname, and only this needs it. `isCurrentNavItem` is the top bar's own
  * segment matcher, so `/admin` and `/admin/templates/…` both count and some
  * future `/administrivia` would not — it falls through to CRM, as any path
- * outside a named territory should. Hidden below `sm`, where the bar has no
- * slack.
+ * outside a named territory should.
+ *
+ * Where and whether it shows is the BAR's decision, not this component's: the
+ * top bar seats it in a fixed-width slot (which is what keeps the nav from
+ * shifting between areas) and hides that slot below `sm`. A label added here
+ * has to fit the slot — 144px — and the bar's comment says how to check.
  */
 type Area = {
   label: string
@@ -78,7 +82,7 @@ export function AreaBadge() {
   return (
     <span
       className={[
-        'hidden shrink-0 items-center gap-1.5 rounded-full border bg-gradient-to-b sm:inline-flex',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-gradient-to-b',
         'px-2.5 py-1 text-[10px] font-semibold uppercase leading-none tracking-[0.1em]',
         area.tone,
       ].join(' ')}

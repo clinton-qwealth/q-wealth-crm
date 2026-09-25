@@ -28,10 +28,15 @@ import { TopNavLinks } from './top-nav-links'
  * true centre left a hole on the left and a squeeze on the right. The links
  * now centre in the SPACE BETWEEN the mark and the search box — `flex-1
  * justify-center` on the middle — which sits them left of the bar's centre by
- * half the flanks' difference, evenly breathing on both sides. The known cost
- * is the one the grid avoided: the run shifts a little when the flanks change
- * width, most visibly when the Administration pill appears. Chosen with that
- * stated.
+ * half the flanks' difference, evenly breathing on both sides.
+ *
+ * The cost that came with it — the run shifting when a flank changed width —
+ * is paid off by the PILL SLOT below: the area pill sits inside a fixed
+ * `w-36`, so "CRM" and "Q-INTELLIGENCE" occupy the same room and the left
+ * flank is one constant width. The links' anchor chain is mark → slot →
+ * slack, every link in it constant, so the run holds still across pages —
+ * asked for on 25 September, after the three-colourway pill made the drift
+ * visible on every area change.
  *
  * **Still a server component.** The destinations moved to TopNavLinks on
  * 10 September, because marking the current one needs the pathname and the
@@ -57,7 +62,7 @@ export function TopNav({
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
       <div className="flex h-12 items-center gap-3 px-3 sm:gap-6 sm:px-5">
-        {/* Left flank: who we are, and — in the admin area — where you are. */}
+        {/* Left flank: who we are, and where you are. */}
         <div className="flex min-w-0 shrink-0 items-center gap-2.5">
           <Link
             href="/"
@@ -66,7 +71,17 @@ export function TopNav({
           >
             <BrandMark className="h-7 w-7 text-neutral-900" />
           </Link>
-          <AreaBadge />
+          {/* THE SLOT'S WIDTH IS LOAD-BEARING. It is what keeps the nav still:
+              the pill's word changes with the area, and without a fixed room to
+              change in, every navigation between areas nudged the centred run
+              sideways by half the difference. 144px fits the widest label,
+              Q-INTELLIGENCE, with ~10px to spare — a NEW AREA'S LABEL MUST FIT
+              or it will overflow the slot, and jsdom cannot measure that for
+              you: check it in a browser. Hidden below `sm` with the pill,
+              where the bar has no slack to reserve. */}
+          <span className="hidden w-36 shrink-0 sm:flex">
+            <AreaBadge />
+          </span>
         </div>
 
         {/* The slack lives HERE, and the nav floats on the middle of it —
