@@ -1,3 +1,15 @@
+'use client'
+
+/*
+ * A CLIENT component, and the directive is load-bearing in a way jsdom cannot
+ * show you: the ICONS map below passes component FUNCTIONS into `SectionNav`,
+ * and a function cannot cross a server→client boundary — the page throws
+ * "Functions cannot be passed directly to Client Components" at request time,
+ * while every unit test (no boundary in jsdom) and the build (this page is
+ * never prerendered) stay green. Found live on /groups, 25 Sep 2026, minutes
+ * after the extraction that removed the directive. `section-nav-boundary`
+ * is the test that now stands where the compiler does not.
+ */
 import type { ComponentType } from 'react'
 import { BuildingIcon, GroupIcon, ReferralIcon, StructureIcon } from '@/components/icons'
 import { SectionNav } from '@/components/section-nav'
