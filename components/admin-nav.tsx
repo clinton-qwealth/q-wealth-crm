@@ -32,6 +32,32 @@ import { ADMIN_SECTIONS, type AdminSectionId } from '@/lib/admin-sections'
  * of which is not colour (the lift) and one of which is not visual at all
  * (`aria-current`).
  *
+ * ## The hover tint is OPAQUE, and the transition is the house one
+ *
+ * Both were different for a few hours on 25 September and both were wrong in
+ * the same way: they were the only things on the page compositing against the
+ * fixed `PageGround` layer under a `backdrop-filter` header.
+ *
+ * The tint was `bg-white/70`. Every other hover in this app is opaque — the
+ * top bar's is `bg-neutral-100` — and a translucent one has to be re-blended
+ * with the artwork behind it on every repaint, which the blurred header at
+ * `z-40` already forces the compositor to track. It is now `bg-white`, which
+ * also reads better: hovering an item previews it rising into the sheet it
+ * becomes when you are on it.
+ *
+ * The transition named `box-shadow` explicitly, so the active item's sheet
+ * shadow animated too. `transition-colors` is what every neighbour here uses,
+ * it covers `color`, `background-color` and `stroke` — which is the glyph —
+ * and it leaves the shadow alone.
+ *
+ * Clinton reported the symptom that sent me looking: hovering an item showed
+ * the hand cursor while the pointer was moving and dropped back to the arrow
+ * the moment it stopped. A static reproduction built from the compiled CSS
+ * ruled the stylesheet out — the computed cursor on these links is `pointer`
+ * and the hit test lands inside the anchor — so what is left is repaint, which
+ * is what these two changes take away. VERIFY IT BY HOVERING: the page needs a
+ * session, so no test in this repo can see it.
+ *
  * ## Icons live here, not in the list
  *
  * `ADMIN_SECTIONS` is a `lib/` module with no JSX, so a test can import it
@@ -71,13 +97,13 @@ export function AdminNav({ current }: { current: AdminSectionId }) {
                 className={[
                   /* `relative` anchors the bar's absolute position. */
                   'relative flex items-center gap-2.5 rounded-lg py-2 pl-3.5 pr-3 text-sm outline-none',
-                  'transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-brand/30',
+                  'transition-colors focus-visible:ring-2 focus-visible:ring-brand/30',
                   /* Mutually exclusive, as in the top bar: a hover tint on the
                      current item would dull the sheet under the pointer,
                      exactly when somebody reaches for it. */
                   active
                     ? `font-medium text-neutral-900 ${SHEET_SURFACE}`
-                    : 'text-neutral-600 hover:bg-white/70 hover:text-neutral-900',
+                    : 'text-neutral-600 hover:bg-white hover:text-neutral-900',
                 ].join(' ')}
               >
                 <span
