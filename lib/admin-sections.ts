@@ -29,23 +29,24 @@
  * `/admin`, not `/admin?section=users`, so the default destination — the one
  * the account menu already points at — has one spelling rather than two.
  */
+/* Labels only, no descriptions: the page stopped rendering a heading block on
+   25 September 2026 — the top bar's Administration pill names the area and the
+   menu names the section, so a paragraph restating both was the crowding
+   Clinton asked to remove. */
 export const ADMIN_SECTIONS = [
   {
     id: 'users',
     label: 'User management',
-    description: 'Who works here, who may sign in, and which territories they see.',
     href: '/admin',
   },
   {
     id: 'workflows',
     label: 'Workflow management',
-    description: 'The templates a workflow is deployed from, and the roles they hand out.',
     href: '/admin?section=workflows',
   },
   {
     id: 'observability',
     label: 'Observability',
-    description: 'Who changed what, and when.',
     href: '/admin?section=observability',
   },
 ] as const

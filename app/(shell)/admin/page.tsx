@@ -4,7 +4,7 @@ import { AuditTrail } from '@/components/audit-trail'
 import { StaffList } from '@/components/staff-list'
 import { Tabs, type TabItem } from '@/components/tabs'
 import { TemplateList } from '@/components/template-list'
-import { Card, PageHeading, WORKING_AREA } from '@/components/ui'
+import { Card, WORKING_AREA } from '@/components/ui'
 import { UserGroupList } from '@/components/user-group-list'
 import { WorkflowRoleList } from '@/components/workflow-role-list'
 import {
@@ -91,7 +91,13 @@ export default async function AdminPage(
 
   return (
     <>
-      <PageHeading eyebrow="Administration" title={section.label} description={section.description} />
+      {/* No heading block, since 25 September: the top bar's Administration
+          pill names the AREA and the menu's mark names the SECTION, so a
+          full-width heading restating both only pushed the work down the page.
+          The h1 stays for whoever navigates by headings — a page without one
+          has no anchor to jump to — it just spends no pixels. `sr-only` is
+          absolutely positioned, so it adds no row to the grid. */}
+      <h1 className="sr-only">{section.label}</h1>
 
       {/* Left — the menu, on the ground rather than in a card */}
       <div className="col-span-full flex flex-col gap-4 lg:col-span-3 xl:col-span-2">

@@ -133,9 +133,20 @@ describe('the sections', () => {
     }
   })
 
-  test('the heading names the section, not the page', async () => {
+  /**
+   * The h1 names the section and spends no pixels. The visible heading block
+   * went on 25 September — the top bar's pill names the area, the menu's mark
+   * names the section, and the block restating both just pushed the work down
+   * the page. The h1 itself STAYS, `sr-only`, because a reader navigating by
+   * headings needs an anchor; deleting it outright would pass a "no heading
+   * block" assertion while quietly removing the page's name from assistive
+   * output — which is why both halves are asserted here.
+   */
+  test('the heading names the section, invisibly', async () => {
     const { getByRole, unmount } = await page('workflows')
-    expect(getByRole('heading', { level: 1 }).textContent).toBe('Workflow management')
+    const h1 = getByRole('heading', { level: 1 })
+    expect(h1.textContent).toBe('Workflow management')
+    expect(h1.className).toContain('sr-only')
     unmount()
     const second = await page()
     expect(second.getByRole('heading', { level: 1 }).textContent).toBe('User management')
