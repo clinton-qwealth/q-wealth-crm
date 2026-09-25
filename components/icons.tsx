@@ -672,3 +672,16 @@ export function SparkIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/** Four tiles: the working surface itself. The area pill's mark for the
+ *  ordinary CRM pages — the ones that are not a special territory. */
+export function GridIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <rect x="3" y="3" width="6" height="6" rx="1.5" />
+      <rect x="11" y="3" width="6" height="6" rx="1.5" />
+      <rect x="3" y="11" width="6" height="6" rx="1.5" />
+      <rect x="11" y="11" width="6" height="6" rx="1.5" />
+    </svg>
+  )
+}

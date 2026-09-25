@@ -14,10 +14,12 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
  *   both, since the bar's heavy right flank made true centre read lopsided.
  *   The middle wrapper's `flex-1 justify-center` is the whole mechanism, and
  *   its classes are the only place jsdom can see it.
- * - **The pill renders everywhere**, and every page in the product claims to
- *   be Administration. Or it string-matches the pathname, and some future
- *   `/administrivia` page inherits the badge — `isCurrentNavItem` is a segment
- *   test, and the trailing-slash case below is what proves it is being used.
+ * - **Every page claims to be Administration**, or a special area's pill
+ *   string-matches the pathname and some future `/administrivia` page inherits
+ *   it — `isCurrentNavItem` is a segment test, and the leak cases below prove
+ *   it is being used. The ordinary pages say CRM, which since 25 September is
+ *   the pill's DEFAULT rather than its absence: one pill, always, in one of
+ *   three colourways.
  * - **The pill carries the admin route as a link.** It must not: it says where
  *   you ARE. The four nav links deliberately do not list /admin, and a
  *   clickable pill would put a protected destination into every admin page's
@@ -71,11 +73,12 @@ describe('the bar', () => {
 })
 
 describe('the area pill', () => {
-  test('is absent everywhere that is not a named area', () => {
-    for (const path of ['/', '/groups', '/workflows', '/reports']) {
+  test('says CRM on every ordinary page — the default is a pill, not an absence', () => {
+    for (const path of ['/', '/groups', '/workflows', '/reports', '/profile', '/preferences']) {
       const { unmount } = at(path)
-      expect(screen.queryByText('Administration'), `no pill at ${path}`).toBeNull()
-      expect(screen.queryByText('Q-Intelligence'), `no pill at ${path}`).toBeNull()
+      expect(screen.getByText('CRM'), `CRM pill at ${path}`).toBeTruthy()
+      expect(screen.queryByText('Administration'), `no admin pill at ${path}`).toBeNull()
+      expect(screen.queryByText('Q-Intelligence'), `no Q-Intelligence pill at ${path}`).toBeNull()
       unmount()
     }
   })
@@ -84,8 +87,24 @@ describe('the area pill', () => {
     for (const path of ['/admin', '/admin/templates/abc-123']) {
       const { unmount } = at(path)
       expect(screen.getByText('Administration'), `pill at ${path}`).toBeTruthy()
+      expect(screen.queryByText('CRM'), `the default gives way at ${path}`).toBeNull()
       unmount()
     }
+  })
+
+  /* Each colourway is its own hue, and the hue is on the pill the word is on.
+     A copy-paste that left Q-Intelligence wearing the brand, or CRM wearing
+     sky (the insurance tiles' colour), passes every presence test above. */
+  test('wears the right colour: blue CRM, purple Q-Intelligence, brand Administration', () => {
+    const pill = (path: string, word: string) => {
+      const { unmount } = at(path)
+      const cls = screen.getByText(word).className
+      unmount()
+      return cls
+    }
+    expect(pill('/', 'CRM')).toContain('text-blue-700')
+    expect(pill('/help', 'Q-Intelligence')).toContain('text-purple-700')
+    expect(pill('/admin', 'Administration')).toContain('text-brand-700')
   })
 
   /* ONE pill, saying where you are — never both. The find-first over the area
@@ -103,12 +122,15 @@ describe('the area pill', () => {
 
   /* The segment rule, not a prefix rule: isCurrentNavItem matches `/admin` and
      `/admin/…`, and nothing else that merely starts with the letters. */
-  test('does not leak onto a route that only starts with the same letters', () => {
-    at('/administrivia')
+  test('a route that only starts with an area’s letters is just the CRM', () => {
+    const first = at('/administrivia')
     expect(screen.queryByText('Administration')).toBeNull()
-    const { unmount } = at('/helpdesk')
+    expect(screen.getByText('CRM')).toBeTruthy()
+    first.unmount()
+    const second = at('/helpdesk')
     expect(screen.queryByText('Q-Intelligence')).toBeNull()
-    unmount()
+    expect(screen.getByText('CRM')).toBeTruthy()
+    second.unmount()
   })
 
   test('says where you are — it is not a link, and it sits beside the mark', () => {
