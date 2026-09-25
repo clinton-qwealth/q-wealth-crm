@@ -43,12 +43,19 @@ export const metadata = { title: 'Administration · Q Wealth CRM' }
  *
  * ## Three columns since 20 September, matching the group page
  *
- * The same 3 / 6 / 3 split over the shell's twelve-column grid, so the two
- * pages an administrator moves between do not rearrange themselves. The left
- * column now holds the menu; the right is **still deliberately empty** —
- * Clinton asked for the shape first and will decide what goes in it. Nothing
- * is rendered there, and the working area sits in the middle where the group
- * page's does.
+ * The group page's 3 / 6 / 3 split over the shell's twelve-column grid at
+ * `lg`, so the two pages an administrator moves between do not rearrange
+ * themselves. From `xl` the menu narrows to 2 / 7 / 3 — asked for on
+ * 25 September: three short labels do not need a quarter of a wide screen,
+ * and the working area takes what they give up. Only at `xl`, because at
+ * `lg` a two-column track is about 145px, which "Workflow management" does
+ * not fit on one line.
+ *
+ * The left column holds the menu, bare — a `Card` around it read as a second
+ * record beside the tabs, see `AdminNav`. The right is **still deliberately
+ * empty**: Clinton asked for the shape first and will decide what goes in it.
+ * Nothing is rendered there, and the working area sits in the middle where
+ * the group page's does.
  *
  * ## The gate comes before the wave
  *
@@ -86,15 +93,13 @@ export default async function AdminPage(
     <>
       <PageHeading eyebrow="Administration" title={section.label} description={section.description} />
 
-      {/* Left — the menu */}
-      <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
-        <Card>
-          <AdminNav current={section.id} />
-        </Card>
+      {/* Left — the menu, on the ground rather than in a card */}
+      <div className="col-span-full flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
+        <AdminNav current={section.id} />
       </div>
 
       {/* Centre — the working area */}
-      <div className="col-span-full lg:col-span-6">
+      <div className="col-span-full lg:col-span-6 xl:col-span-7">
         <Card>
           <Tabs
             /* KEYED BY SECTION. `Tabs` keeps its selected tab in state, and

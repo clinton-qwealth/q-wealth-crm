@@ -5,11 +5,32 @@ import { useEffect, useRef, useState } from 'react'
 import { signOut } from '@/app/actions'
 import { ACCOUNT_MENU_ITEMS, ADMIN_MENU_ITEM } from '@/lib/nav'
 import { fullName, initialsOf } from '@/lib/staff-name'
+import type { ComponentType } from 'react'
 import { Avatar } from './avatar'
-import { UserIcon } from './icons'
+import { KeyIcon, SignOutIcon, SlidersIcon, UserIcon } from './icons'
 
+/* `group`, so the glyph can follow the label's hover colour. */
 const ITEM_CLASS =
-  'block w-full px-3 py-1.5 text-left text-sm outline-none transition-colors focus-visible:bg-brand-50 focus-visible:text-brand-700'
+  'group flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm outline-none transition-colors focus-visible:bg-brand-50 focus-visible:text-brand-700'
+
+/* Quiet by default and darkening with the row: the glyph is a cue beside the
+   word, not a second label competing with it. */
+const ITEM_ICON = 'h-4 w-4 shrink-0 text-neutral-400 transition-colors group-hover:text-neutral-600'
+
+/**
+ * A glyph per destination, keyed by href so the list in `lib/nav.ts` stays
+ * free of JSX and importable by tests. The `Record` over the union of hrefs
+ * means a destination added there without a glyph here is a type error, not
+ * a bare row in the menu.
+ */
+const ICONS: Record<
+  (typeof ACCOUNT_MENU_ITEMS)[number]['href'] | typeof ADMIN_MENU_ITEM.href,
+  ComponentType<{ className?: string }>
+> = {
+  '/profile': UserIcon,
+  '/preferences': SlidersIcon,
+  '/admin': KeyIcon,
+}
 
 /**
  * Avatar button with a dropdown.
@@ -139,20 +160,24 @@ export function ProfileMenu({
           ) : null}
 
           <div className="py-1">
-            {links.map((item, i) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                role="menuitem"
-                ref={(el) => {
-                  itemRefs.current[i] = el
-                }}
-                onClick={() => setOpen(false)}
-                className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {links.map((item, i) => {
+              const Icon = ICONS[item.href]
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  role="menuitem"
+                  ref={(el) => {
+                    itemRefs.current[i] = el
+                  }}
+                  onClick={() => setOpen(false)}
+                  className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
+                >
+                  <Icon className={ITEM_ICON} />
+                  {item.label}
+                </Link>
+              )
+            })}
           </div>
 
           {/* Separated: leaving is a different kind of act from navigating. */}
@@ -166,6 +191,7 @@ export function ProfileMenu({
                 }}
                 className={`${ITEM_CLASS} text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900`}
               >
+                <SignOutIcon className={ITEM_ICON} />
                 Sign out
               </button>
             </form>

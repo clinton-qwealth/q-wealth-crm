@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ComponentType } from 'react'
 import { GroupIcon, PulseIcon, WorkflowIcon } from '@/components/icons'
+import { SHEET_SURFACE } from '@/components/ui'
 import { ADMIN_SECTIONS, type AdminSectionId } from '@/lib/admin-sections'
 
 /**
@@ -16,15 +17,20 @@ import { ADMIN_SECTIONS, type AdminSectionId } from '@/lib/admin-sections'
  * action invalidates the prefetch cache, that is the piece to add, the way
  * `top-nav-links.tsx` does it.
  *
- * ## "Here" is a bar, not a fill
+ * ## Bare on the ground, and "here" is a sheet
  *
- * The top bar fills the current item with the brand colour, a known contrast
- * exception that its own header defends. Down the side of a page, the same
- * fill would be the loudest thing on the screen and would sit where the eye
- * expects the primary action. So this uses the other idiom already in the
- * vocabulary — the tabs' 2px brand bar — turned on its side and put on the
- * left edge, with a grey ground and a heavier weight as the two signals that
- * are not colour. `aria-current` says the same thing to a screen reader.
+ * The first version sat inside a `Card`, and read as a record of three rows
+ * beside a record of tabs — two boxes of the same weight, one of which was
+ * only chrome. Since 25 September the menu sits directly on the page ground
+ * and the CURRENT item is the one white surface: `SHEET_SURFACE`, the same
+ * lift every list here gives its sheet, so the item you are on reads as the
+ * front of the working area rather than as a highlighted row in a box. The
+ * others are text on the ground and whiten a little under the pointer.
+ *
+ * The 2px brand bar on the left edge stays — the tabs' "here" idiom, turned
+ * on its side — and with the glyph going brand, that is three signals, one
+ * of which is not colour (the lift) and one of which is not visual at all
+ * (`aria-current`).
  *
  * ## Icons live here, not in the list
  *
@@ -35,7 +41,8 @@ import { ADMIN_SECTIONS, type AdminSectionId } from '@/lib/admin-sections'
  *
  * On a narrow screen the left column stacks above the working area, so the
  * list runs sideways there and only becomes a column at `lg`, where it has a
- * column to be in.
+ * column to be in. The labels may wrap in the narrowest column they get; a
+ * clipped label would be worse than a two-line one.
  */
 const ICONS: Record<AdminSectionId, ComponentType<{ className?: string }>> = {
   users: GroupIcon,
@@ -46,7 +53,10 @@ const ICONS: Record<AdminSectionId, ComponentType<{ className?: string }>> = {
 export function AdminNav({ current }: { current: AdminSectionId }) {
   return (
     <nav aria-label="Administration sections">
-      <ul className="no-scrollbar flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+      {/* `-m-1 p-1` gives the current item's shadow room inside the sideways
+          scroller on small screens, where `overflow-x-auto` would otherwise
+          clip it top and bottom. */}
+      <ul className="no-scrollbar -m-1 flex gap-1 overflow-x-auto p-1 lg:flex-col lg:overflow-visible">
         {ADMIN_SECTIONS.map((section) => {
           const Icon = ICONS[section.id]
           const active = section.id === current
@@ -60,25 +70,27 @@ export function AdminNav({ current }: { current: AdminSectionId }) {
                 aria-current={active ? 'page' : undefined}
                 className={[
                   /* `relative` anchors the bar's absolute position. */
-                  'relative flex items-center gap-2.5 rounded-md py-2 pl-3 pr-3 text-sm outline-none transition-colors',
-                  'focus-visible:ring-2 focus-visible:ring-brand/30',
-                  /* Mutually exclusive, as in the top bar: a grey hover on the
-                     current item would make the highlight disappear under the
-                     pointer, exactly when somebody reaches for it. */
+                  'relative flex items-center gap-2.5 rounded-lg py-2 pl-3.5 pr-3 text-sm outline-none',
+                  'transition-[background-color,color,box-shadow] focus-visible:ring-2 focus-visible:ring-brand/30',
+                  /* Mutually exclusive, as in the top bar: a hover tint on the
+                     current item would dull the sheet under the pointer,
+                     exactly when somebody reaches for it. */
                   active
-                    ? 'bg-neutral-100 font-medium text-neutral-900'
-                    : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900',
+                    ? `font-medium text-neutral-900 ${SHEET_SURFACE}`
+                    : 'text-neutral-600 hover:bg-white/70 hover:text-neutral-900',
                 ].join(' ')}
               >
                 <span
                   aria-hidden="true"
                   className={[
-                    'pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-full bg-brand',
+                    /* Inside the sheet's border rather than on it, so the bar
+                       reads as a mark on the item and not as a coloured edge. */
+                    'pointer-events-none absolute inset-y-2.5 left-0.75 w-0.5 rounded-full bg-brand',
                     active ? 'opacity-100' : 'opacity-0',
                   ].join(' ')}
                 />
                 <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-brand' : 'text-neutral-400'}`} />
-                <span className="whitespace-nowrap">{section.label}</span>
+                <span>{section.label}</span>
               </Link>
             </li>
           )

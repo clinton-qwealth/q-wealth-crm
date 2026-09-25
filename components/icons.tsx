@@ -621,3 +621,40 @@ export function PulseIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
+
+/**
+ * Three sliders: the knobs a person sets for themselves. The account menu's
+ * mark for Preferences — deliberately not a cog, which reads as "settings for
+ * the system" and is the shape Administration would want.
+ */
+export function SlidersIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M3 5.5h2.25M9 5.5h8M3 10h7.75M14.5 10h2.5M3 14.5h4.25M11 14.5h6" />
+      <circle cx="7" cy="5.5" r="1.75" />
+      <circle cx="12.5" cy="10" r="1.75" />
+      <circle cx="9" cy="14.5" r="1.75" />
+    </svg>
+  )
+}
+
+/** A key: access, and who is given it. The account menu's mark for
+ *  Administration, which is the page that hands access out. */
+export function KeyIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <circle cx="7" cy="12.75" r="3.25" />
+      <path d="m9.4 10.35 6.85-6.85M13.25 6.5l2 2M11.25 8.5l2 2" />
+    </svg>
+  )
+}
+
+/** A doorway with the arrow leaving through it: Sign out. */
+export function SignOutIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} {...STROKE} aria-hidden="true">
+      <path d="M8.5 3.5H4.75a.5.5 0 0 0-.5.5v12a.5.5 0 0 0 .5.5H8.5" />
+      <path d="m12.25 6.5 3.5 3.5-3.5 3.5M15.75 10H7.75" />
+    </svg>
+  )
+}

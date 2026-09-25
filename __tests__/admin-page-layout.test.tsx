@@ -174,7 +174,19 @@ describe('the columns', () => {
       'lg:col-span-6',
       'lg:col-span-3',
     ])
+    /* Narrower from xl, 25 Sep 2026: three short labels do not need a quarter
+       of a wide screen, and the working area takes what they give up. The
+       right column carries no xl span of its own and keeps its 3, so the row
+       still sums to twelve. Only at xl — see the page for why not lg. */
+    expect(cols.map((c) => (c.className.match(/xl:col-span-\d+/) ?? [''])[0])).toEqual([
+      'xl:col-span-2',
+      'xl:col-span-7',
+      '',
+    ])
     expect(cols[0]!.querySelector('nav'), 'the menu sits on the left').toBeTruthy()
+    /* Bare: the menu is chrome, not a record, so it gets no card of its own.
+       A `section` here would be the Card's element. */
+    expect(cols[0]!.querySelector('section'), 'the menu is not boxed in a card').toBeNull()
     expect(cols[1]!.querySelector('[data-slot="staff-panel"]'), 'the work sits in the centre').toBeTruthy()
   })
 
