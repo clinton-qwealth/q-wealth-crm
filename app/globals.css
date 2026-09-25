@@ -596,3 +596,44 @@ dialog.qw-drawer[open]::backdrop {
     animation: none;
   }
 }
+
+/*
+ * A section of the Administration page arriving.
+ *
+ * The menu's mark moves on the click (see `components/admin-nav.tsx`), so the
+ * content lands a round trip later. Without this it snapped in and the two
+ * halves of one action read as two events; a short fade ties them together.
+ *
+ * `both` so the first frame is the `from` state rather than a flash of the
+ * finished layout. The rise is 4px — enough to give the fade a direction, small
+ * enough that nothing appears to move. Deliberately NOT applied to the card
+ * around it: fading the border and shadow too would read as the card blinking
+ * rather than as its contents changing.
+ *
+ * It replays because the element carries a `key` on the section id, so React
+ * remounts it and the animation starts again. No key, no replay — a CSS
+ * animation runs on mount, not on prop change.
+ */
+.qw-section-in {
+  animation: qw-section-in 220ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@keyframes qw-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The content stays; only the motion goes. Nothing sets `opacity: 0` outside
+   the keyframes, so switching the animation off leaves the section visible —
+   which is the whole reason the base rule carries no opacity of its own. */
+@media (prefers-reduced-motion: reduce) {
+  .qw-section-in {
+    animation: none;
+  }
+}

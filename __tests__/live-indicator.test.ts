@@ -51,7 +51,10 @@ describe('the live indicator', () => {
   /* It grows and fades out, then waits. A ring that is always mid-flight reads
      as a spinner — something loading — rather than as a steady state. */
   test('the ring fades to nothing and rests before the next pulse', () => {
-    const frames = css.slice(css.indexOf('@keyframes qw-live-pulse'))
+    /* Bounded at the reduced-motion block that follows it, not left running to
+       the end of the file — see the note on `at` below. */
+    const from = css.indexOf('@keyframes qw-live-pulse')
+    const frames = css.slice(from, css.indexOf('@media (prefers-reduced-motion: reduce)', from))
     /* Anchored on the semicolon: a bare `opacity: 0` pattern also matches
        `opacity: 0.4`, which is a ring that never disappears — the exact fault
        this asserts against. A mutation proved it. */
@@ -60,8 +63,19 @@ describe('the live indicator', () => {
   })
 
   test('reduced motion stops the pulse and keeps the light', () => {
-    const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)')
-    const block = css.slice(at, css.indexOf('\n}', css.indexOf('.qw-live::after', at)))
+    /* The reduced-motion block that holds THIS rule, found by working back
+       from the rule itself — not `lastIndexOf`, which meant "the last one in
+       the file" and silently became someone else's block the day another
+       animation was appended below. The slice then came back empty and the
+       test failed claiming the animation was not turned off, which was both
+       true of the wrong block and useless.
+
+       The second `.qw-live::after` is the one inside the media query; the
+       first is the rule that starts the pulse, above the keyframes. */
+    const ringWhenReduced = css.indexOf('.qw-live::after', css.indexOf('@keyframes qw-live-pulse'))
+    const at = css.lastIndexOf('@media (prefers-reduced-motion: reduce)', ringWhenReduced)
+    expect(at, 'the rule sits inside a reduced-motion block').toBeGreaterThan(-1)
+    const block = css.slice(at, css.indexOf('\n}', ringWhenReduced))
     expect(block, 'the animation is turned off').toMatch(/animation:\s*none/)
     expect(block, 'the dot itself is not hidden — that would remove the fact').not.toMatch(
       /\.qw-live\s*\{[^}]*display:\s*none/,

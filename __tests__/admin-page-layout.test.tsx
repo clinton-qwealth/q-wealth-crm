@@ -148,8 +148,12 @@ describe('the sections', () => {
    * then User management into the same container — because that is what a
    * client-side navigation does, and it is the only way the bug shows: a
    * fresh render per section always starts clean. Mutation, and it was run:
-   * remove `key={section.id}` from `<Tabs>` in the page — this fails with
-   * zero selected tabs.
+   * remove `key={section.id}` from the working area's wrapper in the page —
+   * this fails with zero selected tabs.
+   *
+   * That key also replays the section's fade, so removing it breaks both at
+   * once. The fade is asserted separately below, since a class can be dropped
+   * without the key going with it.
    */
   test('moving between sections does not carry the old selection over', async () => {
     const first = await AdminPage({ searchParams: Promise.resolve({ section: 'workflows' }) })
@@ -188,6 +192,18 @@ describe('the columns', () => {
        A `section` here would be the Card's element. */
     expect(cols[0]!.querySelector('section'), 'the menu is not boxed in a card').toBeNull()
     expect(cols[1]!.querySelector('[data-slot="staff-panel"]'), 'the work sits in the centre').toBeTruthy()
+  })
+
+  /* The fade that joins the click to the content landing a round trip later.
+     A CSS animation runs on MOUNT, so the class is only half of it — the key
+     on the same element is what replays it, and that is pinned above. */
+  test('the working area fades its section in', async () => {
+    const { container } = await page()
+    const faded = columns(container)[1]!.querySelector('.qw-section-in')
+    expect(faded, 'the working area carries the section fade').toBeTruthy()
+    /* Inside the card, not around it: fading the border and shadow too would
+       read as the card blinking rather than as its contents changing. */
+    expect(faded!.closest('section'), 'the fade is inside the card').toBeTruthy()
   })
 
   test('the right column is reserved and empty, not filled with a placeholder', async () => {

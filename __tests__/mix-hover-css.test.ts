@@ -32,9 +32,37 @@ import { ASSET_CLASSES } from '@/lib/allocation'
  */
 const css = readFileSync(resolve(__dirname, '../app/globals.css'), 'utf8')
 
+/**
+ * One section of the stylesheet: from its first selector to the START of the
+ * next section's.
+ *
+ * **The end bound is not decoration.** Each of the three slices below was
+ * `css.slice(css.indexOf(start))` — a slice that ran to the END OF THE FILE —
+ * so "the ring runs on a 300ms clock" was in fact asserting that no other
+ * duration appears anywhere beneath it in `globals.css`. Three of these tests
+ * failed on 25 September 2026 the moment an unrelated 220ms animation was
+ * appended to the file, which is an assertion firing for something it was
+ * never about. A section that stops where the next one starts says what it
+ * meant to say, and leaves the rest of the file alone.
+ *
+ * It throws rather than returning an empty string: a slice that silently
+ * comes back empty passes every `not.toMatch` in this file.
+ */
+const section = (start: string, end: string) => {
+  const from = css.indexOf(start)
+  const to = css.indexOf(end, from)
+  if (from < 0 || to <= from) {
+    throw new Error(`globals.css has no section from "${start}" to "${end}"`)
+  }
+  return css.slice(from, to)
+}
+
 /* The block appended for the ring, isolated so a stray `data-slot` elsewhere
    in the file cannot satisfy any of this. */
-const block = css.slice(css.indexOf("[data-slot='mix-chart'] [data-slot='segment']"))
+const block = section(
+  "[data-slot='mix-chart'] [data-slot='segment']",
+  "[data-slot='alloc-chart'] [data-slot='alloc-segment']",
+)
 
 describe('the ring’s hover rules', () => {
   test('the arcs are set up to transition both the fade and the pop', () => {
@@ -107,7 +135,10 @@ describe('the ring’s hover rules', () => {
  * shipping an arc that cannot be popped.
  */
 describe('the allocation ring’s hover rules', () => {
-  const alloc = css.slice(css.indexOf("[data-slot='alloc-chart'] [data-slot='alloc-segment']"))
+  const alloc = section(
+    "[data-slot='alloc-chart'] [data-slot='alloc-segment']",
+    "[data-slot='value-chart'] .recharts-bar-rectangle path",
+  )
 
   test('exist, after the investment ring’s, on the same clock', () => {
     expect(alloc.length).toBeGreaterThan(0)
@@ -142,7 +173,7 @@ describe('the allocation ring’s hover rules', () => {
  * appears; only this can prove the rules exist.
  */
 describe('the value chart’s hover rules', () => {
-  const bars = css.slice(css.indexOf("[data-slot='value-chart'] .recharts-bar-rectangle path"))
+  const bars = section("[data-slot='value-chart'] .recharts-bar-rectangle path", '.qw-field')
 
   test('exist: the rest recede and the active bar comes forward', () => {
     expect(bars.length).toBeGreaterThan(0)

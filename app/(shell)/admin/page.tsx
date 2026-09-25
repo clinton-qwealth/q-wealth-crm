@@ -101,21 +101,29 @@ export default async function AdminPage(
       {/* Centre — the working area */}
       <div className="col-span-full lg:col-span-6 xl:col-span-7">
         <Card>
-          <Tabs
-            /* KEYED BY SECTION. `Tabs` keeps its selected tab in state, and
-               without the key the same instance would survive a move from
-               Workflow management to User management still believing
-               "templates" is selected — a tab set with nothing selected and
-               no panel showing. The key makes a new section a new instance. */
-            key={section.id}
-            ground
-            /* A floor under the working area, so switching to a quiet tab does
-               not collapse the middle column. Same reasoning as the group
-               page's. */
-            minPanel={WORKING_AREA}
-            label="Administration"
-            items={tabs}
-          />
+          {/* KEYED BY SECTION, and the key does two jobs.
+
+              `Tabs` keeps its selected tab in state, so without a remount the
+              same instance would survive a move from Workflow management to
+              User management still believing "templates" is selected — a tab
+              set with nothing selected and no panel showing.
+
+              And a CSS animation runs on MOUNT, not on a prop change, so the
+              remount is also what replays `qw-section-in`. The menu's mark
+              moves on the click and the content lands a round trip later; the
+              fade is what joins the two. Inside the card, not around it —
+              fading the border and shadow would read as the card blinking. */}
+          <div key={section.id} className="qw-section-in">
+            <Tabs
+              ground
+              /* A floor under the working area, so switching to a quiet tab
+                 does not collapse the middle column. Same reasoning as the
+                 group page's. */
+              minPanel={WORKING_AREA}
+              label="Administration"
+              items={tabs}
+            />
+          </div>
         </Card>
       </div>
 
