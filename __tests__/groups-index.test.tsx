@@ -122,6 +122,9 @@ describe('the menu', () => {
     const h1 = screen.getByRole('heading', { level: 1 })
     expect(h1.textContent).toBe('Service providers')
     expect(h1.className).not.toContain('sr-only')
+    /* On the card TEXT's edge, not the card border's — the 16px that made the
+       first cut read "a little too far left" beside every line under it. */
+    expect((screen.getByRole('heading', { level: 1 }).parentElement as HTMLElement).className).toContain('px-4')
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(within(crumbs).getByRole('link', { name: 'Q Wealth CRM' }).getAttribute('href')).toBe('/')
     expect(within(crumbs).queryByRole('link', { name: 'Groups' }), 'the current level is not a link').toBeNull()

@@ -54,6 +54,11 @@ const holding = (o: Partial<ProviderHolding>): ProviderHolding => ({
   record_id: 'a1',
   label: 'HUB24 Invest',
   status: 'active',
+  number: null,
+  cover_types: null,
+  lives_insured: null,
+  total_lump_sum_cover: null,
+  total_monthly_benefit: null,
   ...o,
 })
 
@@ -174,5 +179,45 @@ describe('the holdings', () => {
     /* Scoped to the row: the PROFILE card legitimately says "active" about the
        provider's own role, which is a different fact. */
     expect(within(screen.getByRole('link', { name: /HUB24 Invest/ })).queryByText('active')).toBeNull()
+  })
+
+  /**
+   * The policy rows are the GROUP page's insurance rows, re-cut: cover words,
+   * lives insured, the two-unit figure — plus "held by", which is this page's
+   * own fact. What a plausible cut gets wrong, and what is pinned:
+   *
+   * - **The enum leaks.** `income_protection` on the row instead of "Income
+   *   protection" — the exact drift COVER_TYPE_LABEL exists to stop.
+   * - **The two units get summed.** $750,000 of life plus $6,500/mo is not
+   *   $756,500 — `coverSummary` joins them, and the row must too.
+   * - **A cancelled policy wears a live tile.** The tile carries the word.
+   */
+  test('a policy row reads covers, lives, holder — and the two-unit figure unsummed', async () => {
+    await show(provider(), [
+      holding({
+        kind: 'policy',
+        record_id: 'i1',
+        label: 'TAL Accelerated Protection',
+        cover_types: 'life, income_protection',
+        lives_insured: 'Janet Testsmith',
+        total_lump_sum_cover: 750000,
+        total_monthly_benefit: 6500,
+      }),
+    ])
+    const row = screen.getByRole('link', { name: /TAL Accelerated Protection/ })
+    expect(row.textContent).toContain('Life, Income protection')
+    expect(row.textContent).not.toContain('income_protection')
+    expect(row.textContent).toContain('Janet Testsmith')
+    expect(row.textContent).toContain('held by Testsmith Household')
+    expect(row.textContent).toContain('$750,000 + $6,500/mo')
+    expect(row.textContent).not.toContain('756,500')
+  })
+
+  test('a cancelled policy goes dormant on the tile, with the word for a pointer', async () => {
+    await show(provider(), [
+      holding({ kind: 'policy', record_id: 'i2', label: 'Old cover', status: 'cancelled' }),
+    ])
+    const row = screen.getByRole('link', { name: /Old cover/ })
+    expect(within(row).getByTitle('Cancelled')).toBeTruthy()
   })
 })

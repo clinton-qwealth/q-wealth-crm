@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { COVER_TYPE_LABEL } from '@/components/policy-list'
 import { RegisterHeader } from '@/components/register-header'
-import { Card, Pill, SHEET } from '@/components/ui'
+import { Card, coverSummary, Pill, PolicyTile, SHEET } from '@/components/ui'
 import { ProviderContacts } from '@/components/provider-contacts'
 import { ProviderLogoBox } from '@/components/provider-logo-box'
 import {
@@ -167,7 +168,7 @@ export default async function ServiceProviderPage({
           ) : (
             <div className="flex flex-col gap-5">
               <HoldingSection title="Accounts" rows={accounts} />
-              <HoldingSection title="Policies" rows={policies} />
+              <PolicySection rows={policies} />
             </div>
           )}
         </Card>
@@ -188,6 +189,62 @@ export default async function ServiceProviderPage({
         </Card>
       </div>
     </>
+  )
+}
+
+/**
+ * The provider's policies: the GROUP page's insurance row, re-cut for this
+ * card — same tile, same cover words, same two-unit figure through
+ * `coverSummary`, because an adviser who reads policies there should not meet
+ * a poorer row here. The addition is "held by …", which is this page's own
+ * fact: the group page never has to say whose sheet a policy is on.
+ *
+ * The tile carries the lifecycle (a cancelled policy goes dormant grey with
+ * the word riding `title`/`sr-only`), so the neutral status pill the first cut
+ * wore is gone — one place says it, the way the accounts and policy lists
+ * decided long ago. Absent entirely when empty, like the accounts section.
+ */
+function PolicySection({ rows }: { rows: ProviderHolding[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div>
+      <h3 className="mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        Policies
+      </h3>
+      <div className={SHEET}>
+        <ul className="divide-y divide-neutral-200/80">
+          {rows.map((h) => {
+            const covers = (h.cover_types ?? '')
+              .split(', ')
+              .filter(Boolean)
+              .map((c) => COVER_TYPE_LABEL[c] ?? c)
+              .join(', ')
+            const figure = coverSummary(h.total_lump_sum_cover, h.total_monthly_benefit)
+            return (
+              <li key={`${h.record_id}:${h.group_id}`}>
+                <Link
+                  href={`/groups/${h.group_id}`}
+                  className="flex items-center gap-3 px-3.5 py-2.5 outline-none transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+                >
+                  <PolicyTile status={h.status} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-neutral-900">{h.label}</span>
+                    <span className="mt-0.5 block truncate text-xs text-neutral-500">
+                      {[covers, h.lives_insured, `held by ${h.group_name}`].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  {figure ? (
+                    <span className="shrink-0 text-right text-[15px] font-semibold tabular-nums text-neutral-900">
+                      {figure}
+                    </span>
+                  ) : null}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </div>
   )
 }
 

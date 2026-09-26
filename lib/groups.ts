@@ -159,7 +159,8 @@ export async function getServiceProvider(partyId: string): Promise<ServiceProvid
   }
 }
 
-/** One holding with a provider, as the provider page lists it. */
+/** One holding with a provider, as the provider page lists it. The policy
+ *  facts are null on account rows — a UNION view's shape. */
 export type ProviderHolding = {
   kind: 'account' | 'policy'
   group_id: string
@@ -167,6 +168,11 @@ export type ProviderHolding = {
   record_id: string
   label: string
   status: string
+  number: string | null
+  cover_types: string | null
+  lives_insured: string | null
+  total_lump_sum_cover: string | number | null
+  total_monthly_benefit: string | number | null
 }
 
 /**
@@ -182,7 +188,9 @@ export async function getProviderHoldings(partyId: string): Promise<ProviderHold
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('provider_holdings')
-    .select('kind, group_id, group_name, record_id, label, status')
+    .select(
+      'kind, group_id, group_name, record_id, label, status, number, cover_types, lives_insured, total_lump_sum_cover, total_monthly_benefit',
+    )
     .eq('provider_party_id', partyId)
     .order('kind')
     .order('label')

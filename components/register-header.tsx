@@ -16,6 +16,18 @@ import { Fragment } from 'react'
  * A crumb without an `href` is the level you are on, rendered as text — a
  * link to the page you are reading is a control that does nothing.
  *
+ * ## It shares the CARD TEXT's left edge, not the card border's
+ *
+ * Clinton read the first cut as "a little too far left", and he was right in
+ * a measurable way: the header sat flush with the card's BORDER, while every
+ * line inside the card — the toolbar, the field labels, the rows' names —
+ * starts 16px further right, behind the card's `p-4`. A heading one step left
+ * of every line under it reads as a misregistration, not a hierarchy. So the
+ * header carries `px-4` to stand on the same text edge as the content it
+ * captions — the group profile card's "one left edge" rule, applied a level
+ * up. (`PageHeading` stays flush with the grid on the pages that use it; those
+ * headers caption a whole page, not one card's contents.)
+ *
  * ## A logo may stand where the name would
  *
  * Asked 26 Sep for providers: a record with a mark wears the mark. The h1 is
@@ -36,7 +48,7 @@ export function RegisterHeader({
   logo?: string
 }) {
   return (
-    <header className="mb-4">
+    <header className="mb-4 px-4">
       <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-neutral-500">
         {trail.map((crumb, i) => (
           <Fragment key={crumb.label}>
