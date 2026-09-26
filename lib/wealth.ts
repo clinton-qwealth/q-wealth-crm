@@ -8,7 +8,7 @@ import { balanceTotals, type BalanceRow } from './balance-sheet'
  * summary tiles are 160px each, where "$1,284,300.00" at 20px overflowed its
  * tile while "$1,284,300" fits with room. Measured, not guessed.
  */
-const headlineMoney = new Intl.NumberFormat('en-AU', {
+export const headlineMoney = new Intl.NumberFormat('en-AU', {
   style: 'currency',
   currency: 'AUD',
   maximumFractionDigits: 0,

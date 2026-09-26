@@ -146,6 +146,28 @@ describe('the provider page', () => {
     expect(cols[2]!.textContent, 'the activity feed stays honestly reserved').toContain('Activity')
   })
 
+  /* The header strip: the household page's three-figure treatment. The values
+     themselves are lib/provider-summary's, tested there; here the pin is that
+     the strip renders, formatted, with the exclusion note riding as `title`. */
+  test('the header carries Total FUM, investment and super', async () => {
+    await show(provider(), [
+      holding({}),
+      holding({ record_id: 'a2', account_type: 'superannuation', latest_value: 250000 }),
+      holding({ record_id: 'a3', latest_value: null }),
+    ])
+    expect(screen.getByText('Total FUM')).toBeTruthy()
+    expect(screen.getByText('$500,000')).toBeTruthy()
+    expect(screen.getByText('Total investment')).toBeTruthy()
+    expect(screen.getByText('Total super')).toBeTruthy()
+    /* getAll: the same figure legitimately appears on the account ROW below
+       (AccountValue) — the strip's copy is the one the title-note ride pins. */
+    expect(screen.getAllByText('$250,000').length).toBeGreaterThanOrEqual(1)
+    /* The note rides the tiles' native tooltip — what the figure LEAVES OUT,
+       said where the figure is. StatTile decides which node carries `title`,
+       so the pin is presence, not placement. */
+    expect(document.querySelector('[title*="1 unvalued account excluded"]')).toBeTruthy()
+  })
+
   test('a provider without notes says so quietly', async () => {
     const { container } = await show(provider({ notes: null }))
     const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))

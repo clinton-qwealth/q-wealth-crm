@@ -3,7 +3,18 @@ import { notFound, redirect } from 'next/navigation'
 import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { COVER_TYPE_LABEL } from '@/components/policy-list'
 import { RegisterHeader } from '@/components/register-header'
-import { AccountTypeTile, AccountValue, Card, coverSummary, Pill, PolicyTile, SHEET } from '@/components/ui'
+import { headlineMoney } from '@/lib/wealth'
+import {
+  AccountTypeTile,
+  AccountValue,
+  Card,
+  coverSummary,
+  Pill,
+  PolicyTile,
+  SHEET,
+  StatTile,
+} from '@/components/ui'
+import { providerSummary } from '@/lib/provider-summary'
 import { ProviderContacts } from '@/components/provider-contacts'
 import { ProviderLogoBox } from '@/components/provider-logo-box'
 import {
@@ -80,6 +91,18 @@ export default async function ServiceProviderPage({
     .filter(Boolean)
     .join(' · ')
 
+  /* The header strip's figures — deduplicated, live-only, with the exclusions
+     counted; the rules live in lib/provider-summary. */
+  const totals = providerSummary(holdings)
+  const totalsNote = [
+    'Across the groups you can see, live accounts only',
+    totals.unvalued > 0
+      ? `${totals.unvalued} unvalued account${totals.unvalued === 1 ? '' : 's'} excluded`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   return (
     <>
       <div className="col-span-full">
@@ -93,6 +116,29 @@ export default async function ServiceProviderPage({
           /* The mark stands where the name would — the name is still the h1's
              accessible text, through the image's alt. */
           logo={provider.logo_path ? providerLogoUrl(provider.party_id, provider.logo_path) : undefined}
+          /* The household page's wealth strip, worn by a provider: three
+             equals on hairline dividers, no boxes — that page's reasoning,
+             reused whole. Shown even at zero: a provider the reader holds
+             nothing with reads $0, which is a fact, not a fault. */
+          summary={
+            <div className="grid grid-cols-3 divide-x divide-neutral-300/80">
+              {[
+                { label: 'Total FUM', value: totals.fum },
+                { label: 'Total investment', value: totals.investment },
+                { label: 'Total super', value: totals.superannuation },
+              ].map((f, i) => (
+                <StatTile
+                  key={f.label}
+                  label={f.label}
+                  value={headlineMoney.format(f.value)}
+                  title={totalsNote}
+                  bare
+                  size="lg"
+                  className={i === 0 ? 'pr-6' : 'px-6'}
+                />
+              ))}
+            </div>
+          }
         />
       </div>
 
