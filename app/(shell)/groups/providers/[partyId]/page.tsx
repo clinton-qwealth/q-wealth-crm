@@ -1,7 +1,8 @@
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { RegisterHeader } from '@/components/register-header'
-import { Card, Pill } from '@/components/ui'
-import { getServiceProvider } from '@/lib/groups'
+import { Card, Pill, SHEET } from '@/components/ui'
+import { getProviderHoldings, getServiceProvider, type ProviderHolding } from '@/lib/groups'
 import { getCurrentStaff } from '@/lib/staff'
 
 export const metadata = { title: 'Service provider · Q Wealth CRM' }
@@ -22,9 +23,14 @@ const CONTACT_LABEL: Record<string, string> = {
  * profile on the left, working area in the middle, a right column for what
  * accumulates. The variation is in what fills them — a provider has no
  * members, no balance sheet and no household wealth strip, so the left is a
- * short profile, and the other two columns are RESERVED, each naming what it
- * is reserved for. They are placeholders that say so, not empty lists that
- * imply a register nobody built.
+ * short profile, the middle is THE HOLDINGS — every account and policy that
+ * names this provider, live since 26 Sep when the provider_party_id links
+ * were backfilled — and the right stays reserved for provider-scoped notes.
+ *
+ * What kind of provider they are is DERIVED from those holdings, not stored:
+ * referenced from accounts makes them a platform, from policies an insurer,
+ * from both, both. A stored label could drift from what is actually held;
+ * the derivation cannot lie, and "nothing held yet" is shown as exactly that.
  *
  * ## The gate
  *
@@ -50,8 +56,18 @@ export default async function ServiceProviderPage({
   if (!staff) redirect('/login')
 
   const { partyId } = await params
-  const provider = await getServiceProvider(partyId)
+  /* One wave: the profile and its holdings together. */
+  const [provider, holdings] = await Promise.all([
+    getServiceProvider(partyId),
+    getProviderHoldings(partyId),
+  ])
   if (!provider) notFound()
+
+  const accounts = holdings.filter((h) => h.kind === 'account')
+  const policies = holdings.filter((h) => h.kind === 'policy')
+  const provides = [accounts.length > 0 ? 'Platform' : null, policies.length > 0 ? 'Insurer' : null]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <>
@@ -76,6 +92,13 @@ export default async function ServiceProviderPage({
                 <Pill on={provider.role_status === 'active'}>
                   {provider.ended ? `Ended ${provider.ended}` : provider.role_status}
                 </Pill>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Provides</dt>
+              {/* Derived, never stored — see the header. */}
+              <dd className="mt-0.5 text-neutral-800">
+                {provides || 'Nothing held with them yet'}
               </dd>
             </div>
             <div>
@@ -107,23 +130,26 @@ export default async function ServiceProviderPage({
         </Card>
       </div>
 
-      {/* Centre — reserved for the working area. What belongs here is the
-          firm's exposure to this provider: the accounts and policies held with
-          it, which today carry the provider only as a NAME on the record. A
-          real join is schema work — a provider_party_id on the account — and
-          the dashed block says so rather than drawing an empty table over a
-          join that does not exist. */}
+      {/* Centre — the firm's exposure to this provider, through the reader's
+          own keys: provider_holdings is invoker-rights, so a limited adviser
+          sees only the groups their RLS admits. Each row opens the household
+          that holds it, because that is where the record's own drawer lives. */}
       <div className="col-span-full lg:col-span-6">
         <Card>
-          <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
-            <p className="text-center text-sm font-medium text-neutral-700">
-              Accounts and policies with this provider
-            </p>
-            <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
-              Holdings name their provider as text today, so they cannot be listed here yet.
-              Linking them is the next piece of this page.
-            </p>
-          </div>
+          {holdings.length === 0 ? (
+            <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+              <p className="text-center text-sm font-medium text-neutral-700">Nothing held with this provider</p>
+              <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
+                No account or policy you can see names them. That may be the whole truth, or it may
+                be your view of it — visibility here follows your group access.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <HoldingSection title="Accounts" rows={accounts} />
+              <HoldingSection title="Policies" rows={policies} />
+            </div>
+          )}
         </Card>
       </div>
 
@@ -142,5 +168,42 @@ export default async function ServiceProviderPage({
         </Card>
       </div>
     </>
+  )
+}
+
+/**
+ * One kind of holding: a mini register inside the card. Absent entirely when
+ * empty — "Policies (0)" under a platform is noise, and the Provides line
+ * already says what kinds exist.
+ */
+function HoldingSection({ title, rows }: { title: string; rows: ProviderHolding[] }) {
+  if (rows.length === 0) return null
+  const DORMANT_OK = ['active', 'in_force']
+  return (
+    <div>
+      <h3 className="mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
+        {title}
+      </h3>
+      <div className={SHEET}>
+        <ul className="divide-y divide-neutral-200/80">
+          {rows.map((h) => (
+            <li key={`${h.record_id}:${h.group_id}`}>
+              <Link
+                href={`/groups/${h.group_id}`}
+                className="flex items-center gap-3 px-3.5 py-2.5 outline-none transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-neutral-900">{h.label}</span>
+                    {DORMANT_OK.includes(h.status) ? null : <Pill tone="neutral">{h.status}</Pill>}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-neutral-500">{h.group_name}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   )
 }

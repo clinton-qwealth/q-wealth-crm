@@ -145,6 +145,37 @@ export async function getServiceProvider(partyId: string): Promise<ServiceProvid
   }
 }
 
+/** One holding with a provider, as the provider page lists it. */
+export type ProviderHolding = {
+  kind: 'account' | 'policy'
+  group_id: string
+  group_name: string
+  record_id: string
+  label: string
+  status: string
+}
+
+/**
+ * Everything held with one provider, through the reader's own keys.
+ *
+ * `provider_holdings` is SECURITY INVOKER over the group views, so a limited
+ * adviser sees the firm's exposure only through the groups their RLS admits —
+ * the page states the register is firm-wide, but the holdings list never is.
+ * A joint account whose owners span two households appears once per household,
+ * the same way it appears on both households' own pages.
+ */
+export async function getProviderHoldings(partyId: string): Promise<ProviderHolding[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('provider_holdings')
+    .select('kind, group_id, group_name, record_id, label, status')
+    .eq('provider_party_id', partyId)
+    .order('kind')
+    .order('label')
+  if (error) throw new Error(`The provider's holdings could not be read: ${error.message}`)
+  return (data ?? []) as ProviderHolding[]
+}
+
 /**
  * The user groups a household may be put in: active ones, by name.
  *
