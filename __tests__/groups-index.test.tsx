@@ -39,6 +39,7 @@ vi.mock('@/lib/staff', () => ({
 vi.mock('@/lib/groups', () => ({
   getVisibleGroups: async () => GROUPS,
   getServiceProviders: async () => PROVIDERS,
+  getProviderKinds: async () => new Map(),
 }))
 /* The dialogs pull in the server actions module ('use server' + next/cache);
    this file is about the page, so they are stood in for. */
@@ -282,8 +283,8 @@ describe('the provider register', () => {
      provider row navigates like every other register's. */
   test('lists providers, each a link to its page, with the + beside the toolbar', async () => {
     PROVIDERS = [
-      { party_id: 'p1', name: 'Macquarie Wrap', since: '2024-03-01' },
-      { party_id: 'p2', name: 'HUB24', since: null },
+      { party_id: 'p1', name: 'Macquarie Wrap', since: '2024-03-01', logo_path: null },
+      { party_id: 'p2', name: 'HUB24', since: null, logo_path: null },
     ]
     await show([], 'providers')
     expect(screen.getByRole('link', { name: /Macquarie Wrap/ }).getAttribute('href')).toBe(

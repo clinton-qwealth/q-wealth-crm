@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { RegisterHeader } from '@/components/register-header'
 import { Card, Pill, SHEET } from '@/components/ui'
 import { ProviderContacts } from '@/components/provider-contacts'
+import { ProviderLogoBox } from '@/components/provider-logo-box'
 import {
   getProviderContacts,
   getProviderHoldings,
@@ -92,6 +93,9 @@ export default async function ServiceProviderPage({
       {/* Left — the provider's profile */}
       <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
         <Card title="Provider">
+          {/* The logo, above the fields — the one piece of the profile that is
+              a picture, worn where the staff drawer wears its photo. */}
+          <ProviderLogoBox partyId={provider.party_id} name={provider.name} logoPath={provider.logo_path} />
           <dl className="flex flex-col gap-3 text-sm">
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Status</dt>

@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import { getServiceProviders, getVisibleGroups } from '@/lib/groups'
+import { getProviderKinds, getServiceProviders, getVisibleGroups } from '@/lib/groups'
 import { resolveGroupSection, type GroupSectionId } from '@/lib/group-sections'
 import { GroupRegister } from '@/components/group-register'
 import { GroupsNav } from '@/components/groups-nav'
@@ -137,10 +137,11 @@ async function sectionPanel(section: GroupSectionId) {
     }
 
     case 'providers': {
-      const providers = await getServiceProviders()
+      /* Two reads, one wave: the register and the kinds that dress it. */
+      const [providers, kinds] = await Promise.all([getServiceProviders(), getProviderKinds()])
       return (
         <ProviderRegister
-          providers={providers}
+          providers={providers.map((p) => ({ ...p, kinds: kinds.get(p.party_id) ?? [] }))}
           action={<NewProviderForm triggerVariant="quiet" />}
           empty={{
             title: 'No service providers recorded',

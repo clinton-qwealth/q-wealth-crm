@@ -57,6 +57,13 @@ export type ServiceProviderItem = {
   name: string
   /** The role's start date, ISO `YYYY-MM-DD`, when one was recorded. */
   since: string | null
+  logo_path: string | null
+}
+
+/** A register row once the page has married it to what the provider holds —
+ *  the KINDS are derived from provider_holdings, never stored. */
+export type ProviderRegisterRow = ServiceProviderItem & {
+  kinds: ProviderHolding['kind'][]
 }
 
 /**
@@ -84,11 +91,15 @@ export async function getServiceProviders(): Promise<ServiceProviderItem[]> {
   return (data ?? [])
     .map((r) => {
       const row = r as Record<string, unknown>
-      const party = Array.isArray(row.parties) ? row.parties[0] : row.parties
+      const party = (Array.isArray(row.parties) ? row.parties[0] : row.parties) as {
+        display_name?: string
+        logo_path?: string | null
+      } | null
       return {
         party_id: row.party_id as string,
-        name: ((party as { display_name?: string } | null)?.display_name ?? 'Unnamed') as string,
+        name: (party?.display_name ?? 'Unnamed') as string,
         since: (row.start_date as string | null) ?? null,
+        logo_path: party?.logo_path ?? null,
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -102,6 +113,7 @@ export type ServiceProviderDetail = {
   since: string | null
   ended: string | null
   notes: string | null
+  logo_path: string | null
   contact_points: { kind: string; value: string; is_preferred: boolean }[]
 }
 
@@ -131,6 +143,7 @@ export async function getServiceProvider(partyId: string): Promise<ServiceProvid
   const party = (Array.isArray(row.parties) ? row.parties[0] : row.parties) as {
     display_name?: string
     notes?: string | null
+    logo_path?: string | null
     contact_points?: { kind: string; value: string; is_preferred: boolean }[] | null
   } | null
 
@@ -141,6 +154,7 @@ export async function getServiceProvider(partyId: string): Promise<ServiceProvid
     since: (row.start_date as string | null) ?? null,
     ended: (row.end_date as string | null) ?? null,
     notes: party?.notes ?? null,
+    logo_path: party?.logo_path ?? null,
     contact_points: party?.contact_points ?? [],
   }
 }
@@ -174,6 +188,24 @@ export async function getProviderHoldings(partyId: string): Promise<ProviderHold
     .order('label')
   if (error) throw new Error(`The provider's holdings could not be read: ${error.message}`)
   return (data ?? []) as ProviderHolding[]
+}
+
+/**
+ * Which kinds of thing each provider holds, for the register's Type filter and
+ * each row's second line: party_id → the distinct kinds. One read of the same
+ * invoker view the provider page uses, so the filter reflects the reader's own
+ * visibility the way the page does.
+ */
+export async function getProviderKinds(): Promise<Map<string, ProviderHolding['kind'][]>> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase.from('provider_holdings').select('provider_party_id, kind')
+  if (error) throw new Error(`The providers' holdings could not be read: ${error.message}`)
+  const kinds = new Map<string, ProviderHolding['kind'][]>()
+  for (const r of (data ?? []) as { provider_party_id: string; kind: ProviderHolding['kind'] }[]) {
+    const list = kinds.get(r.provider_party_id) ?? []
+    if (!list.includes(r.kind)) kinds.set(r.provider_party_id, [...list, r.kind])
+  }
+  return kinds
 }
 
 /** One of a provider's key contacts — a BDM, adviser support. */

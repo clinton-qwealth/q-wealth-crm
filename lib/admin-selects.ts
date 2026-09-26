@@ -85,7 +85,7 @@ export const DEPLOYABLE_TEMPLATES_SELECT =
  * resolving to exactly one FK. It is the search page's own provider embed with
  * `start_date` added, so the two screens stay one query shape.
  */
-export const SERVICE_PROVIDERS_SELECT = 'party_id, start_date, parties!inner(display_name)'
+export const SERVICE_PROVIDERS_SELECT = 'party_id, start_date, parties!inner(display_name, logo_path)'
 
 /**
  * One provider, for `/groups/providers/[partyId]` — 26 Sep 2026.
@@ -96,7 +96,7 @@ export const SERVICE_PROVIDERS_SELECT = 'party_id, start_date, parties!inner(dis
  * adviser's screen does.
  */
 export const PROVIDER_DETAIL_SELECT =
-  'party_id, status, start_date, end_date, parties!inner(display_name, status, notes, contact_points(kind, value, is_preferred))'
+  'party_id, status, start_date, end_date, parties!inner(display_name, status, notes, logo_path, contact_points(kind, value, is_preferred))'
 
 /** Every select above, named, so a test can walk them without repeating them. */
 export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: string }>> = {

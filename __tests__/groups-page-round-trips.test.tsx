@@ -221,10 +221,13 @@ describe('/groups index', () => {
     expect(depth).toBe(1)
   })
 
-  test('the provider register reads its own table, and not the groups', async () => {
+  test('the provider register reads its table and its kinds together, and not the groups', async () => {
     const { depth } = await measure(indexSection('providers'))
-    expect(calls).toEqual(['party_roles'])
+    /* Two reads, ONE wave: the rows, and the holdings that dress them with a
+       kind. The depth is what catches a regression to reading them in turn. */
+    expect([...calls].sort()).toEqual(['party_roles', 'provider_holdings'])
     expect(depth).toBe(1)
+    expect(calls).not.toContain('group_summary')
   })
 
   test('the referrers register reads nothing — there is nothing to read', async () => {

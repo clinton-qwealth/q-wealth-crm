@@ -24,6 +24,9 @@ vi.mock('@/lib/groups', () => ({
   getProviderContacts: async () => CONTACTS,
 }))
 /* The well is its own component with its own tests; the page only seats it. */
+vi.mock('@/components/provider-logo-box', () => ({
+  ProviderLogoBox: () => <div data-slot="provider-logo-box" />,
+}))
 vi.mock('@/components/provider-contacts', () => ({
   ProviderContacts: ({ providerPartyId }: { providerPartyId: string }) => (
     <div data-slot="provider-contacts">{providerPartyId}</div>
@@ -39,6 +42,7 @@ const provider = (o: Partial<ServiceProviderDetail> = {}): ServiceProviderDetail
   since: '2025-02-01',
   ended: null,
   notes: null,
+  logo_path: null,
   contact_points: [{ kind: 'email', value: 'adviser@hub24.example', is_preferred: true }],
   ...o,
 })

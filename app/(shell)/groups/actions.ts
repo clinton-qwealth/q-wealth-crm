@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { PROVIDER_LOGO_BUCKET } from '@/lib/provider-logo'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import {
   POST_MEDIA_BUCKET,
@@ -1780,6 +1781,33 @@ export async function createClientGroup(
 const PROVIDER_PAGE = '/groups/providers/[partyId]' as const
 
 export type ProviderContactState = { error: string } | { ok: true } | null
+
+/**
+ * Set or remove a provider's logo — `setStaffAvatar`'s protocol on the
+ * register's bucket. THE ROW FIRST, THEN THE BYTES: the function validates the
+ * path (this provider's prefix, object already uploaded) and returns what it
+ * replaced; only then are the old bytes removed, best effort, because the row
+ * already says what the logo is.
+ */
+export async function setProviderLogo(partyId: string, path: string | null): Promise<ProviderContactState> {
+  if (!partyId) return { error: 'No provider selected.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('set_provider_logo', {
+    p_party_id: partyId,
+    p_path: path,
+  })
+  if (error) return { error: error.message }
+
+  const replaced = typeof data === 'string' && data ? data : null
+  if (replaced) {
+    await supabase.storage.from(PROVIDER_LOGO_BUCKET).remove([replaced])
+  }
+
+  revalidatePath(PROVIDER_PAGE, 'page')
+  revalidatePath('/groups')
+  return { ok: true }
+}
 
 export async function addProviderContact(
   _prev: ProviderContactState,
