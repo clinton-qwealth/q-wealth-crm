@@ -15,13 +15,25 @@ import { Fragment } from 'react'
  *
  * A crumb without an `href` is the level you are on, rendered as text — a
  * link to the page you are reading is a control that does nothing.
+ *
+ * ## A logo may stand where the name would
+ *
+ * Asked 26 Sep for providers: a record with a mark wears the mark. The h1 is
+ * STILL the h1 — the image sits inside it and `title` becomes its alt, so the
+ * page's accessible name is identical either way and `getByRole('heading',
+ * { name })` cannot tell the difference. That is the whole design: the logo is
+ * a rendering of the name, never a replacement for having one.
  */
 export function RegisterHeader({
   trail,
   title,
+  logo,
 }: {
   trail: { label: string; href?: string }[]
   title: string
+  /** An image URL that stands in for the title's TEXT. `title` still names the
+   *  page — it becomes the image's alt. */
+  logo?: string
 }) {
   return (
     <header className="mb-4">
@@ -46,7 +58,17 @@ export function RegisterHeader({
           </Fragment>
         ))}
       </nav>
-      <h1 className="mt-1 text-xl font-semibold tracking-tight text-neutral-900">{title}</h1>
+      <h1 className="mt-1 text-xl font-semibold tracking-tight text-neutral-900">
+        {logo ? (
+          /* Plain img: the provider route 302s to a signed URL, which
+             next/image cannot optimise through. Height fixed to the header's
+             scale, width its own — logos are wide, tall, square. */
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo} alt={title} className="h-12 w-auto max-w-64 object-contain" />
+        ) : (
+          title
+        )}
+      </h1>
     </header>
   )
 }

@@ -11,6 +11,7 @@ import {
   type ProviderHolding,
 } from '@/lib/groups'
 import { getCurrentStaff } from '@/lib/staff'
+import { providerLogoUrl } from '@/lib/provider-logo'
 
 export const metadata = { title: 'Service provider · Q Wealth CRM' }
 
@@ -87,6 +88,9 @@ export default async function ServiceProviderPage({
             { label: 'Service providers', href: '/groups?section=providers' },
           ]}
           title={provider.name}
+          /* The mark stands where the name would — the name is still the h1's
+             accessible text, through the image's alt. */
+          logo={provider.logo_path ? providerLogoUrl(provider.party_id, provider.logo_path) : undefined}
         />
       </div>
 

@@ -68,6 +68,23 @@ describe('the provider page', () => {
     await expect(show(null)).rejects.toThrow('notFound')
   })
 
+  /**
+   * With a logo, the mark STANDS WHERE THE NAME WOULD — but the h1's
+   * accessible name must not change: the image's alt carries it, so heading
+   * navigation, the e2e suite's name lookups and this very query all still
+   * resolve "HUB24". A logo that replaced the h1's CONTENTS with a nameless
+   * image would pass a render test and silently unname the page.
+   */
+  test('a provider with a logo wears it as the title, name intact underneath', async () => {
+    await show(provider({ logo_path: 'p1/abc.png' }))
+    const h1 = screen.getByRole('heading', { level: 1, name: 'HUB24' })
+    const img = h1.querySelector('img') as HTMLImageElement
+    expect(img.getAttribute('src')).toContain('/api/provider-logo/p1')
+    expect(img.getAttribute('alt')).toBe('HUB24')
+    /* The breadcrumb stays above it, unchanged. */
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy()
+  })
+
   test('names the provider under the register’s breadcrumb', async () => {
     await show(provider())
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('HUB24')
