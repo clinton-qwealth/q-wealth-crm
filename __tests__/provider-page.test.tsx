@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import type { ProviderHolding, ServiceProviderDetail } from '@/lib/groups'
 
@@ -105,11 +105,28 @@ describe('the provider page', () => {
     )
   })
 
-  test('the profile reads the record: since, contacts, preferred marked', async () => {
-    await show(provider())
+  /**
+   * The centre is TABBED since 27 Sep: Accounts first (the working view), and
+   * Details holding the record's prose — since, the org's channels, notes —
+   * the home the left panel's "general fields only" slimming was waiting for.
+   */
+  test('the centre opens on Accounts, and Details holds since, contacts, notes', async () => {
+    await show(provider({ notes: 'Prefers email.' }))
+    expect(screen.getByRole('tab', { name: 'Accounts' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
     expect(screen.getByText('2025-02-01')).toBeTruthy()
     expect(screen.getByText('adviser@hub24.example')).toBeTruthy()
     expect(screen.getByText(/Email · preferred/)).toBeTruthy()
+    expect(screen.getByText('Prefers email.')).toBeTruthy()
+  })
+
+  test('the left panel is exactly the general pair — since and channels left it', async () => {
+    await show(provider())
+    const left = document.querySelector('div[class*="lg:col-span-3"] section') as HTMLElement
+    expect(left.textContent).toContain('Status')
+    expect(left.textContent).toContain('Provides')
+    expect(left.textContent, 'since moved to Details').not.toContain('Provider since')
+    expect(left.textContent, 'channels moved to Details').not.toContain('adviser@hub24.example')
   })
 
   test('an ended provider says so instead of wearing active', async () => {
@@ -132,7 +149,7 @@ describe('the provider page', () => {
    * two to a row, and NOTES ARE NOT AMONG THEM — a note is prose, and prose in
    * a half-width grid cell wraps into a ransom note.
    */
-  test('the columns split 3/5/4, general facts two-up on the left, notes on the right', async () => {
+  test('the columns split 3/5/4, general facts two-up, the right reserved for activity', async () => {
     const { container } = await show(provider({ notes: 'Prefers email.\nQuarterly reviews.' }))
     const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
     expect(cols.map((c) => (c.className.match(/lg:col-span-\d+/) ?? [''])[0])).toEqual([
@@ -141,9 +158,11 @@ describe('the provider page', () => {
       'lg:col-span-4',
     ])
     expect(cols[0]!.querySelector('dl')!.className).toContain('grid-cols-2')
-    expect(cols[0]!.textContent, 'notes left the profile').not.toContain('Prefers email.')
-    expect(cols[2]!.textContent).toContain('Prefers email.')
-    expect(cols[2]!.textContent, 'the activity feed stays honestly reserved').toContain('Activity')
+    expect(cols[0]!.textContent, 'notes are prose, not a profile fact').not.toContain('Prefers email.')
+    /* The notes went to the Details TAB with the rest of the record's prose;
+       the right column keeps only the feed's honest reservation. */
+    expect(cols[2]!.textContent).toContain('Activity')
+    expect(cols[2]!.textContent).not.toContain('Prefers email.')
   })
 
   /* The header strip: the household page's three-figure treatment. The values
@@ -168,10 +187,10 @@ describe('the provider page', () => {
     expect(document.querySelector('[title*="1 unvalued account excluded"]')).toBeTruthy()
   })
 
-  test('a provider without notes says so quietly', async () => {
-    const { container } = await show(provider({ notes: null }))
-    const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
-    expect(cols[2]!.textContent).toContain('No notes yet.')
+  test('a provider without notes says so quietly, on the Details tab', async () => {
+    await show(provider({ notes: null }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Details' }))
+    expect(screen.getByText('No notes yet.')).toBeTruthy()
   })
 })
 
@@ -188,8 +207,9 @@ describe('the holdings', () => {
       holding({}),
       holding({ kind: 'policy', record_id: 'i1', label: 'AIA Priority Protection', group_name: 'Brown Family', group_id: 'g2' }),
     ])
-    expect(screen.getByText('Accounts')).toBeTruthy()
-    expect(screen.getByText('Policies')).toBeTruthy()
+    /* Headings, not bare text: 'Accounts' is now also a TAB's label. */
+    expect(screen.getByRole('heading', { name: 'Accounts' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Policies' })).toBeTruthy()
     expect(screen.getByRole('link', { name: /HUB24 Invest/ }).getAttribute('href')).toBe('/groups/g1')
     expect(screen.getByRole('link', { name: /AIA Priority Protection/ }).getAttribute('href')).toBe('/groups/g2')
   })
@@ -203,9 +223,9 @@ describe('the holdings', () => {
     await show(provider(), [holding({ kind: 'policy', record_id: 'i1' })])
     expect(screen.getByText('Insurer')).toBeTruthy()
     expect(screen.queryByText(/Platform/)).toBeNull()
-    /* And the empty kind's section does not render — "Accounts (0)" under an
-       insurer is noise. */
-    expect(screen.queryByText('Accounts')).toBeNull()
+    /* And the empty kind's SECTION does not render — "Accounts (0)" under an
+       insurer is noise. The tab of that name remains; the heading must not. */
+    expect(screen.queryByRole('heading', { name: 'Accounts' })).toBeNull()
   })
 
   test('nothing held is said plainly, with the visibility caveat', async () => {

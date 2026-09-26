@@ -3,7 +3,8 @@ import { notFound, redirect } from 'next/navigation'
 import { COVER_TYPE_LABEL } from '@/components/policy-list'
 import { RegisterHeader } from '@/components/register-header'
 import { headlineMoney } from '@/lib/wealth'
-import { Card, coverSummary, Pill, PolicyTile, SHEET, StatTile } from '@/components/ui'
+import { Tabs } from '@/components/tabs'
+import { Card, coverSummary, Pill, PolicyTile, SHEET, StatTile, WORKING_AREA } from '@/components/ui'
 import { providerSummary } from '@/lib/provider-summary'
 import { ProviderAccounts } from '@/components/provider-accounts'
 import { ProviderContacts } from '@/components/provider-contacts'
@@ -13,6 +14,7 @@ import {
   getProviderHoldings,
   getServiceProvider,
   type ProviderHolding,
+  type ServiceProviderDetail,
 } from '@/lib/groups'
 import { getCurrentStaff } from '@/lib/staff'
 import { providerLogoUrl } from '@/lib/provider-logo'
@@ -159,26 +161,11 @@ export default async function ServiceProviderPage({
                 {provides || 'Nothing held with them yet'}
               </dd>
             </div>
-            <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
-                Provider since
-              </dt>
-              <dd className="mt-0.5 text-neutral-800">{provider.since ?? 'Not recorded'}</dd>
-            </div>
-            {provider.contact_points.length > 0 ? (
-              provider.contact_points.map((c) => (
-                <div key={`${c.kind}:${c.value}`}>
-                  <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
-                    {CONTACT_LABEL[c.kind] ?? c.kind}
-                    {c.is_preferred ? ' · preferred' : ''}
-                  </dt>
-                  <dd className="mt-0.5 break-words text-neutral-800">{c.value}</dd>
-                </div>
-              ))
-            ) : (
-              <p className="col-span-2 text-xs text-neutral-400">No contact details recorded yet.</p>
-            )}
           </dl>
+          {/* Since, the org's channels and the notes now live on the centre's
+              Details tab — the home yesterday's "general fields only" slimming
+              was waiting for. The left is exactly Status | Provides, the logo,
+              and the people. */}
 
           {/* The households' members well, worn by a provider: the same
               object in the same place on the card, holding the PEOPLE — BDMs,
@@ -195,36 +182,50 @@ export default async function ServiceProviderPage({
           had content coming (the notes) and nothing but a placeholder's width. */}
       <div className="col-span-full lg:col-span-5">
         <Card>
-          {holdings.length === 0 ? (
-            <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
-              <p className="text-center text-sm font-medium text-neutral-700">Nothing held with this provider</p>
-              <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
-                No account or policy you can see names them. That may be the whole truth, or it may
-                be your view of it — visibility here follows your group access.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-5">
-              <ProviderAccounts rows={accounts} />
-              <PolicySection rows={policies} />
-            </div>
-          )}
+          <Tabs
+            ground
+            /* The household centre's own configuration — a floor so a quiet
+               Details tab does not collapse the column beside the rail. */
+            minPanel={WORKING_AREA}
+            label="Provider detail"
+            items={[
+              {
+                id: 'accounts',
+                label: 'Accounts',
+                panel:
+                  holdings.length === 0 ? (
+                    <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+                      <p className="text-center text-sm font-medium text-neutral-700">
+                        Nothing held with this provider
+                      </p>
+                      <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
+                        No account or policy you can see names them. That may be the whole truth, or
+                        it may be your view of it — visibility here follows your group access.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-5">
+                      <ProviderAccounts rows={accounts} />
+                      <PolicySection rows={policies} />
+                    </div>
+                  ),
+              },
+              {
+                id: 'details',
+                label: 'Details',
+                panel: <ProviderDetails provider={provider} />,
+              },
+            ]}
+          />
         </Card>
       </div>
 
-      {/* Right — what accumulates about the relationship, one column point
-          wider than it was (4 of 12, taken from the middle): the provider's
-          notes live here now, out of the profile's general facts, and the
-          activity feed keeps its honest placeholder beneath them. */}
+      {/* Right — the notes moved to the centre's Details tab with the rest of
+          the record's prose (27 Sep); what stays reserved here is the feed. */}
       <div className="col-span-full lg:col-span-4">
-        <Card title="Notes">
-          {provider.notes ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">{provider.notes}</p>
-          ) : (
-            <p className="text-sm text-neutral-400">No notes yet.</p>
-          )}
-          <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-8">
-            <p className="text-center text-sm font-medium text-neutral-700">Activity</p>
+        <Card title="Activity">
+          <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-8">
+            <p className="text-center text-sm font-medium text-neutral-700">Nothing recorded yet</p>
             <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
               File notes are group-scoped today; a provider-scoped feed lives here once notes can
               name one.
@@ -287,6 +288,50 @@ function PolicySection({ rows }: { rows: ProviderHolding[] }) {
             )
           })}
         </ul>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The Details tab: the record's prose and particulars — since, the
+ * organisation's own channels, the notes. Everything about the provider that
+ * is neither a headline (the strip), a state (the left pair), a holding, nor
+ * a person (the contacts well). One home, after two days of these facts
+ * lodging wherever there was room.
+ */
+function ProviderDetails({ provider }: { provider: ServiceProviderDetail }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
+        <div>
+          <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+            Provider since
+          </dt>
+          <dd className="mt-0.5 text-neutral-800">{provider.since ?? 'Not recorded'}</dd>
+        </div>
+        {provider.contact_points.map((c) => (
+          <div key={`${c.kind}:${c.value}`}>
+            <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">
+              {CONTACT_LABEL[c.kind] ?? c.kind}
+              {c.is_preferred ? ' · preferred' : ''}
+            </dt>
+            <dd className="mt-0.5 break-words text-neutral-800">{c.value}</dd>
+          </div>
+        ))}
+        {provider.contact_points.length === 0 ? (
+          <p className="col-span-2 text-xs text-neutral-400">No contact details recorded yet.</p>
+        ) : null}
+      </dl>
+      <div>
+        <h4 className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Notes</h4>
+        {provider.notes ? (
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">
+            {provider.notes}
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-neutral-400">No notes yet.</p>
+        )}
       </div>
     </div>
   )
