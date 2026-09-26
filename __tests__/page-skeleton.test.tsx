@@ -76,7 +76,9 @@ describe('the page skeleton', () => {
     const status = screen.getByRole('status')
     const [eyebrow, title] = Array.from(status.querySelectorAll('.animate-pulse'))
     expect(eyebrow.className).toContain('h-4')
-    expect(title.className).toContain('h-8')
+    /* Inset with the real header's px-4, or the swap jogs 16px sideways. */
+    expect((eyebrow.parentElement as HTMLElement).className).toContain('px-4')
+    expect(title.className).toContain('h-7')
     expect(title.className).toContain('mt-1')
     expect(container.firstElementChild).toBe(status)
   })

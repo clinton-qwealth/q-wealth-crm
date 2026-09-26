@@ -1,7 +1,7 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Markdown, outline } from '@/components/markdown'
-import { Card, PageHeading } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { Card } from '@/components/ui'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 /*
@@ -64,19 +64,16 @@ export default async function KnowledgeBasePage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <PageHeading
-        eyebrow={doc.section}
-        title={doc.title}
-        description={
-          day(doc.page_updated_at)
-            ? `Version ${doc.version} · last edited ${day(doc.page_updated_at)} in Confluence`
-            : `Version ${doc.version}`
-        }
-        actions={
-          <div className="flex items-center gap-3 text-xs">
-            <Link href="/help" className="text-neutral-500 hover:text-neutral-800">
-              ← All policies
-            </Link>
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[ROOT_CRUMB, { label: 'Help', href: '/help' }, { label: doc.section }]}
+          title={doc.title}
+          description={
+            day(doc.page_updated_at)
+              ? `Version ${doc.version} · last edited ${day(doc.page_updated_at)} in Confluence`
+              : `Version ${doc.version}`
+          }
+          actions={
             <a
               href={doc.url}
               target="_blank"
@@ -85,9 +82,9 @@ export default async function KnowledgeBasePage({ params }: { params: Promise<{ 
             >
               Open in Confluence
             </a>
-          </div>
-        }
-      />
+          }
+        />
+      </div>
 
       {doc.retired_at ? (
         <div

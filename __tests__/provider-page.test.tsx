@@ -59,6 +59,11 @@ const holding = (o: Partial<ProviderHolding>): ProviderHolding => ({
   lives_insured: null,
   total_lump_sum_cover: null,
   total_monthly_benefit: null,
+  account_type: 'investment',
+  owners: 'Janet Testsmith',
+  latest_value: 250000,
+  change_amount: null,
+  change_pct: null,
   ...o,
 })
 
@@ -173,11 +178,18 @@ describe('the holdings', () => {
     expect(screen.getByText('Nothing held with them yet')).toBeTruthy()
   })
 
-  test('a dormant holding wears its status; a live one wears nothing', async () => {
+  /**
+   * The status pill the first cut wore is GONE by design: the typed tile
+   * carries the lifecycle now (dormant grey, the word on `title`/`sr-only`),
+   * the way the accounts and policy lists decided long ago. A pill AND a
+   * dormant tile would say one fact twice; this pins that it is said once.
+   */
+  test('the status is the tile’s to say — no pill doubles it', async () => {
     await show(provider(), [holding({}), holding({ record_id: 'a2', label: 'Old wrap', status: 'closed' })])
-    expect(screen.getByText('closed')).toBeTruthy()
-    /* Scoped to the row: the PROFILE card legitimately says "active" about the
-       provider's own role, which is a different fact. */
+    const dormant = screen.getByRole('link', { name: /Old wrap/ })
+    expect(within(dormant).getByTitle('Closed')).toBeTruthy()
+    expect(within(dormant).queryByText('closed'), 'no raw enum pill').toBeNull()
+    /* And a live row wears nothing at all. */
     expect(within(screen.getByRole('link', { name: /HUB24 Invest/ })).queryByText('active')).toBeNull()
   })
 
@@ -211,6 +223,35 @@ describe('the holdings', () => {
     expect(row.textContent).toContain('held by Testsmith Household')
     expect(row.textContent).toContain('$750,000 + $6,500/mo')
     expect(row.textContent).not.toContain('756,500')
+  })
+
+  /**
+   * The account rows are the GROUP page's account rows, re-cut the way the
+   * policies were. Pinned the same way: the type reads as a WORD, the value
+   * comes through `AccountValue` (so an unvalued account says "No value
+   * recorded" instead of rendering a blank right edge), and a closed account
+   * goes dormant on the tile.
+   */
+  test('an account row reads type, owners, holder — and the valued figure', async () => {
+    await show(provider(), [
+      holding({ change_amount: 12000, change_pct: 5.04 }),
+    ])
+    const row = screen.getByRole('link', { name: /HUB24 Invest/ })
+    expect(row.textContent).toContain('Investment')
+    expect(row.textContent).toContain('Janet Testsmith')
+    expect(row.textContent).toContain('held by Testsmith Household')
+    expect(row.textContent).toContain('$250,000')
+  })
+
+  test('an unvalued account says so rather than rendering a blank edge', async () => {
+    await show(provider(), [holding({ latest_value: null })])
+    expect(screen.getByText('No value recorded')).toBeTruthy()
+  })
+
+  test('a closed account goes dormant on the tile, with the word for a pointer', async () => {
+    await show(provider(), [holding({ status: 'closed' })])
+    const row = screen.getByRole('link', { name: /HUB24 Invest/ })
+    expect(within(row).getByTitle('Closed')).toBeTruthy()
   })
 
   test('a cancelled policy goes dormant on the tile, with the word for a pointer', async () => {

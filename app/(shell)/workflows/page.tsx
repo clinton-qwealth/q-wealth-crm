@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { getGroupChoices, getWorkflowBoard } from '@/lib/workflows'
-import { Card, PageHeading } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { Card } from '@/components/ui'
 import { KanbanBoard } from '@/components/kanban-board'
 import { StartWorkflowModal } from '@/components/workflow-section'
 
@@ -23,12 +24,14 @@ export default async function WorkflowsPage() {
 
   return (
     <>
-      <PageHeading
-        eyebrow="Workflows"
-        title="Workflows"
-        description="Every piece of work under way, across every group you can see. Drag a card to move it along."
-        actions={<StartWorkflowModal groups={groups} />}
-      />
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[ROOT_CRUMB]}
+          title="Workflows"
+          description="Every piece of work under way, across every group you can see. Drag a card to move it along."
+          actions={<StartWorkflowModal groups={groups} />}
+        />
+      </div>
       {/* The board fills the window even when it is nearly empty: a board that
           ends where its last card ends looks like a list. min-height is the
           viewport less everything above and below the card — nav (3rem),

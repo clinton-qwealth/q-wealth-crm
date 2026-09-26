@@ -1,7 +1,6 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { TemplateEditor } from '@/components/template-editor'
-import { PageHeading } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
 import { getTemplate, getWorkflowRoles, isAdmin } from '@/lib/admin'
 import { getCurrentStaff } from '@/lib/staff'
 
@@ -33,16 +32,17 @@ export default async function TemplateEditorPage({ params }: { params: Promise<{
 
   return (
     <>
-      <PageHeading
-        eyebrow="Workflow template"
-        title={template.name}
-        description={template.description ?? undefined}
-        actions={
-          <Link href="/admin" className="text-xs text-neutral-500 hover:text-neutral-800">
-            ← All templates
-          </Link>
-        }
-      />
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[
+            ROOT_CRUMB,
+            { label: 'Administration', href: '/admin' },
+            { label: 'Workflow management', href: '/admin?section=workflows' },
+          ]}
+          title={template.name}
+          description={template.description ?? undefined}
+        />
+      </div>
       <TemplateEditor template={template} firmRoles={firmRoles} />
     </>
   )

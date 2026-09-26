@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { ACCOUNT_TYPE_LABEL } from '@/lib/account-mix'
 import { COVER_TYPE_LABEL } from '@/components/policy-list'
 import { RegisterHeader } from '@/components/register-header'
-import { Card, coverSummary, Pill, PolicyTile, SHEET } from '@/components/ui'
+import { AccountTypeTile, AccountValue, Card, coverSummary, Pill, PolicyTile, SHEET } from '@/components/ui'
 import { ProviderContacts } from '@/components/provider-contacts'
 import { ProviderLogoBox } from '@/components/provider-logo-box'
 import {
@@ -167,7 +168,7 @@ export default async function ServiceProviderPage({
             </div>
           ) : (
             <div className="flex flex-col gap-5">
-              <HoldingSection title="Accounts" rows={accounts} />
+              <AccountSection rows={accounts} />
               <PolicySection rows={policies} />
             </div>
           )}
@@ -249,17 +250,20 @@ function PolicySection({ rows }: { rows: ProviderHolding[] }) {
 }
 
 /**
- * One kind of holding: a mini register inside the card. Absent entirely when
- * empty — "Policies (0)" under a platform is noise, and the Provides line
- * already says what kinds exist.
+ * The provider's accounts: the GROUP page's account row, re-cut for this card
+ * — the typed tile carrying the lifecycle, the type-and-owners second line,
+ * and `AccountValue` on the right with its change arrow and its honest "No
+ * value recorded". The addition, as with the policies, is "held by …": the
+ * one fact the group page never needs to say. The generic label-and-group row
+ * both kinds started with is gone — the policies outgrew it this morning and
+ * the accounts followed by the afternoon.
  */
-function HoldingSection({ title, rows }: { title: string; rows: ProviderHolding[] }) {
+function AccountSection({ rows }: { rows: ProviderHolding[] }) {
   if (rows.length === 0) return null
-  const DORMANT_OK = ['active', 'in_force']
   return (
     <div>
       <h3 className="mb-2.5 truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
-        {title}
+        Accounts
       </h3>
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
@@ -269,12 +273,25 @@ function HoldingSection({ title, rows }: { title: string; rows: ProviderHolding[
                 href={`/groups/${h.group_id}`}
                 className="flex items-center gap-3 px-3.5 py-2.5 outline-none transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
               >
+                <AccountTypeTile type={h.account_type ?? ''} status={h.status} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-semibold text-neutral-900">{h.label}</span>
-                    {DORMANT_OK.includes(h.status) ? null : <Pill tone="neutral">{h.status}</Pill>}
+                  <span className="block truncate text-sm font-semibold text-neutral-900">{h.label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-neutral-500">
+                    {[
+                      h.account_type ? (ACCOUNT_TYPE_LABEL[h.account_type] ?? h.account_type) : null,
+                      h.owners,
+                      `held by ${h.group_name}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </span>
-                  <span className="mt-0.5 block truncate text-xs text-neutral-500">{h.group_name}</span>
+                </span>
+                <span className="shrink-0 text-right text-[15px] font-semibold tabular-nums text-neutral-900">
+                  <AccountValue
+                    value={h.latest_value}
+                    changeAmount={h.change_amount}
+                    changePct={h.change_pct}
+                  />
                 </span>
               </Link>
             </li>

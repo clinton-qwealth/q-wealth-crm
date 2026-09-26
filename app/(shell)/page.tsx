@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { Card, PageHeading, StatTile } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { Card, StatTile } from '@/components/ui'
 
 export const metadata = { title: 'Home · Q Wealth CRM' }
 
@@ -45,11 +46,13 @@ export default async function Home() {
 
   return (
     <>
-      <PageHeading
-        eyebrow="Q Intelligence"
-        title={`Good to see you, ${staff.first_name}`}
-        description="A good day to make progress — everything you need is right here."
-      />
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[{ label: ROOT_CRUMB.label }]}
+          title={`Good to see you, ${staff.first_name}`}
+          description="A good day to make progress — everything you need is right here."
+        />
+      </div>
 
       <StatTile
         className="col-span-2 sm:col-span-2 lg:col-span-3"

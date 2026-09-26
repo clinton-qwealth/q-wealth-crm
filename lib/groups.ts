@@ -173,6 +173,11 @@ export type ProviderHolding = {
   lives_insured: string | null
   total_lump_sum_cover: string | number | null
   total_monthly_benefit: string | number | null
+  account_type: string | null
+  owners: string | null
+  latest_value: string | number | null
+  change_amount: string | number | null
+  change_pct: string | number | null
 }
 
 /**
@@ -189,7 +194,7 @@ export async function getProviderHoldings(partyId: string): Promise<ProviderHold
   const { data, error } = await supabase
     .from('provider_holdings')
     .select(
-      'kind, group_id, group_name, record_id, label, status, number, cover_types, lives_insured, total_lump_sum_cover, total_monthly_benefit',
+      'kind, group_id, group_name, record_id, label, status, number, cover_types, lives_insured, total_lump_sum_cover, total_monthly_benefit, account_type, owners, latest_value, change_amount, change_pct',
     )
     .eq('provider_party_id', partyId)
     .order('kind')

@@ -3,7 +3,8 @@ import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import { getGroupAccountPosts, getGroupPolicyPosts, getStaffChoices } from '@/lib/workflows'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { accountMoney, owedMoney, ACCOUNT_LIVE, BalanceItemTile, BALANCE_SPLIT, Card, PageHeading, Pill, Placeholder, POLICY_LIVE, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { accountMoney, owedMoney, ACCOUNT_LIVE, BalanceItemTile, BALANCE_SPLIT, Card, Pill, Placeholder, POLICY_LIVE, StatTile, TAB_SPLIT, WORKING_AREA } from '@/components/ui'
 import { liveFirst } from '@/lib/record-order'
 import { wealthSummary } from '@/lib/wealth'
 import { balanceTotals, ITEM_LIVE, ITEM_TYPE_LABEL } from '@/lib/balance-sheet'
@@ -421,8 +422,15 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
 
   return (
     <>
-      <PageHeading
-        eyebrow="Client groups"
+      <div className="col-span-full">
+      <RegisterHeader
+        trail={[
+          ROOT_CRUMB,
+          { label: 'Groups', href: '/groups' },
+          group.group_type === 'household'
+            ? { label: 'Client households', href: '/groups' }
+            : { label: 'Legal entities / structures', href: '/groups?section=entities' },
+        ]}
         title={group.name}
         meta={
           <>
@@ -467,6 +475,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
           )
         }
       />
+      </div>
 
       {/* Left — group profile */}
       <div className="col-span-full flex flex-col gap-4 lg:col-span-3">

@@ -4,7 +4,8 @@ import { getCurrentStaff } from '@/lib/staff'
 import { formatBirthDate } from '@/lib/note-date'
 import { getMfaState } from '@/lib/mfa'
 import { signOut } from '@/app/actions'
-import { Card, PageHeading, Pill } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { Card, Pill } from '@/components/ui'
 import { EnrolPanel } from './enrol-panel'
 import { fullName } from '@/lib/staff-name'
 
@@ -29,11 +30,13 @@ export default async function ProfilePage() {
 
   return (
     <>
-      <PageHeading
-        eyebrow="Account"
-        title="Profile"
-        description="Your details, what your access profile permits, and how you sign in."
-      />
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[ROOT_CRUMB, { label: 'Account' }]}
+          title="Profile"
+          description="Your details, what your access profile permits, and how you sign in."
+        />
+      </div>
 
       <Card className="col-span-full lg:col-span-6" title="Your details">
         <dl className="divide-y divide-neutral-100">

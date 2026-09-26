@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { KbAsk } from '@/components/kb-ask'
-import { Card, PageHeading } from '@/components/ui'
+import { RegisterHeader, ROOT_CRUMB } from '@/components/register-header'
+import { Card } from '@/components/ui'
 import { SUPABASE_URL } from '@/lib/env'
 import type { KbQuestion } from '@/lib/kb'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
@@ -55,11 +56,13 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <PageHeading
-        eyebrow="Help"
-        title="Policies and procedures"
-        description="Search what the firm’s written policies say, open one to read it, or take the question to Claude. Synced from Confluence; every page shows its version and when it was last synced."
-      />
+      <div className="col-span-full">
+        <RegisterHeader
+          trail={[ROOT_CRUMB, { label: 'Help' }]}
+          title="Policies and procedures"
+          description="Search what the firm’s written policies say, open one to read it, or take the question to Claude. Synced from Confluence; every page shows its version and when it was last synced."
+        />
+      </div>
 
       <Card className="col-span-full lg:col-span-8" title="Ask about a policy">
         <KbAsk searchUrl={`${SUPABASE_URL()}/functions/v1/kb-search`} initialQuestion={q ?? ''} />

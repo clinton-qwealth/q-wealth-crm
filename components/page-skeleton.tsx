@@ -20,9 +20,12 @@ import { SHEET } from './ui'
  * `Placeholder`, which in this app means "planned, not built"; a skeleton means
  * "arriving", which is a different claim and must not borrow that mark.
  *
- * **The anchor holds still.** The first block uses `PageHeading`'s own metrics
- * — a 16px eyebrow line, `mt-1`, a 32px title line — so the thing the eye is
- * tracking does not move when the real heading swaps in. The body is one
+ * **The anchor holds still.** The first block uses `RegisterHeader`'s metrics
+ * — a 16px breadcrumb line, `mt-1`, a 28px title line, both inset by the
+ * header's own `px-4` — so the thing the eye is tracking does not move when
+ * the real heading swaps in. (It tracked `PageHeading` until 26 Sep 2026,
+ * when the shell's pages moved to the breadcrumb header; a skeleton that
+ * mimics a header nobody renders any more is a guaranteed jump.) The body is one
  * `SHEET` of hairline rows: the ledger object the index, the board card and
  * the reports card all are, and the closest single shape to the rest.
  *
@@ -45,10 +48,10 @@ export function PageSkeleton() {
     <>
       <div role="status" className="col-span-full">
         <span className="sr-only">Loading page</span>
-        <div aria-hidden="true">
-          {/* Eyebrow line, then the title line, at PageHeading's sizes. */}
-          <div className={`h-4 w-24 ${BAR}`} />
-          <div className={`mt-1 h-8 w-64 ${BAR}`} />
+        <div aria-hidden="true" className="px-4">
+          {/* Breadcrumb line, then the title line, at RegisterHeader's sizes. */}
+          <div className={`h-4 w-40 ${BAR}`} />
+          <div className={`mt-1 h-7 w-64 ${BAR}`} />
         </div>
       </div>
 
