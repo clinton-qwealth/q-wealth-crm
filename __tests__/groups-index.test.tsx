@@ -195,7 +195,7 @@ describe('the household register', () => {
     await show(MIXED)
     expect(screen.getByRole('link', { name: /Testsmith Household/ })).toBeTruthy()
     expect(screen.queryByRole('link', { name: /Acme Pty Ltd/ })).toBeNull()
-    expect(screen.getByText('1 household')).toBeTruthy()
+    expect(register().getAllByRole('listitem')).toHaveLength(1)
   })
 
   test('every group is a link to its own page, and the whole row is the link', async () => {
@@ -211,10 +211,10 @@ describe('the household register', () => {
     expect(link.textContent).not.toContain('Household ·')
   })
 
-  test('counts in the plural when there are several', async () => {
+  test('lists every row it was given', async () => {
     await show([group(), group({ group_id: 'g3', name: 'Second Household' })])
-    expect(screen.getByText('2 households')).toBeTruthy()
     expect(register().getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.queryByText('2 households'), 'the count line stays gone').toBeNull()
   })
 
   /**
@@ -261,7 +261,7 @@ describe('the entities register', () => {
     expect(link.textContent).toContain('Business entity')
     expect(link.textContent).not.toContain('business_entity')
     expect(screen.queryByRole('link', { name: /Testsmith Household/ })).toBeNull()
-    expect(screen.getByText('1 entity')).toBeTruthy()
+    expect(register().getAllByRole('listitem')).toHaveLength(1)
   })
 
   /**
@@ -289,7 +289,7 @@ describe('the provider register', () => {
     expect(screen.getByRole('link', { name: /Macquarie Wrap/ }).getAttribute('href')).toBe(
       '/groups/providers/p1',
     )
-    expect(screen.getByText('2 providers')).toBeTruthy()
+    expect(register().getAllByRole('listitem')).toHaveLength(2)
     expect(screen.getByText(/since 2024/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New provider' })).toBeTruthy()
   })

@@ -38,11 +38,13 @@ const TOOLBAR_CONTROL =
  * NOTHING — `lib/group-register.ts` narrows in memory. The rules live there,
  * pure, where they can be tested without a renderer.
  *
- * ## The count tells the truth about narrowing
+ * ## No count line — removed 26 Sep, and what it took with it
  *
- * "3 of 12 households" while a filter is on, "12 households" when none is —
- * a filtered list captioned with the filtered number alone reads as the whole
- * register, which is how somebody concludes a client is missing.
+ * The register briefly captioned itself ("12 households", "3 of 12" while
+ * narrowed); Clinton asked for it gone. Worth remembering if it returns: a
+ * count over a FILTERED list must say "3 of 12", because the filtered number
+ * alone reads as the whole register — that is how somebody concludes a client
+ * is missing. With no number shown, that hazard is gone rather than latent.
  *
  * ## Filtered-to-nothing is not empty
  *
@@ -75,7 +77,6 @@ export function GroupRegister({
 
   const statuses = statusesOf(groups)
   const visible = sortGroups(narrowGroups(groups, { q, status }), sort)
-  const narrowed = visible.length !== groups.length
 
   /* Nothing in the register AT ALL — different fact from "filtered to
      nothing", and the one place the + is the loudest thing on offer. */
@@ -150,11 +151,6 @@ export function GroupRegister({
 
       {visible.length > 0 ? (
         <>
-          <p className="text-right text-xs text-neutral-500">
-            {narrowed ? `${visible.length} of ${groups.length}` : groups.length}{' '}
-            {(narrowed ? groups.length : visible.length) === 1 ? noun[0] : noun[1]}
-          </p>
-
           <div className={SHEET}>
             <ul className="divide-y divide-neutral-200/80">
               {visible.map((g) => (

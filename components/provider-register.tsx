@@ -46,7 +46,6 @@ export function ProviderRegister({
                last — unknown is older than any known start, not newer. */
             (b.since ?? '').localeCompare(a.since ?? '') || a.name.localeCompare(b.name),
     )
-  const narrowed = visible.length !== providers.length
 
   if (providers.length === 0) {
     return (
@@ -90,11 +89,6 @@ export function ProviderRegister({
 
       {visible.length > 0 ? (
         <>
-          <p className="text-right text-xs text-neutral-500">
-            {narrowed ? `${visible.length} of ${providers.length}` : providers.length}{' '}
-            {(narrowed ? providers.length : visible.length) === 1 ? 'provider' : 'providers'}
-          </p>
-
           <div className={SHEET}>
             <ul className="divide-y divide-neutral-200/80">
               {visible.map((p) => (

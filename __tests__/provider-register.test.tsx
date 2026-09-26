@@ -42,11 +42,11 @@ describe('the provider register', () => {
     expect(link.getAttribute('href')).toBe('/groups/providers/p1')
   })
 
-  test('search narrows by name and the count says of how many', () => {
+  test('search narrows by name', () => {
     show()
     fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'mac' } })
     expect(names()).toEqual(['Macquarie Wrap'])
-    expect(screen.getByText('1 of 3 providers')).toBeTruthy()
+    expect(screen.queryByText(/1 of 3/), 'no count caption').toBeNull()
   })
 
   /* "Newest" puts the youngest start date first, and a provider with NO date

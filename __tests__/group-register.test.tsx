@@ -12,9 +12,6 @@ import type { GroupListItem } from '@/lib/groups'
  * - **The search matches the words on the row**, type and status included, so
  *   typing "household" lights everything and the search is decorative. It
  *   matches the two columns a person types from memory: name and contact.
- * - **The count keeps saying the filtered number alone.** "1 household" over a
- *   narrowed list reads as the whole register, which is how somebody concludes
- *   a client is missing. Narrowed, it says "1 of 3".
  * - **Filtered-to-nothing draws the register's empty state**, telling the
  *   reader the register is empty when their own keystroke is what emptied it.
  * - **The status options are hard-coded**, so a status born in the database is
@@ -50,13 +47,12 @@ const show = (rows: GroupListItem[] = ROWS) =>
   )
 
 describe('search', () => {
-  test('narrows by name, and the count says of how many', () => {
+  test('narrows by name', () => {
     show()
     fireEvent.change(screen.getByPlaceholderText('Search'), {
       target: { value: 'brown' },
     })
     expect(names()).toEqual(['Brown Family'])
-    expect(screen.getByText('1 of 3 households')).toBeTruthy()
   })
 
   test('finds the primary contact too — the other name a person remembers', () => {
@@ -101,7 +97,6 @@ describe('the status filter', () => {
     show()
     fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'prospect' } })
     expect(names()).toEqual(['Chen Household'])
-    expect(screen.getByText('1 of 3 households')).toBeTruthy()
   })
 })
 
@@ -120,15 +115,15 @@ describe('sort', () => {
   })
 })
 
-describe('the count', () => {
-  test('says the plain total when nothing narrows it', () => {
+/* The count line was removed on 26 Sep at Clinton's ask — asserted GONE, so it
+   does not creep back without the "N of M" truthfulness the component's header
+   explains it must return with. */
+describe('no count line', () => {
+  test('the register does not caption itself with a number', () => {
     show()
-    expect(screen.getByText('3 households')).toBeTruthy()
-  })
-
-  test('speaks in the singular only when the WHOLE register is one row', () => {
-    show([row({})])
-    expect(screen.getByText('1 household')).toBeTruthy()
+    expect(screen.queryByText(/3 households/)).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText('Search'), { target: { value: 'brown' } })
+    expect(screen.queryByText(/1 of 3/)).toBeNull()
   })
 })
 
