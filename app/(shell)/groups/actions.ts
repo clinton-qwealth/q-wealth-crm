@@ -1775,6 +1775,43 @@ export async function createClientGroup(
   return { ok: true, id: data as string }
 }
 
+/** The provider page's route, for revalidation — dynamic, so 'page' is
+ *  required, the same trap GROUP_PAGE documents. */
+const PROVIDER_PAGE = '/groups/providers/[partyId]' as const
+
+export type ProviderContactState = { error: string } | { ok: true } | null
+
+export async function addProviderContact(
+  _prev: ProviderContactState,
+  formData: FormData,
+): Promise<ProviderContactState> {
+  const providerPartyId = String(formData.get('provider_party_id') ?? '')
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) return { error: 'Give the contact a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('add_provider_contact', {
+    p_provider_party_id: providerPartyId,
+    p_name: name,
+    /* Empty strings become nulls in the function, so "no email" is NULL in the
+       row rather than '' — one spelling of absent. */
+    p_role_title: String(formData.get('role_title') ?? ''),
+    p_email: String(formData.get('email') ?? ''),
+    p_phone: String(formData.get('phone') ?? ''),
+  })
+  if (error) return { error: error.message }
+  revalidatePath(PROVIDER_PAGE, 'page')
+  return { ok: true }
+}
+
+export async function removeProviderContact(contactId: string): Promise<ProviderContactState> {
+  const supabase = await createSupabaseServerClient()
+  const { error } = await supabase.rpc('remove_provider_contact', { p_id: contactId })
+  if (error) return { error: error.message }
+  revalidatePath(PROVIDER_PAGE, 'page')
+  return { ok: true }
+}
+
 export async function createServiceProvider(
   _prev: RegisterCreateState,
   formData: FormData,

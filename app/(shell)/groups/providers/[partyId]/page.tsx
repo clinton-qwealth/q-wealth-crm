@@ -2,7 +2,13 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { RegisterHeader } from '@/components/register-header'
 import { Card, Pill, SHEET } from '@/components/ui'
-import { getProviderHoldings, getServiceProvider, type ProviderHolding } from '@/lib/groups'
+import { ProviderContacts } from '@/components/provider-contacts'
+import {
+  getProviderContacts,
+  getProviderHoldings,
+  getServiceProvider,
+  type ProviderHolding,
+} from '@/lib/groups'
 import { getCurrentStaff } from '@/lib/staff'
 
 export const metadata = { title: 'Service provider · Q Wealth CRM' }
@@ -56,10 +62,11 @@ export default async function ServiceProviderPage({
   if (!staff) redirect('/login')
 
   const { partyId } = await params
-  /* One wave: the profile and its holdings together. */
-  const [provider, holdings] = await Promise.all([
+  /* One wave: the profile, its holdings and its people together. */
+  const [provider, holdings, contacts] = await Promise.all([
     getServiceProvider(partyId),
     getProviderHoldings(partyId),
+    getProviderContacts(partyId),
   ])
   if (!provider) notFound()
 
@@ -127,6 +134,11 @@ export default async function ServiceProviderPage({
               </div>
             ) : null}
           </dl>
+
+          {/* The households' members well, worn by a provider: the same
+              object in the same place on the card, holding the PEOPLE — BDMs,
+              adviser support. See the component for what differs and why. */}
+          <ProviderContacts providerPartyId={provider.party_id} contacts={contacts} />
         </Card>
       </div>
 

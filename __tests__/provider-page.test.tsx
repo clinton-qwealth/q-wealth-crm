@@ -9,6 +9,7 @@ import type { ProviderHolding, ServiceProviderDetail } from '@/lib/groups'
  */
 let PROVIDER: ServiceProviderDetail | null = null
 let HOLDINGS: ProviderHolding[] = []
+const CONTACTS: unknown[] = []
 
 vi.mock('next/navigation', () => ({
   redirect: () => { throw new Error('redirect') },
@@ -20,6 +21,13 @@ vi.mock('@/lib/staff', () => ({
 vi.mock('@/lib/groups', () => ({
   getServiceProvider: async () => PROVIDER,
   getProviderHoldings: async () => HOLDINGS,
+  getProviderContacts: async () => CONTACTS,
+}))
+/* The well is its own component with its own tests; the page only seats it. */
+vi.mock('@/components/provider-contacts', () => ({
+  ProviderContacts: ({ providerPartyId }: { providerPartyId: string }) => (
+    <div data-slot="provider-contacts">{providerPartyId}</div>
+  ),
 }))
 
 const { default: ServiceProviderPage } = await import('@/app/(shell)/groups/providers/[partyId]/page')
@@ -76,6 +84,15 @@ describe('the provider page', () => {
   test('an ended provider says so instead of wearing active', async () => {
     await show(provider({ role_status: 'ended', ended: '2026-01-31' }))
     expect(screen.getByText('Ended 2026-01-31')).toBeTruthy()
+  })
+
+  test('the key contacts well sits on the profile card, keyed to this provider', async () => {
+    const { container } = await show(provider())
+    const slot = container.querySelector('[data-slot="provider-contacts"]')
+    expect(slot?.textContent).toBe('p1')
+    /* Inside the LEFT column's card, where the households keep their members
+       — same object, same place, so the two pages read as one design. */
+    expect(slot?.closest('section')).toBe(container.querySelector('div[class*="lg:col-span-3"] section'))
   })
 
   test('the right column stays reserved and says for what; the shape holds', async () => {

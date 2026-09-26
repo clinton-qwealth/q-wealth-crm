@@ -176,6 +176,33 @@ export async function getProviderHoldings(partyId: string): Promise<ProviderHold
   return (data ?? []) as ProviderHolding[]
 }
 
+/** One of a provider's key contacts — a BDM, adviser support. */
+export type ProviderContact = {
+  id: string
+  name: string
+  role_title: string | null
+  email: string | null
+  phone: string | null
+}
+
+/**
+ * A provider's key contacts, by name.
+ *
+ * Deliberately NOT person parties — the table's own migration says why: a BDM
+ * is somebody who serves the firm, not somebody the firm serves, and a
+ * four-field row should not buy a seat in the client world to exist.
+ */
+export async function getProviderContacts(partyId: string): Promise<ProviderContact[]> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('provider_contacts')
+    .select('id, name, role_title, email, phone')
+    .eq('provider_party_id', partyId)
+    .order('name')
+  if (error) throw new Error(`The provider's contacts could not be read: ${error.message}`)
+  return (data ?? []) as ProviderContact[]
+}
+
 /**
  * The user groups a household may be put in: active ones, by name.
  *
