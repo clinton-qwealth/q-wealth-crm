@@ -126,15 +126,30 @@ describe('the provider page', () => {
     expect(slot?.closest('section')).toBe(container.querySelector('div[class*="lg:col-span-3"] section'))
   })
 
-  test('the right column stays reserved and says for what; the shape holds', async () => {
-    const { container } = await show(provider())
-    expect(screen.getByText('Notes and activity')).toBeTruthy()
+  /**
+   * 3 / 5 / 4 since the 26 Sep re-balance: the right column took a point from
+   * the middle when the notes moved into it. The profile's general facts sit
+   * two to a row, and NOTES ARE NOT AMONG THEM — a note is prose, and prose in
+   * a half-width grid cell wraps into a ransom note.
+   */
+  test('the columns split 3/5/4, general facts two-up on the left, notes on the right', async () => {
+    const { container } = await show(provider({ notes: 'Prefers email.\nQuarterly reviews.' }))
     const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
     expect(cols.map((c) => (c.className.match(/lg:col-span-\d+/) ?? [''])[0])).toEqual([
       'lg:col-span-3',
-      'lg:col-span-6',
-      'lg:col-span-3',
+      'lg:col-span-5',
+      'lg:col-span-4',
     ])
+    expect(cols[0]!.querySelector('dl')!.className).toContain('grid-cols-2')
+    expect(cols[0]!.textContent, 'notes left the profile').not.toContain('Prefers email.')
+    expect(cols[2]!.textContent).toContain('Prefers email.')
+    expect(cols[2]!.textContent, 'the activity feed stays honestly reserved').toContain('Activity')
+  })
+
+  test('a provider without notes says so quietly', async () => {
+    const { container } = await show(provider({ notes: null }))
+    const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
+    expect(cols[2]!.textContent).toContain('No notes yet.')
   })
 })
 

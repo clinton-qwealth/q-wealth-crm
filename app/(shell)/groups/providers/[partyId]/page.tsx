@@ -96,13 +96,17 @@ export default async function ServiceProviderPage({
         />
       </div>
 
-      {/* Left — the provider's profile */}
+      {/* Left — the provider's profile: the GENERAL facts, two to a row.
+          Asked 26 Sep — the single stack spent a tall column on short answers.
+          Status and Provides lead; since and the organisation's own contact
+          channels follow in the same grid. Notes moved OUT entirely, to the
+          right column that was reserved for exactly that. */}
       <div className="col-span-full flex flex-col gap-4 lg:col-span-3">
         <Card title="Provider">
           {/* The logo, above the fields — the one piece of the profile that is
               a picture, worn where the staff drawer wears its photo. */}
           <ProviderLogoBox partyId={provider.party_id} name={provider.name} logoPath={provider.logo_path} />
-          <dl className="flex flex-col gap-3 text-sm">
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-sm">
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Status</dt>
               <dd className="mt-0.5">
@@ -135,14 +139,8 @@ export default async function ServiceProviderPage({
                 </div>
               ))
             ) : (
-              <p className="text-xs text-neutral-400">No contact details recorded yet.</p>
+              <p className="col-span-2 text-xs text-neutral-400">No contact details recorded yet.</p>
             )}
-            {provider.notes ? (
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-widest text-neutral-400">Notes</dt>
-                <dd className="mt-0.5 whitespace-pre-wrap text-neutral-700">{provider.notes}</dd>
-              </div>
-            ) : null}
           </dl>
 
           {/* The households' members well, worn by a provider: the same
@@ -155,8 +153,10 @@ export default async function ServiceProviderPage({
       {/* Centre — the firm's exposure to this provider, through the reader's
           own keys: provider_holdings is invoker-rights, so a limited adviser
           sees only the groups their RLS admits. Each row opens the household
-          that holds it, because that is where the record's own drawer lives. */}
-      <div className="col-span-full lg:col-span-6">
+          that holds it, because that is where the record's own drawer lives.
+          Five columns since 26 Sep: the point went to the right column, which
+          had content coming (the notes) and nothing but a placeholder's width. */}
+      <div className="col-span-full lg:col-span-5">
         <Card>
           {holdings.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
@@ -175,13 +175,19 @@ export default async function ServiceProviderPage({
         </Card>
       </div>
 
-      {/* Right — reserved for what accumulates: notes and activity about the
-          relationship, the way a group page's right column holds its file
-          notes. */}
-      <div className="col-span-full lg:col-span-3">
-        <Card>
-          <div className="flex min-h-64 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
-            <p className="text-center text-sm font-medium text-neutral-700">Notes and activity</p>
+      {/* Right — what accumulates about the relationship, one column point
+          wider than it was (4 of 12, taken from the middle): the provider's
+          notes live here now, out of the profile's general facts, and the
+          activity feed keeps its honest placeholder beneath them. */}
+      <div className="col-span-full lg:col-span-4">
+        <Card title="Notes">
+          {provider.notes ? (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-neutral-700">{provider.notes}</p>
+          ) : (
+            <p className="text-sm text-neutral-400">No notes yet.</p>
+          )}
+          <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-8">
+            <p className="text-center text-sm font-medium text-neutral-700">Activity</p>
             <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">
               File notes are group-scoped today; a provider-scoped feed lives here once notes can
               name one.
