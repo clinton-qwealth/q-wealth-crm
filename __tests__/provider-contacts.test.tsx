@@ -30,7 +30,8 @@ const { ProviderContacts } = await import('@/components/provider-contacts')
 
 const contact = (o: Partial<ProviderContact>): ProviderContact => ({
   id: 'c1',
-  name: 'Sam Nguyen',
+  first_name: 'Sam',
+  last_name: 'Nguyen',
   role_title: 'BDM',
   email: 'sam@hub24.example',
   phone: null,
@@ -42,7 +43,7 @@ describe('the key contacts well', () => {
     render(
       <ProviderContacts
         providerPartyId="p1"
-        contacts={[contact({}), contact({ id: 'c2', name: 'Priya Shah', role_title: null, email: null })]}
+        contacts={[contact({}), contact({ id: 'c2', first_name: 'Priya', last_name: 'Shah', role_title: null, email: null })]}
       />,
     )
     expect(screen.getByText('Key contacts')).toBeTruthy()
@@ -55,7 +56,7 @@ describe('the key contacts well', () => {
 
   test('removing goes by id, from the row that was pressed', () => {
     removeCalls.length = 0
-    render(<ProviderContacts providerPartyId="p1" contacts={[contact({}), contact({ id: 'c2', name: 'Priya Shah' })]} />)
+    render(<ProviderContacts providerPartyId="p1" contacts={[contact({}), contact({ id: 'c2', first_name: 'Priya', last_name: 'Shah' })]} />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove Priya Shah' }))
     expect(removeCalls).toEqual(['c2'])
   })
@@ -66,16 +67,24 @@ describe('the key contacts well', () => {
     expect(screen.getByRole('button', { name: /Add contact/ })).toBeTruthy()
   })
 
-  test('the add dialog posts the provider it belongs to, with the four fields', () => {
+  /**
+   * ONE format for entering a person, everywhere — Clinton's rule, 27 Sep,
+   * after this dialog briefly asked for a single free-text name while the
+   * household and staff forms split first and last. The split is the pin:
+   * a form that regresses to one Name field fails on the missing inputs.
+   */
+  test('the add dialog asks first and last name — the household form’s format', () => {
     render(<ProviderContacts providerPartyId="p1" contacts={[]} />)
     fireEvent.click(screen.getByRole('button', { name: /Add contact/ }))
     const dialog = document.querySelector('dialog[open]') as HTMLDialogElement
     expect(dialog).toBeTruthy()
     const form = dialog.querySelector('form') as HTMLFormElement
-    const data = new FormData(form)
-    expect(data.get('provider_party_id')).toBe('p1')
-    for (const field of ['name', 'role_title', 'email', 'phone']) {
-      expect(within(dialog).getByRole('textbox', { name: new RegExp(field === 'role_title' ? 'Role' : field, 'i') }) || form.elements.namedItem(field)).toBeTruthy()
+    expect(new FormData(form).get('provider_party_id')).toBe('p1')
+    expect(within(dialog).getByRole('textbox', { name: 'First name' })).toBeTruthy()
+    expect(within(dialog).getByRole('textbox', { name: 'Last name' })).toBeTruthy()
+    expect(form.elements.namedItem('name'), 'the free-text blob stays gone').toBeNull()
+    for (const field of ['role_title', 'email', 'phone']) {
+      expect(form.elements.namedItem(field)).toBeTruthy()
     }
   })
 })

@@ -9,6 +9,7 @@ import {
 import { FIELD_INPUT } from '@/components/field-box'
 import { PlusIcon } from '@/components/icons'
 import { InitialsTile, SHEET, WELL } from '@/components/ui'
+import { fullName } from '@/lib/staff-name'
 import type { ProviderContact } from '@/lib/groups'
 
 /**
@@ -53,9 +54,9 @@ export function ProviderContacts({
           <ul className="divide-y divide-neutral-200/80">
             {contacts.map((c) => (
               <li key={c.id} className="flex items-center gap-3 px-3 py-2">
-                <InitialsTile name={c.name} />
+                <InitialsTile name={fullName(c)} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-neutral-900">{c.name}</span>
+                  <span className="block truncate text-sm font-medium text-neutral-900">{fullName(c)}</span>
                   <span className="block truncate text-xs text-neutral-500">
                     {[c.role_title, c.email, c.phone].filter(Boolean).join(' · ') || 'Contact'}
                   </span>
@@ -64,7 +65,7 @@ export function ProviderContacts({
                   type="button"
                   disabled={pending}
                   onClick={() => remove(c.id)}
-                  aria-label={`Remove ${c.name}`}
+                  aria-label={`Remove ${fullName(c)}`}
                   className="shrink-0 rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-30"
                 >
                   Remove
@@ -145,10 +146,18 @@ function AddContactDialog({ providerPartyId }: { providerPartyId: string }) {
           </h2>
           <input type="hidden" name="provider_party_id" value={providerPartyId} />
 
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-neutral-700">Name</span>
-            <input name="name" required autoFocus className={FIELD_INPUT} />
-          </label>
+          {/* First and last, in the order the household and staff forms ask —
+              one way to enter a person, everywhere. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-neutral-700">First name</span>
+              <input name="first_name" required autoFocus className={FIELD_INPUT} />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-neutral-700">Last name</span>
+              <input name="last_name" required className={FIELD_INPUT} />
+            </label>
+          </div>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-neutral-700">Role</span>
             <input name="role_title" placeholder="BDM" className={FIELD_INPUT} />

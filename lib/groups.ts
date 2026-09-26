@@ -221,10 +221,13 @@ export async function getProviderKinds(): Promise<Map<string, ProviderHolding['k
   return kinds
 }
 
-/** One of a provider's key contacts — a BDM, adviser support. */
+/** One of a provider's key contacts — a BDM, adviser support. Named in the
+ *  product's one format for people: first and last, never a free-text blob —
+ *  Clinton's rule, 27 Sep, after this table briefly invented a third way. */
 export type ProviderContact = {
   id: string
-  name: string
+  first_name: string
+  last_name: string
   role_title: string | null
   email: string | null
   phone: string | null
@@ -241,9 +244,11 @@ export async function getProviderContacts(partyId: string): Promise<ProviderCont
   const supabase = await createSupabaseServerClient({ writable: false })
   const { data, error } = await supabase
     .from('provider_contacts')
-    .select('id, name, role_title, email, phone')
+    .select('id, first_name, last_name, role_title, email, phone')
     .eq('provider_party_id', partyId)
-    .order('name')
+    /* Surname first, the order a directory reads in. */
+    .order('last_name')
+    .order('first_name')
   if (error) throw new Error(`The provider's contacts could not be read: ${error.message}`)
   return (data ?? []) as ProviderContact[]
 }

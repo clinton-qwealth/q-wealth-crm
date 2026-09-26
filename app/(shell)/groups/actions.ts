@@ -1814,13 +1814,17 @@ export async function addProviderContact(
   formData: FormData,
 ): Promise<ProviderContactState> {
   const providerPartyId = String(formData.get('provider_party_id') ?? '')
-  const name = String(formData.get('name') ?? '').trim()
-  if (!name) return { error: 'Give the contact a name.' }
+  /* First and last, the product's one format for a person — the same pair the
+     household and staff forms collect. */
+  const firstName = String(formData.get('first_name') ?? '').trim()
+  const lastName = String(formData.get('last_name') ?? '').trim()
+  if (!firstName || !lastName) return { error: 'Give the contact a first and last name.' }
 
   const supabase = await createSupabaseServerClient()
   const { error } = await supabase.rpc('add_provider_contact', {
     p_provider_party_id: providerPartyId,
-    p_name: name,
+    p_first_name: firstName,
+    p_last_name: lastName,
     /* Empty strings become nulls in the function, so "no email" is NULL in the
        row rather than '' — one spelling of absent. */
     p_role_title: String(formData.get('role_title') ?? ''),
