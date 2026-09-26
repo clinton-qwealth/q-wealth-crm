@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { ChevronDownIcon, SearchIcon } from '@/components/icons'
-import { FIELD_INPUT } from '@/components/field-box'
+import { ChevronDownIcon, GroupIcon, SearchIcon, StructureIcon } from '@/components/icons'
 import { Pill, SHEET } from '@/components/ui'
 import {
   GROUP_SORTS,
@@ -18,6 +17,16 @@ const TYPE_LABEL: Record<string, string> = {
   household: 'Household',
   business_entity: 'Business entity',
 }
+
+/**
+ * The toolbar's own control style — `FIELD_INPUT` a size down and a shade
+ * quieter. Asked 26 Sep: the full form-field height "clashed with the
+ * records", which is right — a toolbar is chrome over the list, not a form
+ * beside it, so it takes 12px text, tighter padding, the ground's grey and a
+ * hairline, and keeps only the focus treatment at full strength.
+ */
+const TOOLBAR_CONTROL =
+  'rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 hover:border-neutral-300 focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand/15'
 
 /**
  * A register of client groups: the toolbar, the count, the sheet, the rows.
@@ -64,16 +73,16 @@ export function GroupRegister({
       <div className="flex flex-wrap items-center gap-2">
         <label className="relative w-52">
           <span className="sr-only">Search {noun[1]}</span>
-          <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
-          {/* The placeholder is one word because the box is now one third its
-              old width, and "Search by name or contact" clips mid-word at
-              208px. What it searches is still said — by the sr-only label
-              above, and by the row simply answering keystrokes. */}
+          <SearchIcon className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-neutral-400" />
+          {/* The placeholder is one word because the box is one third its old
+              width, and "Search by name or contact" clips mid-word at 208px.
+              What it searches is still said — by the sr-only label above, and
+              by the row simply answering keystrokes. */}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search"
-            className={`${FIELD_INPUT} w-full pl-8`}
+            className={`${TOOLBAR_CONTROL} w-full pl-7`}
           />
         </label>
 
@@ -82,7 +91,7 @@ export function GroupRegister({
             Options are DERIVED — see statusesOf. */}
         <label className="flex items-center gap-1.5">
           <span className="sr-only">Filter by status</span>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={FIELD_INPUT}>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={TOOLBAR_CONTROL}>
             {/* "Status", not "All statuses": at rest the closed control shows
                 this option, so the word doubles as the control's visible name —
                 the same trick the task dialog's "Choose a role" plays. */}
@@ -100,7 +109,7 @@ export function GroupRegister({
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as GroupSortId)}
-            className={FIELD_INPUT}
+            className={TOOLBAR_CONTROL}
           >
             {GROUP_SORTS.map((s) => (
               <option key={s.id} value={s.id}>
@@ -159,12 +168,38 @@ export function GroupRegister({
  * disclosures use rotated to say "this goes somewhere" rather than "this
  * opens". Decorative: the link's accessible name is the group's name.
  */
+/**
+ * The row's anchor tile — the treatment every other list here already has,
+ * given to the registers on 26 Sep. A SQUARE on the neutral tone, the
+ * `GroupTile` idiom: a client group is a thing, and it takes no colour because
+ * the coloured tiles all encode a kind of HOLDING. People for a household, the
+ * org chart for anything that is a structure.
+ */
+function KindTile({ type }: { type: string }) {
+  const Icon = type === 'household' ? GroupIcon : StructureIcon
+  return (
+    <span
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-500 ring-1 ring-neutral-200"
+      aria-hidden="true"
+    >
+      <Icon className="h-[18px] w-[18px]" />
+    </span>
+  )
+}
+
 function GroupRow({ group }: { group: GroupListItem }) {
   /* Marked only when it is NOT active, the same rule the accounts list follows.
      Most groups are active, so a pill on every row would say nothing; a pill on
      the prospect or the inactive one says something. */
   const marked = group.status !== 'active'
   const members = group.member_count ?? 0
+  /* The register the row sits in already says "household", so a household row
+     does not repeat it. A structure names its kind, because the entities
+     register is deliberately a catch-all — Business entity, a future trust —
+     and the word is what tells them apart. */
+  const second = [group.group_type === 'household' ? null : (TYPE_LABEL[group.group_type] ?? group.group_type), group.primary_contact]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <li>
@@ -172,19 +207,26 @@ function GroupRow({ group }: { group: GroupListItem }) {
         href={`/groups/${group.group_id}`}
         className="flex items-center gap-3 px-3.5 py-3 outline-none transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
       >
+        <KindTile type={group.group_type} />
+
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-neutral-900">{group.name}</span>
             {marked ? <Pill tone="neutral">{group.status}</Pill> : null}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-neutral-500">
-            {[
-              TYPE_LABEL[group.group_type] ?? group.group_type,
-              `${members} member${members === 1 ? '' : 's'}`,
-              group.primary_contact,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
+          {second ? (
+            <span className="mt-0.5 block truncate text-xs text-neutral-500">{second}</span>
+          ) : null}
+        </span>
+
+        {/* The figure the list is scanned for, in the figure slot — the
+            template list's deployments treatment. It left the second line so
+            the number can be read DOWN the register rather than hunted for
+            mid-sentence. */}
+        <span className="shrink-0 text-right text-[15px] font-semibold tabular-nums text-neutral-900">
+          {members}
+          <span className="block text-[11px] font-normal leading-tight text-neutral-400">
+            {members === 1 ? 'member' : 'members'}
           </span>
         </span>
 

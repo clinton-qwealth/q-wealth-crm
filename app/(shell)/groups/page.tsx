@@ -9,6 +9,7 @@ import { resolveGroupSection, type GroupSectionId } from '@/lib/group-sections'
 import { GroupRegister } from '@/components/group-register'
 import { GroupsNav } from '@/components/groups-nav'
 import { RegisterHeader } from '@/components/register-header'
+import { BuildingIcon } from '@/components/icons'
 import { Card, SHEET } from '@/components/ui'
 
 export const metadata = { title: 'Clients · Q Wealth CRM' }
@@ -56,16 +57,16 @@ export default async function GroupsIndexPage(
           panel is static — the cursor trouble this page's history warns about
           came from surfaces that transition, and this one never does.
 
-          THE BOTTOM EDGE REACHES THE VIEWPORT'S, asked 26 Sep. The rail is as
-          tall as the row, and the row is only as tall as the content, so on a
-          short register it stopped mid-screen. The arithmetic: 100dvh minus
-          the 48px bar minus the main's 28px top padding is `calc(100dvh -
-          4.75rem)` of minimum height, and `-mb-7` lets it run through the
-          main's bottom padding to the screen's edge WITHOUT adding 28px of
-          scroll to every short page. Square bottom corners at `lg`, because a
-          rounded corner flush against the viewport edge leaves two slivers of
-          artwork peeking under it. */}
-      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:-mb-7 lg:h-full lg:min-h-[calc(100dvh-4.75rem)] lg:rounded-b-none xl:col-span-2">
+          THE BOTTOM STOPS A GUTTER SHORT OF THE SCREEN, matching the top —
+          revised 26 Sep from a flush-to-the-edge version the same day. The
+          rail is as tall as the row, and the row is only as tall as the
+          content, so on a short register it stopped mid-screen; the minimum
+          height is what fixes that. The arithmetic: 100dvh minus the 48px bar,
+          minus the main's 28px top padding, minus its 28px bottom padding is
+          `calc(100dvh - 6.5rem)` — the panel then ends exactly where the
+          page's own bottom gutter begins, the same breathing room it gets at
+          the top, and keeps all four rounded corners. */}
+      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:h-full lg:min-h-[calc(100dvh-6.5rem)] xl:col-span-2">
         <GroupsNav current={section.id} />
       </div>
 
@@ -179,12 +180,23 @@ function ProvidersPanel({ providers }: { providers: ServiceProviderItem[] }) {
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
           {providers.map((p) => (
-            <li key={p.party_id} className="px-3.5 py-3">
-              <span className="block truncate text-sm font-semibold text-neutral-900">{p.name}</span>
-              <span className="mt-0.5 block truncate text-xs text-neutral-500">
-                {['Service provider', p.since ? `since ${p.since.slice(0, 4)}` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
+            <li key={p.party_id} className="flex items-center gap-3 px-3.5 py-3">
+              {/* The building is the search's mark for a provider, spent here
+                  for the same meaning — the same anchor tile the group rows
+                  carry, so the registers read as one family. */}
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-500 ring-1 ring-neutral-200"
+                aria-hidden="true"
+              >
+                <BuildingIcon className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-neutral-900">{p.name}</span>
+                <span className="mt-0.5 block truncate text-xs text-neutral-500">
+                  {['Service provider', p.since ? `since ${p.since.slice(0, 4)}` : null]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </span>
             </li>
           ))}

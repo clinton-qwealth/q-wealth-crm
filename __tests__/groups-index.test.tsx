@@ -131,13 +131,13 @@ describe('the menu', () => {
     expect(cols[0]!.className).toContain('backdrop-blur')
     expect(cols[0]!.className).toContain('bg-white/40')
     expect(cols[0]!.className).toContain('lg:h-full')
-    /* And it reaches the VIEWPORT's bottom, not the content's: minimum height
-       is the screen minus the bar and the top gutter, and the negative bottom
-       margin runs it through the main's padding without adding scroll. The
-       two classes are one mechanism — drop either and a short register's rail
-       stops mid-screen again, or every page grows 28px of scroll. */
-    expect(cols[0]!.className).toContain('lg:min-h-[calc(100dvh-4.75rem)]')
-    expect(cols[0]!.className).toContain('lg:-mb-7')
+    /* And it runs down to the page's BOTTOM GUTTER, not just to the content's
+       end: minimum height is the screen minus the bar and both of the main's
+       vertical paddings, so a short register's rail no longer stops mid-air —
+       and it ends the same 28px short of the screen that it starts below the
+       bar, top and bottom matching. */
+    expect(cols[0]!.className).toContain('lg:min-h-[calc(100dvh-6.5rem)]')
+    expect(cols[0]!.className, 'no flush-bottom negative margin any more').not.toContain('-mb-7')
   })
 
   /**
@@ -194,9 +194,13 @@ describe('the household register', () => {
     await show([group()])
     const link = screen.getByRole('link', { name: /Testsmith Household/ })
     expect(link.getAttribute('href')).toBe('/groups/g1')
-    expect(link.textContent).toContain('Household')
-    expect(link.textContent).toContain('3 members')
     expect(link.textContent).toContain('Jane Testsmith')
+    /* The member count moved to the row's figure slot — a number over a small
+       word, readable DOWN the register — and the type word left household
+       rows entirely: the register they sit in already says it. */
+    expect(within(link).getByText('3')).toBeTruthy()
+    expect(within(link).getByText('members')).toBeTruthy()
+    expect(link.textContent).not.toContain('Household ·')
   })
 
   test('counts in the plural when there are several', async () => {
@@ -221,7 +225,9 @@ describe('the household register', () => {
 
   test('a group with nobody on it still reads as a row, not a blank', async () => {
     await show([group({ member_count: null, primary_contact: null })])
-    expect(screen.getByRole('link', { name: /Testsmith Household/ }).textContent).toContain('0 members')
+    const link = screen.getByRole('link', { name: /Testsmith Household/ })
+    expect(within(link).getByText('0'), 'the figure says zero rather than vanishing').toBeTruthy()
+    expect(within(link).getByText('members')).toBeTruthy()
   })
 
   /**
