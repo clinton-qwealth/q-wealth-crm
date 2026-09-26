@@ -1739,3 +1739,54 @@ export async function completeWorkflowTaskEarly(
   revalidatePath(`/workflows/${workflowId}`)
   return { ok: true }
 }
+
+/* -------------------------------------------------------------------------- */
+/* The registers' own creators, 26 Sep 2026                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Widened the way `TemplateCreateState` is and for the same reason: both
+ * dialogs navigate INTO the record they made — an empty household goes
+ * straight to its page to be given members, a provider to its skeleton —
+ * and hunting the new row out of the register would be a wasted step.
+ */
+export type RegisterCreateState = { error: string } | { ok: true; id: string } | null
+
+export async function createClientGroup(
+  _prev: RegisterCreateState,
+  formData: FormData,
+): Promise<RegisterCreateState> {
+  const name = String(formData.get('name') ?? '').trim()
+  const groupType = String(formData.get('group_type') ?? '')
+  if (!name) return { error: 'Give the group a name.' }
+  /* The register the dialog sits on decides the type; a value outside the
+     enum would only produce a Postgres error worded for nobody. */
+  if (groupType !== 'household' && groupType !== 'business_entity') {
+    return { error: 'Choose what kind of group this is.' }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('create_client_group', {
+    p_name: name,
+    p_group_type: groupType,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/groups')
+  return { ok: true, id: data as string }
+}
+
+export async function createServiceProvider(
+  _prev: RegisterCreateState,
+  formData: FormData,
+): Promise<RegisterCreateState> {
+  const name = String(formData.get('name') ?? '').trim()
+  if (!name) return { error: 'Give the provider a name.' }
+
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase.rpc('create_service_provider', { p_name: name })
+  /* The duplicate guard's message ("A provider with that name already
+     exists") is written for a person and passes through verbatim. */
+  if (error) return { error: error.message }
+  revalidatePath('/groups')
+  return { ok: true, id: data as string }
+}

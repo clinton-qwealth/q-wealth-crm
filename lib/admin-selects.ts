@@ -87,6 +87,17 @@ export const DEPLOYABLE_TEMPLATES_SELECT =
  */
 export const SERVICE_PROVIDERS_SELECT = 'party_id, start_date, parties!inner(display_name)'
 
+/**
+ * One provider, for `/groups/providers/[partyId]` — 26 Sep 2026.
+ *
+ * Two levels again: the role row, its party, and the party's contact points.
+ * `contact_points` rides its own FK to `parties`; the day someone adds a
+ * second path between those tables, this is the probe that says so before an
+ * adviser's screen does.
+ */
+export const PROVIDER_DETAIL_SELECT =
+  'party_id, status, start_date, end_date, parties!inner(display_name, status, notes, contact_points(kind, value, is_preferred))'
+
 /** Every select above, named, so a test can walk them without repeating them. */
 export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: string }>> = {
   'user groups': { from: 'user_groups', select: USER_GROUPS_SELECT },
@@ -95,4 +106,5 @@ export const ADMIN_SELECTS: Readonly<Record<string, { from: string; select: stri
   'the firm’s roles': { from: 'workflow_roles', select: WORKFLOW_ROLES_SELECT },
   'deployable templates': { from: 'workflow_templates', select: DEPLOYABLE_TEMPLATES_SELECT },
   'service providers': { from: 'party_roles', select: SERVICE_PROVIDERS_SELECT },
+  'one provider': { from: 'party_roles', select: PROVIDER_DETAIL_SELECT },
 }

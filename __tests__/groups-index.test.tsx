@@ -40,6 +40,14 @@ vi.mock('@/lib/groups', () => ({
   getVisibleGroups: async () => GROUPS,
   getServiceProviders: async () => PROVIDERS,
 }))
+/* The dialogs pull in the server actions module ('use server' + next/cache);
+   this file is about the page, so they are stood in for. */
+vi.mock('@/components/register-create', () => ({
+  NewGroupForm: ({ groupType }: { groupType: string }) => (
+    <button type="button">{groupType === 'household' ? 'New household' : 'New entity'}</button>
+  ),
+  NewProviderForm: () => <button type="button">New provider</button>,
+}))
 
 const { default: GroupsIndexPage } = await import('@/app/(shell)/groups/page')
 
@@ -236,12 +244,13 @@ describe('the household register', () => {
    * assigned them any — and telling them the wrong one of those sends them to
    * the wrong person.
    */
-  test('an empty register explains that visibility is per-adviser', async () => {
+  test('an empty register explains that visibility is per-adviser, and offers the +', async () => {
     await show([])
     expect(register().queryByRole('list'), 'no sheet is drawn around nothing').toBeNull()
     expect(screen.getByText(/No client households to show/)).toBeTruthy()
     expect(document.body.textContent).toMatch(/own or have been given access to/)
     expect(document.body.textContent).toMatch(/ask an administrator/i)
+    expect(screen.getByRole('button', { name: 'New household' })).toBeTruthy()
   })
 })
 
@@ -268,23 +277,28 @@ describe('the entities register', () => {
 })
 
 describe('the provider register', () => {
-  test('lists providers by name, and the rows are NOT links — there is nowhere to go', async () => {
+  /* The reversal is deliberate and dated: until 26 Sep these rows were plain
+     BECAUSE no page existed. `/groups/providers/[partyId]` exists now, so a
+     provider row navigates like every other register's. */
+  test('lists providers, each a link to its page, with the + beside the toolbar', async () => {
     PROVIDERS = [
       { party_id: 'p1', name: 'Macquarie Wrap', since: '2024-03-01' },
       { party_id: 'p2', name: 'HUB24', since: null },
     ]
     await show([], 'providers')
-    expect(screen.getByText('Macquarie Wrap')).toBeTruthy()
-    expect(screen.getByText('HUB24')).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Macquarie Wrap/ }).getAttribute('href')).toBe(
+      '/groups/providers/p1',
+    )
     expect(screen.getByText('2 providers')).toBeTruthy()
     expect(screen.getByText(/since 2024/)).toBeTruthy()
-    expect(screen.getByText('Macquarie Wrap').closest('a')).toBeNull()
+    expect(screen.getByRole('button', { name: 'New provider' })).toBeTruthy()
   })
 
-  test('an empty register says what a provider is, not that something failed', async () => {
+  test('an empty register says what a provider is, and offers to make one', async () => {
     PROVIDERS = []
     await show([], 'providers')
     expect(screen.getByText(/No service providers recorded/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New provider' })).toBeTruthy()
   })
 })
 

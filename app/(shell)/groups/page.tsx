@@ -1,16 +1,13 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
-import {
-  getServiceProviders,
-  getVisibleGroups,
-  type ServiceProviderItem,
-} from '@/lib/groups'
+import { getServiceProviders, getVisibleGroups } from '@/lib/groups'
 import { resolveGroupSection, type GroupSectionId } from '@/lib/group-sections'
 import { GroupRegister } from '@/components/group-register'
 import { GroupsNav } from '@/components/groups-nav'
+import { ProviderRegister } from '@/components/provider-register'
 import { RegisterHeader } from '@/components/register-header'
-import { BuildingIcon } from '@/components/icons'
-import { Card, SHEET } from '@/components/ui'
+import { NewGroupForm, NewProviderForm } from '@/components/register-create'
+import { Card } from '@/components/ui'
 
 export const metadata = { title: 'Clients · Q Wealth CRM' }
 
@@ -105,15 +102,18 @@ async function sectionPanel(section: GroupSectionId) {
   switch (section) {
     case 'households': {
       const groups = (await getVisibleGroups()).filter((g) => g.group_type === 'household')
-      if (groups.length === 0) {
-        return (
-          <EmptyRegister
-            title="No client households to show"
-            body="You see the households you own or have been given access to. If you expect one here, ask an administrator to check who it is assigned to."
-          />
-        )
-      }
-      return <GroupRegister groups={groups} noun={['household', 'households']} />
+      return (
+        <GroupRegister
+          groups={groups}
+          noun={['household', 'households']}
+          action={<NewGroupForm groupType="household" triggerVariant="quiet" />}
+          empty={{
+            title: 'No client households to show',
+            body: 'You see the households you own or have been given access to. If you expect one here, ask an administrator to check who it is assigned to.',
+            action: <NewGroupForm groupType="household" />,
+          }}
+        />
+      )
     }
 
     case 'entities': {
@@ -122,20 +122,33 @@ async function sectionPanel(section: GroupSectionId) {
          lands here rather than in no section at all. The households filter is
          the exact one; this is the remainder, on purpose. */
       const groups = (await getVisibleGroups()).filter((g) => g.group_type !== 'household')
-      if (groups.length === 0) {
-        return (
-          <EmptyRegister
-            title="No entities or structures to show"
-            body="Companies, trusts and other structures you look after appear here. You see the ones you own or have been given access to."
-          />
-        )
-      }
-      return <GroupRegister groups={groups} noun={['entity', 'entities']} />
+      return (
+        <GroupRegister
+          groups={groups}
+          noun={['entity', 'entities']}
+          action={<NewGroupForm groupType="business_entity" triggerVariant="quiet" />}
+          empty={{
+            title: 'No entities or structures to show',
+            body: 'Companies, trusts and other structures you look after appear here. You see the ones you own or have been given access to.',
+            action: <NewGroupForm groupType="business_entity" />,
+          }}
+        />
+      )
     }
 
     case 'providers': {
       const providers = await getServiceProviders()
-      return <ProvidersPanel providers={providers} />
+      return (
+        <ProviderRegister
+          providers={providers}
+          action={<NewProviderForm triggerVariant="quiet" />}
+          empty={{
+            title: 'No service providers recorded',
+            body: 'A provider is a platform, insurer or fund manager the firm deals with. The register is firm-wide.',
+            action: <NewProviderForm />,
+          }}
+        />
+      )
     }
 
     case 'referrers':
@@ -151,60 +164,6 @@ async function sectionPanel(section: GroupSectionId) {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * The provider register. Rows, not links: a provider has no page of its own —
- * the search says the same of its provider hits — so a row that navigated
- * would 404, and a row that pretends to open is worse than one that plainly
- * does not.
- */
-function ProvidersPanel({ providers }: { providers: ServiceProviderItem[] }) {
-  if (providers.length === 0) {
-    return (
-      <EmptyRegister
-        title="No service providers recorded"
-        body="A provider is a party holding an active product-provider role — platforms, insurers, fund managers. They appear here as they are recorded."
-      />
-    )
-  }
-
-  return (
-    <>
-      {/* No mini-heading: the page header above the card already says
-          "Service providers", and saying it twice an inch apart is the kind
-          of crowding this layout exists to remove. The count keeps the line. */}
-      <p className="mb-2.5 text-right text-xs text-neutral-500">
-        {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
-      </p>
-
-      <div className={SHEET}>
-        <ul className="divide-y divide-neutral-200/80">
-          {providers.map((p) => (
-            <li key={p.party_id} className="flex items-center gap-3 px-3.5 py-3">
-              {/* The building is the search's mark for a provider, spent here
-                  for the same meaning — the same anchor tile the group rows
-                  carry, so the registers read as one family. */}
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-500 ring-1 ring-neutral-200"
-                aria-hidden="true"
-              >
-                <BuildingIcon className="h-[18px] w-[18px]" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-neutral-900">{p.name}</span>
-                <span className="mt-0.5 block truncate text-xs text-neutral-500">
-                  {['Service provider', p.since ? `since ${p.since.slice(0, 4)}` : null]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </>
-  )
-}
 
 /** The dashed house treatment for a register that is empty rather than broken —
  *  the same block the old full-width index used, with the words as a prop. */

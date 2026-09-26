@@ -1,4 +1,4 @@
-import { SERVICE_PROVIDERS_SELECT } from '@/lib/admin-selects'
+import { PROVIDER_DETAIL_SELECT, SERVICE_PROVIDERS_SELECT } from '@/lib/admin-selects'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import type { UserGroupChoice } from '@/lib/user-groups'
 
@@ -92,6 +92,57 @@ export async function getServiceProviders(): Promise<ServiceProviderItem[]> {
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** One provider, as its page needs it. */
+export type ServiceProviderDetail = {
+  party_id: string
+  name: string
+  role_status: string
+  since: string | null
+  ended: string | null
+  notes: string | null
+  contact_points: { kind: string; value: string; is_preferred: boolean }[]
+}
+
+/**
+ * One provider by party id, or null when that party is not a provider.
+ *
+ * Null covers "no such party", "a party that is somebody's client", and "not
+ * visible" alike, and the page answers all three with `notFound()` — the same
+ * one-answer rule the share-token page follows. NOT filtered to active: an
+ * ended provider still has a page, the way an archived template does, and the
+ * page says so rather than pretending the record never existed.
+ */
+export async function getServiceProvider(partyId: string): Promise<ServiceProviderDetail | null> {
+  const supabase = await createSupabaseServerClient({ writable: false })
+  const { data, error } = await supabase
+    .from('party_roles')
+    .select(PROVIDER_DETAIL_SELECT)
+    .eq('role', 'product_provider')
+    .eq('party_id', partyId)
+    .maybeSingle()
+  /* An ERROR is thrown, not folded into null: `getTemplate` swallowed its
+     errors into a 404 and cost a day of production diagnosis this week. */
+  if (error) throw new Error(`The provider could not be read: ${error.message}`)
+  if (!data) return null
+
+  const row = data as Record<string, unknown>
+  const party = (Array.isArray(row.parties) ? row.parties[0] : row.parties) as {
+    display_name?: string
+    notes?: string | null
+    contact_points?: { kind: string; value: string; is_preferred: boolean }[] | null
+  } | null
+
+  return {
+    party_id: row.party_id as string,
+    name: party?.display_name ?? 'Unnamed',
+    role_status: row.status as string,
+    since: (row.start_date as string | null) ?? null,
+    ended: (row.end_date as string | null) ?? null,
+    notes: party?.notes ?? null,
+    contact_points: party?.contact_points ?? [],
+  }
 }
 
 /**

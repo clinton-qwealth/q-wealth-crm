@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon, GroupIcon, SearchIcon, StructureIcon } from '@/components/icons'
 import { Pill, SHEET } from '@/components/ui'
 import {
@@ -53,9 +53,21 @@ const TOOLBAR_CONTROL =
 export function GroupRegister({
   groups,
   noun,
+  action,
+  empty,
 }: {
   groups: GroupListItem[]
   noun: [singular: string, plural: string]
+  /** The register's + button, pinned to the toolbar's right — the quiet
+   *  variant, since the records own the space (DataSection's rule). */
+  action?: ReactNode
+  /**
+   * The register-is-empty state, WITH its own call to action: the empty state
+   * is where creating the first record matters most, so the page passes the
+   * same dialog at full prominence — again DataSection's inversion, rebuilt
+   * here because this register has a toolbar DataSection does not.
+   */
+  empty: { title: string; body: string; action?: ReactNode }
 }) {
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('all')
@@ -64,6 +76,18 @@ export function GroupRegister({
   const statuses = statusesOf(groups)
   const visible = sortGroups(narrowGroups(groups, { q, status }), sort)
   const narrowed = visible.length !== groups.length
+
+  /* Nothing in the register AT ALL — different fact from "filtered to
+     nothing", and the one place the + is the loudest thing on offer. */
+  if (groups.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50/60 px-6 py-10">
+        <p className="text-center text-sm font-medium text-neutral-700">{empty.title}</p>
+        <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">{empty.body}</p>
+        {empty.action ? <div className="mt-4">{empty.action}</div> : null}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -118,6 +142,10 @@ export function GroupRegister({
             ))}
           </select>
         </label>
+
+        {/* The + on the row's right — the one justified thing here, because an
+            add affordance in a fixed corner survives the list growing. */}
+        {action ? <span className="ml-auto">{action}</span> : null}
       </div>
 
       {visible.length > 0 ? (

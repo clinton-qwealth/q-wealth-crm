@@ -40,7 +40,14 @@ const names = () =>
   screen.getAllByRole('listitem').map((li) => li.querySelector('.font-semibold')?.textContent)
 
 const show = (rows: GroupListItem[] = ROWS) =>
-  render(<GroupRegister groups={rows} noun={['household', 'households']} />)
+  render(
+    <GroupRegister
+      groups={rows}
+      noun={['household', 'households']}
+      action={<button type="button">New household</button>}
+      empty={{ title: 'Nothing here', body: 'Truly nothing.', action: <button type="button">Make one</button> }}
+    />,
+  )
 
 describe('search', () => {
   test('narrows by name, and the count says of how many', () => {
@@ -122,5 +129,26 @@ describe('the count', () => {
   test('speaks in the singular only when the WHOLE register is one row', () => {
     show([row({})])
     expect(screen.getByText('1 household')).toBeTruthy()
+  })
+})
+
+describe('the + and the empty register', () => {
+  test('the action rides the toolbar, pinned right of the controls', () => {
+    show()
+    const add = screen.getByRole('button', { name: 'New household' })
+    expect((add.parentElement as HTMLElement).className).toContain('ml-auto')
+  })
+
+  /**
+   * Register-empty and filtered-to-nothing are different facts with different
+   * furniture: the empty register leads with its own call to action, and the
+   * toolbar does not render at all — controls over nothing are noise.
+   */
+  test('an empty register shows its words and its call to action, and no toolbar', () => {
+    show([])
+    expect(screen.getByText('Nothing here')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Make one' })).toBeTruthy()
+    expect(screen.queryByPlaceholderText('Search')).toBeNull()
+    expect(screen.queryByLabelText('Sort')).toBeNull()
   })
 })
