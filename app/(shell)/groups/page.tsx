@@ -1,21 +1,15 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentStaff } from '@/lib/staff'
 import {
   getServiceProviders,
   getVisibleGroups,
-  type GroupListItem,
   type ServiceProviderItem,
 } from '@/lib/groups'
 import { resolveGroupSection, type GroupSectionId } from '@/lib/group-sections'
+import { GroupRegister } from '@/components/group-register'
 import { GroupsNav } from '@/components/groups-nav'
-import { Card, Pill, SHEET } from '@/components/ui'
-import { ChevronDownIcon } from '@/components/icons'
-
-const TYPE_LABEL: Record<string, string> = {
-  household: 'Household',
-  business_entity: 'Business entity',
-}
+import { RegisterHeader } from '@/components/register-header'
+import { Card, SHEET } from '@/components/ui'
 
 export const metadata = { title: 'Clients · Q Wealth CRM' }
 
@@ -55,24 +49,28 @@ export default async function GroupsIndexPage(
 
   return (
     <>
-      {/* Invisible on purpose, present on purpose: the anchor for anyone
-          navigating by headings, costing no row of the grid. Same call as
-          /admin, where the reasoning is written out. */}
-      <h1 className="sr-only">{section.label}</h1>
-
-      {/* Left — the menu, on the ground rather than in a card */}
-      <div className="col-span-full flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
+      {/* Left — the rail. The faint frosted panel is what says "this column is
+          chrome": one translucent surface over the page artwork, running the
+          full row height, so the menu reads as a sidebar rather than as a
+          stack of floating links. `backdrop-blur` is safe HERE because the
+          panel is static — the cursor trouble this page's history warns about
+          came from surfaces that transition, and this one never does. */}
+      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:h-full xl:col-span-2">
         <GroupsNav current={section.id} />
       </div>
 
-      {/* Centre — the register. Keyed so a section change remounts it, which
-          both resets any state and replays the fade; see /admin. */}
+      {/* Centre — the header, then the register. Keyed together so a section
+          change remounts both, which resets state and replays the fade — the
+          title is part of what arrives, so it fades with the content rather
+          than snapping ahead of it. */}
       <div className="col-span-full lg:col-span-6 xl:col-span-7">
-        <Card>
-          <div key={section.id} className="qw-section-in">
-            {panel}
-          </div>
-        </Card>
+        <div key={section.id} className="qw-section-in">
+          <RegisterHeader
+            trail={[{ label: 'Q Wealth CRM', href: '/' }, { label: 'Groups' }]}
+            title={section.label}
+          />
+          <Card>{panel}</Card>
+        </div>
       </div>
 
       {/* Right — reserved, as on /admin. */}
@@ -90,17 +88,15 @@ async function sectionPanel(section: GroupSectionId) {
   switch (section) {
     case 'households': {
       const groups = (await getVisibleGroups()).filter((g) => g.group_type === 'household')
-      return (
-        <GroupListPanel
-          groups={groups}
-          noun={['household', 'households']}
-          empty={{
-            title: 'No client households to show',
-            body:
-              'You see the households you own or have been given access to. If you expect one here, ask an administrator to check who it is assigned to.',
-          }}
-        />
-      )
+      if (groups.length === 0) {
+        return (
+          <EmptyRegister
+            title="No client households to show"
+            body="You see the households you own or have been given access to. If you expect one here, ask an administrator to check who it is assigned to."
+          />
+        )
+      }
+      return <GroupRegister groups={groups} noun={['household', 'households']} />
     }
 
     case 'entities': {
@@ -109,17 +105,15 @@ async function sectionPanel(section: GroupSectionId) {
          lands here rather than in no section at all. The households filter is
          the exact one; this is the remainder, on purpose. */
       const groups = (await getVisibleGroups()).filter((g) => g.group_type !== 'household')
-      return (
-        <GroupListPanel
-          groups={groups}
-          noun={['entity', 'entities']}
-          empty={{
-            title: 'No entities or structures to show',
-            body:
-              'Companies, trusts and other structures you look after appear here. You see the ones you own or have been given access to.',
-          }}
-        />
-      )
+      if (groups.length === 0) {
+        return (
+          <EmptyRegister
+            title="No entities or structures to show"
+            body="Companies, trusts and other structures you look after appear here. You see the ones you own or have been given access to."
+          />
+        )
+      }
+      return <GroupRegister groups={groups} noun={['entity', 'entities']} />
     }
 
     case 'providers': {
@@ -142,44 +136,6 @@ async function sectionPanel(section: GroupSectionId) {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A register of client groups: the heading row, the sheet, the rows. The same
- * sheet the index drew full-width before the menu arrived — the argument for
- * one sheet over a stack of cards is on the group page and still applies.
- */
-function GroupListPanel({
-  groups,
-  noun,
-  empty,
-}: {
-  groups: GroupListItem[]
-  noun: [singular: string, plural: string]
-  empty: { title: string; body: string }
-}) {
-  if (groups.length === 0) return <EmptyRegister title={empty.title} body={empty.body} />
-
-  return (
-    <>
-      <div className="mb-2.5 flex items-center justify-between gap-3">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Client groups
-        </h2>
-        <p className="text-xs text-neutral-500">
-          {groups.length} {groups.length === 1 ? noun[0] : noun[1]}
-        </p>
-      </div>
-
-      <div className={SHEET}>
-        <ul className="divide-y divide-neutral-200/80">
-          {groups.map((g) => (
-            <GroupRow key={g.group_id} group={g} />
-          ))}
-        </ul>
-      </div>
-    </>
-  )
-}
-
-/**
  * The provider register. Rows, not links: a provider has no page of its own —
  * the search says the same of its provider hits — so a row that navigated
  * would 404, and a row that pretends to open is worse than one that plainly
@@ -197,14 +153,12 @@ function ProvidersPanel({ providers }: { providers: ServiceProviderItem[] }) {
 
   return (
     <>
-      <div className="mb-2.5 flex items-center justify-between gap-3">
-        <h2 className="truncate text-xs font-semibold uppercase tracking-wider text-neutral-500">
-          Service providers
-        </h2>
-        <p className="text-xs text-neutral-500">
-          {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
-        </p>
-      </div>
+      {/* No mini-heading: the page header above the card already says
+          "Service providers", and saying it twice an inch apart is the kind
+          of crowding this layout exists to remove. The count keeps the line. */}
+      <p className="mb-2.5 text-right text-xs text-neutral-500">
+        {providers.length} {providers.length === 1 ? 'provider' : 'providers'}
+      </p>
 
       <div className={SHEET}>
         <ul className="divide-y divide-neutral-200/80">
@@ -232,54 +186,5 @@ function EmptyRegister({ title, body }: { title: string; body: string }) {
       <p className="text-center text-sm font-medium text-neutral-700">{title}</p>
       <p className="mt-1 max-w-sm text-center text-xs leading-relaxed text-neutral-500">{body}</p>
     </div>
-  )
-}
-
-/**
- * One group in the list.
- *
- * **The whole row is the link**, not just the name. A row that navigates should
- * be clickable across its width — a 120px name inside a 900px row is a target
- * people miss — and there is nothing else on the row to click, so nothing is
- * being swallowed by making it one.
- *
- * **The chevron points right.** The same glyph the file-note and History
- * disclosures use rotated to say "this goes somewhere" rather than "this
- * opens". Decorative: the link's accessible name is the group's name.
- */
-function GroupRow({ group }: { group: GroupListItem }) {
-  /* Marked only when it is NOT active, the same rule the accounts list follows.
-     Most groups are active, so a pill on every row would say nothing; a pill on
-     the prospect or the inactive one says something. */
-  const marked = group.status !== 'active'
-  const members = group.member_count ?? 0
-
-  return (
-    <li>
-      <Link
-        href={`/groups/${group.group_id}`}
-        className="flex items-center gap-3 px-3.5 py-3 outline-none transition-colors hover:bg-neutral-50 focus-visible:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-sm font-semibold text-neutral-900">{group.name}</span>
-            {marked ? <Pill tone="neutral">{group.status}</Pill> : null}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-neutral-500">
-            {[
-              TYPE_LABEL[group.group_type] ?? group.group_type,
-              `${members} member${members === 1 ? '' : 's'}`,
-              group.primary_contact,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </span>
-        </span>
-
-        {/* The icon sets its own `aria-hidden`, so nothing is passed here — the
-            link's accessible name is the group's name and nothing else. */}
-        <ChevronDownIcon className="h-4 w-4 shrink-0 -rotate-90 text-neutral-300" />
-      </Link>
-    </li>
   )
 }

@@ -99,8 +99,11 @@ export default async function AdminPage(
           absolutely positioned, so it adds no row to the grid. */}
       <h1 className="sr-only">{section.label}</h1>
 
-      {/* Left — the menu, on the ground rather than in a card */}
-      <div className="col-span-full flex flex-col gap-4 lg:col-span-3 xl:col-span-2">
+      {/* Left — the rail, on the same faint frosted panel as the client
+          pages', so the two sectioned screens keep reading as one design. The
+          notes on the panel — why blur is safe on a STATIC surface — are on
+          /groups. */}
+      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:h-full xl:col-span-2">
         <AdminNav current={section.id} />
       </div>
 

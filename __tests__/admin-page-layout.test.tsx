@@ -199,6 +199,8 @@ describe('the columns', () => {
       '',
     ])
     expect(cols[0]!.querySelector('nav'), 'the menu sits on the left').toBeTruthy()
+    /* The frosted rail, shared with /groups so the twins keep matching. */
+    expect(cols[0]!.className, 'on the frosted rail').toContain('backdrop-blur')
     /* Bare: the menu is chrome, not a record, so it gets no card of its own.
        A `section` here would be the Card's element. */
     expect(cols[0]!.querySelector('section'), 'the menu is not boxed in a card').toBeNull()

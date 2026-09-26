@@ -102,14 +102,42 @@ describe('the menu', () => {
     ).rejects.toThrow('notFound')
   })
 
-  test('the heading names the register, invisibly — the admin page’s call', async () => {
+  /**
+   * The compact header, 26 Sep 2026: breadcrumb over a VISIBLE h1, in the
+   * middle column — the Confluence shape Clinton pointed at. It replaces the
+   * interim `sr-only` heading, and the crumb for the level you are on is
+   * text, not a link: a link to the page you are reading does nothing.
+   */
+  test('the header is a breadcrumb over the register’s name', async () => {
     const { unmount } = await show([group()], 'providers')
     const h1 = screen.getByRole('heading', { level: 1 })
     expect(h1.textContent).toBe('Service providers')
-    expect(h1.className).toContain('sr-only')
+    expect(h1.className).not.toContain('sr-only')
+    const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumbs).getByRole('link', { name: 'Q Wealth CRM' }).getAttribute('href')).toBe('/')
+    expect(within(crumbs).queryByRole('link', { name: 'Groups' }), 'the current level is not a link').toBeNull()
+    expect(crumbs.textContent).toContain('Groups')
     unmount()
     await show([group()])
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Client households')
+  })
+
+  /* The rail's frosted panel — what visually separates chrome from work. A
+     STATIC translucent surface, which is why blur is tolerable here at all;
+     see the page's comment and the cursor history behind it. */
+  test('the menu sits on a frosted rail that runs the column', async () => {
+    const { container } = await show([group()])
+    const cols = Array.from(container.querySelectorAll<HTMLElement>(':scope > div[class*="lg:col-span-"]'))
+    expect(cols[0]!.className).toContain('backdrop-blur')
+    expect(cols[0]!.className).toContain('bg-white/40')
+    expect(cols[0]!.className).toContain('lg:h-full')
+  })
+
+  test('the register has its toolbar: search, status, sort', async () => {
+    await show([group()])
+    expect(screen.getByPlaceholderText('Search by name or contact')).toBeTruthy()
+    expect(screen.getByLabelText('Filter by status')).toBeTruthy()
+    expect(screen.getByLabelText('Sort')).toBeTruthy()
   })
 
   /* The admin page's columns, so the two sectioned pages do not rearrange
