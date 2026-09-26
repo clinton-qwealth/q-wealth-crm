@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, type ReactNode } from 'react'
 import { ChevronDownIcon, GroupIcon, SearchIcon, StructureIcon } from '@/components/icons'
-import { Pill, SHEET } from '@/components/ui'
+import { Pill, SHEET, TOOLBAR_CONTROL } from '@/components/ui'
 import {
   GROUP_SORTS,
   narrowGroups,
@@ -18,15 +18,6 @@ const TYPE_LABEL: Record<string, string> = {
   business_entity: 'Business entity',
 }
 
-/**
- * The toolbar's own control style — `FIELD_INPUT` a size down and a shade
- * quieter. Asked 26 Sep: the full form-field height "clashed with the
- * records", which is right — a toolbar is chrome over the list, not a form
- * beside it, so it takes 12px text, tighter padding, the ground's grey and a
- * hairline, and keeps only the focus treatment at full strength.
- */
-const TOOLBAR_CONTROL =
-  'rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 hover:border-neutral-300 focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand/15'
 
 /**
  * A register of client groups: the toolbar, the count, the sheet, the rows.

@@ -3,13 +3,10 @@
 import Link from 'next/link'
 import { useState, type ReactNode } from 'react'
 import { BuildingIcon, ChevronDownIcon, SearchIcon } from '@/components/icons'
-import { SHEET } from '@/components/ui'
+import { SHEET, TOOLBAR_CONTROL } from '@/components/ui'
 import { providerLogoUrl } from '@/lib/provider-logo'
 import type { ProviderRegisterRow } from '@/lib/groups'
 
-/** The group register's toolbar dress, copied deliberately — see that file. */
-const TOOLBAR_CONTROL =
-  'rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 hover:border-neutral-300 focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand/15'
 
 type ProviderSortId = 'name_asc' | 'name_desc' | 'newest'
 type ProviderTypeId = 'all' | 'platform' | 'insurer'

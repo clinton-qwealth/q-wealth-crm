@@ -314,6 +314,16 @@ export const SECTION_TOOLBAR = 'mb-2.5 flex items-center gap-3'
 export const PRIMARY_ACTION =
   'inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white outline-none transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand/40'
 
+/**
+ * A register toolbar's control — `FIELD_INPUT` a size down and a shade
+ * quieter: 12px text, tighter padding, the ground's grey and a hairline, full
+ * focus treatment kept. A toolbar is chrome over a list, not a form beside it.
+ * Written once after the third register grew a third copy — the add-button
+ * drift, about to happen again.
+ */
+export const TOOLBAR_CONTROL =
+  'rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 hover:border-neutral-300 focus:border-brand-300 focus:bg-white focus:ring-2 focus:ring-brand/15'
+
 export const QUIET_ACTION =
   'inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-brand-50 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand/30'
 
