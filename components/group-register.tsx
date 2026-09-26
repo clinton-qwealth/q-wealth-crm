@@ -58,15 +58,21 @@ export function GroupRegister({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Left-aligned, not justified — asked 26 Sep: the controls hold their
+          own width and the slack stays free on the right, so the row reads as
+          three tools rather than a stretched form. */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* The search takes the slack; the two selects keep their size. */}
-        <label className="relative min-w-40 flex-1">
+        <label className="relative w-52">
           <span className="sr-only">Search {noun[1]}</span>
           <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
+          {/* The placeholder is one word because the box is now one third its
+              old width, and "Search by name or contact" clips mid-word at
+              208px. What it searches is still said — by the sr-only label
+              above, and by the row simply answering keystrokes. */}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search by name or contact"
+            placeholder="Search"
             className={`${FIELD_INPUT} w-full pl-8`}
           />
         </label>
@@ -77,7 +83,10 @@ export function GroupRegister({
         <label className="flex items-center gap-1.5">
           <span className="sr-only">Filter by status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)} className={FIELD_INPUT}>
-            <option value="all">All statuses</option>
+            {/* "Status", not "All statuses": at rest the closed control shows
+                this option, so the word doubles as the control's visible name —
+                the same trick the task dialog's "Choose a role" plays. */}
+            <option value="all">Status</option>
             {statuses.map((s) => (
               <option key={s} value={s}>
                 {s[0]!.toUpperCase() + s.slice(1)}

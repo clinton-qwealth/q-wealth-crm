@@ -54,22 +54,38 @@ export default async function GroupsIndexPage(
           full row height, so the menu reads as a sidebar rather than as a
           stack of floating links. `backdrop-blur` is safe HERE because the
           panel is static — the cursor trouble this page's history warns about
-          came from surfaces that transition, and this one never does. */}
-      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:h-full xl:col-span-2">
+          came from surfaces that transition, and this one never does.
+
+          THE BOTTOM EDGE REACHES THE VIEWPORT'S, asked 26 Sep. The rail is as
+          tall as the row, and the row is only as tall as the content, so on a
+          short register it stopped mid-screen. The arithmetic: 100dvh minus
+          the 48px bar minus the main's 28px top padding is `calc(100dvh -
+          4.75rem)` of minimum height, and `-mb-7` lets it run through the
+          main's bottom padding to the screen's edge WITHOUT adding 28px of
+          scroll to every short page. Square bottom corners at `lg`, because a
+          rounded corner flush against the viewport edge leaves two slivers of
+          artwork peeking under it. */}
+      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:-mb-7 lg:h-full lg:min-h-[calc(100dvh-4.75rem)] lg:rounded-b-none xl:col-span-2">
         <GroupsNav current={section.id} />
       </div>
 
-      {/* Centre — the header, then the register. Keyed together so a section
-          change remounts both, which resets state and replays the fade — the
-          title is part of what arrives, so it fades with the content rather
-          than snapping ahead of it. */}
+      {/* Centre — the header, then the register. ONE key remounts both, so a
+          section change replays both entrances — but they move differently,
+          asked 26 Sep: the header fades IN PLACE, words appearing where words
+          were, while the content below it rises. A title that travelled read
+          as the whole page lurching; a list that only faded read as a repaint
+          rather than an arrival. Same clock, two treatments. */}
       <div className="col-span-full lg:col-span-6 xl:col-span-7">
-        <div key={section.id} className="qw-section-in">
-          <RegisterHeader
-            trail={[{ label: 'Q Wealth CRM', href: '/' }, { label: 'Groups' }]}
-            title={section.label}
-          />
-          <Card>{panel}</Card>
+        <div key={section.id}>
+          <div className="qw-fade-in">
+            <RegisterHeader
+              trail={[{ label: 'Q Wealth CRM', href: '/' }, { label: 'Groups' }]}
+              title={section.label}
+            />
+          </div>
+          <div className="qw-section-in">
+            <Card>{panel}</Card>
+          </div>
         </div>
       </div>
 

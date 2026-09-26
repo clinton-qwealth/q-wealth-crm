@@ -131,11 +131,36 @@ describe('the menu', () => {
     expect(cols[0]!.className).toContain('backdrop-blur')
     expect(cols[0]!.className).toContain('bg-white/40')
     expect(cols[0]!.className).toContain('lg:h-full')
+    /* And it reaches the VIEWPORT's bottom, not the content's: minimum height
+       is the screen minus the bar and the top gutter, and the negative bottom
+       margin runs it through the main's padding without adding scroll. The
+       two classes are one mechanism — drop either and a short register's rail
+       stops mid-screen again, or every page grows 28px of scroll. */
+    expect(cols[0]!.className).toContain('lg:min-h-[calc(100dvh-4.75rem)]')
+    expect(cols[0]!.className).toContain('lg:-mb-7')
+  })
+
+  /**
+   * Two entrances, one clock, asked 26 Sep: the header fades IN PLACE while
+   * the content under it rises. The h1 must therefore sit inside the
+   * movement-free wrapper and OUTSIDE the rising one — nested the other way,
+   * the title travels and the whole page reads as lurching. Mutation, and it
+   * was run: wrap the header back inside `.qw-section-in` — this fails.
+   */
+  test('the header fades without moving; only the content rises', async () => {
+    await show([group()])
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1.closest('.qw-fade-in'), 'the header is in the still fade').toBeTruthy()
+    expect(h1.closest('.qw-section-in'), 'and not in the rising one').toBeNull()
+    expect(
+      document.querySelector('.qw-section-in section'),
+      'the card is what rises',
+    ).toBeTruthy()
   })
 
   test('the register has its toolbar: search, status, sort', async () => {
     await show([group()])
-    expect(screen.getByPlaceholderText('Search by name or contact')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Search')).toBeTruthy()
     expect(screen.getByLabelText('Filter by status')).toBeTruthy()
     expect(screen.getByLabelText('Sort')).toBeTruthy()
   })

@@ -103,7 +103,7 @@ export default async function AdminPage(
           pages', so the two sectioned screens keep reading as one design. The
           notes on the panel — why blur is safe on a STATIC surface — are on
           /groups. */}
-      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:h-full xl:col-span-2">
+      <div className="col-span-full h-fit rounded-xl bg-white/40 p-2 ring-1 ring-neutral-200/60 backdrop-blur-sm lg:col-span-3 lg:-mb-7 lg:h-full lg:min-h-[calc(100dvh-4.75rem)] lg:rounded-b-none xl:col-span-2">
         <AdminNav current={section.id} />
       </div>
 

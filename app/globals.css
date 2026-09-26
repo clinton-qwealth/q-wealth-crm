@@ -619,8 +619,8 @@ dialog.qw-drawer[open]::backdrop {
  * slow. The rise went 4px to 6px with it: a longer fade with almost no travel
  * reads as a delay rather than as movement.
  *
- * This is the one long transition on the site — the charts run on a 300ms
- * clock and nothing else exceeds it — because it is the only one covering a
+ * This and `qw-fade-in` below are the site's one long clock — the charts run
+ * on 300ms and nothing else exceeds it — because these two alone cover a
  * network round trip rather than a hover.
  *
  * It replays because the element carries a `key` on the section id, so React
@@ -642,11 +642,33 @@ dialog.qw-drawer[open]::backdrop {
   }
 }
 
+/*
+ * The register HEADER's arrival: the section clock with the movement removed.
+ *
+ * Asked 26 Sep 2026: when a section changes, the title should not travel —
+ * words appear where words were — while the content below it rises. Opacity
+ * alone, on the same 380ms curve, so the two entrances land as one event with
+ * two weights rather than two animations.
+ */
+.qw-fade-in {
+  animation: qw-fade-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes qw-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* The content stays; only the motion goes. Nothing sets `opacity: 0` outside
-   the keyframes, so switching the animation off leaves the section visible —
-   which is the whole reason the base rule carries no opacity of its own. */
+   the keyframes, so switching the animation off leaves everything visible —
+   which is the whole reason the base rules carry no opacity of their own. */
 @media (prefers-reduced-motion: reduce) {
-  .qw-section-in {
+  .qw-section-in,
+  .qw-fade-in {
     animation: none;
   }
 }

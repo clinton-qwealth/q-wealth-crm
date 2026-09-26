@@ -45,7 +45,7 @@ const show = (rows: GroupListItem[] = ROWS) =>
 describe('search', () => {
   test('narrows by name, and the count says of how many', () => {
     show()
-    fireEvent.change(screen.getByPlaceholderText('Search by name or contact'), {
+    fireEvent.change(screen.getByPlaceholderText('Search'), {
       target: { value: 'brown' },
     })
     expect(names()).toEqual(['Brown Family'])
@@ -54,7 +54,7 @@ describe('search', () => {
 
   test('finds the primary contact too — the other name a person remembers', () => {
     show()
-    fireEvent.change(screen.getByPlaceholderText('Search by name or contact'), {
+    fireEvent.change(screen.getByPlaceholderText('Search'), {
       target: { value: 'ada' },
     })
     expect(names()).toEqual(['Brown Family'])
@@ -62,7 +62,7 @@ describe('search', () => {
 
   test('does not match the words the row merely wears, like its type', () => {
     show()
-    fireEvent.change(screen.getByPlaceholderText('Search by name or contact'), {
+    fireEvent.change(screen.getByPlaceholderText('Search'), {
       target: { value: 'household' },
     })
     /* Two rows NAMED household match; Brown Family must not, even though its
@@ -72,7 +72,7 @@ describe('search', () => {
 
   test('matching nothing is not an empty register — it offers to clear, and clearing works', () => {
     show()
-    fireEvent.change(screen.getByPlaceholderText('Search by name or contact'), {
+    fireEvent.change(screen.getByPlaceholderText('Search'), {
       target: { value: 'zzz' },
     })
     expect(screen.getByText(/Nothing matches “zzz”/)).toBeTruthy()
@@ -84,10 +84,10 @@ describe('search', () => {
 describe('the status filter', () => {
   test('offers the statuses the rows actually have, actives first', () => {
     show()
-    const options = Array.from(
-      (screen.getByLabelText('Filter by status') as HTMLSelectElement).options,
-    ).map((o) => o.value)
-    expect(options).toEqual(['all', 'active', 'prospect'])
+    const options = Array.from((screen.getByLabelText('Filter by status') as HTMLSelectElement).options)
+    expect(options.map((o) => o.value)).toEqual(['all', 'active', 'prospect'])
+    /* The resting option is the control's visible name. */
+    expect(options[0]!.textContent).toBe('Status')
   })
 
   test('narrows to the chosen status', () => {
